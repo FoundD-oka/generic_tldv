@@ -1,0 +1,16 @@
+{
+  "task": "issue-1",
+  "reviewer": "independent adversarial sidechain (general-purpose subagent)",
+  "scope": "issue-1 GCS-recordings changes only (storage.py, recordings.py, recording_finalizer.py, collector/endpoints.py, recording-sweep.ts, index.ts, deploy/gcs/lifecycle.json)",
+  "verdict": "pass_with_nits",
+  "confidence": "high",
+  "blocking": [],
+  "summary": "Issue-1 GCS backend is correct and merge-ready — inclusive-range, metadata-only size lookup, no persisted signed URLs, per-backend read/delete dispatch, sweep double-guarded (excludeSessionUid + 6h mtime), valid lifecycle schema; only minor non-blocking nits.",
+  "nits": [
+    "lifecycle.json had a non-schema _comment top-level key — FIXED in commit c4e2117 (removed; note kept in README).",
+    "collector _purge_recordings_for_meeting deletes media storage_path but not the derived .mp3 cache object (delete_recording does); harmless — 60d lifecycle reaps it. Left as a documented follow-up.",
+    "get_presigned_url relies on creds.service_account_email which under Workload Identity ADC often resolves to 'default' and fails signBlob; handled via catch->None->/raw fallback and the GCS_SIGNING_SERVICE_ACCOUNT override (documented in deploy/gcs/README.md). Operators must set it for signed URLs.",
+    "download_media_file treats file_exists() exceptions as 404 (defensive endpoint behavior), so a misconfigured-permissions bucket surfaces as 404 not 500."
+  ],
+  "resolution": "No blocking findings. The one actionable nit (lifecycle _comment) was fixed before merge. Remaining nits are documented/acceptable."
+}
