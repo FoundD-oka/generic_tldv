@@ -35,7 +35,7 @@ export function LiveSession({ platform, nativeId, onEnd }: LiveSessionProps) {
     nativeId,
     autoConnect: true,
     onError: (err) => {
-      toast.error("WebSocket error", { description: err });
+      toast.error("WebSocketエラー", { description: err });
     },
   });
 
@@ -53,13 +53,13 @@ export function LiveSession({ platform, nativeId, onEnd }: LiveSessionProps) {
   const handleStopBot = async () => {
     try {
       await vexaAPI.stopBot(platform, nativeId);
-      toast.success("Bot stopped", {
-        description: "The transcription bot has left the meeting",
+      toast.success("ボットを停止しました", {
+        description: "文字起こしボットが会議から退出しました",
       });
       clearLiveSession();
       onEnd?.();
     } catch (error) {
-      toast.error("Failed to stop bot", {
+      toast.error("ボットの停止に失敗しました", {
         description: (error as Error).message,
       });
     }
@@ -86,7 +86,7 @@ export function LiveSession({ platform, nativeId, onEnd }: LiveSessionProps) {
                 </span>
               )}
               <CardTitle className="text-lg">
-                {isActive ? "Live Session" : "Session Ended"}
+                {isActive ? "ライブセッション" : "セッション終了"}
               </CardTitle>
             </div>
 
@@ -94,7 +94,7 @@ export function LiveSession({ platform, nativeId, onEnd }: LiveSessionProps) {
               <div className="flex items-center">
                 <Button variant="destructive" size="sm" onClick={handleStopBot}>
                   <StopCircle className="h-4 w-4 mr-2" />
-                  Stop Bot
+                  ボットを停止
                 </Button>
                 <DocsLink href="/docs/rest/bots#stop-bot" />
               </div>
@@ -125,17 +125,17 @@ export function LiveSession({ platform, nativeId, onEnd }: LiveSessionProps) {
               {isConnecting ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Connecting...</span>
+                  <span>接続中...</span>
                 </>
               ) : isConnected ? (
                 <>
                   <Wifi className="h-4 w-4 text-green-500" />
-                  <span>Connected</span>
+                  <span>接続済み</span>
                 </>
               ) : (
                 <>
                   <WifiOff className="h-4 w-4 text-red-500" />
-                  <span>Disconnected</span>
+                  <span>切断中</span>
                 </>
               )}
             </div>
@@ -144,7 +144,7 @@ export function LiveSession({ platform, nativeId, onEnd }: LiveSessionProps) {
             {speakerOrder.length > 0 && (
               <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                 <Users className="h-4 w-4" />
-                <span>{speakerOrder.length} speaker{speakerOrder.length !== 1 ? "s" : ""}</span>
+                <span>{speakerOrder.length}名の話者</span>
               </div>
             )}
           </div>
@@ -159,9 +159,9 @@ export function LiveSession({ platform, nativeId, onEnd }: LiveSessionProps) {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            Live Transcript
+            ライブ文字起こし
             {liveTranscripts.length > 0 && (
-              <Badge variant="secondary">{liveTranscripts.length} segments</Badge>
+              <Badge variant="secondary">{liveTranscripts.length}件</Badge>
             )}
           </CardTitle>
         </CardHeader>
@@ -176,24 +176,24 @@ export function LiveSession({ platform, nativeId, onEnd }: LiveSessionProps) {
                       <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-red-500 animate-pulse" />
                     </div>
                     <p className="text-muted-foreground">
-                      Recording in progress
+                      録音中
                     </p>
                     <p className="text-sm text-muted-foreground mt-1">
-                      Audio is being captured. You can transcribe after the meeting ends.
+                      音声を記録しています。会議終了後に文字起こしできます。
                     </p>
                   </>
                 ) : isActive ? (
                   <>
                     <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mb-4" />
                     <p className="text-muted-foreground">
-                      Waiting for speech to transcribe...
+                      発話を待っています...
                     </p>
                     <p className="text-sm text-muted-foreground mt-1">
-                      Transcripts will appear here in real-time
+                      文字起こしはリアルタイムでここに表示されます
                     </p>
                   </>
                 ) : (
-                  <p className="text-muted-foreground">No transcript available</p>
+                  <p className="text-muted-foreground">文字起こしはありません</p>
                 )}
               </div>
             ) : (

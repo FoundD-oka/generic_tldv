@@ -100,6 +100,24 @@ class TestGetRecording:
         assert "/recordings/5/master" in call_args[0][1]
         assert call_args[1].get("params", {}).get("type") == "audio"
 
+    async def test_download_recording_master_mp3_proxies(self, mock_http_client, mock_response):
+        mock_http_client.request = AsyncMock(return_value=mock_response(206, {"ok": True}))
+        app.state.http_client = mock_http_client
+
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            resp = await ac.get(
+                "/recordings/5/master/mp3?type=audio",
+                headers={"x-api-key": "k", "range": "bytes=0-2"},
+            )
+
+        assert resp.status_code == 206
+        call_args = mock_http_client.request.call_args
+        assert call_args[0][0] == "GET"
+        assert "/recordings/5/master/mp3" in call_args[0][1]
+        assert call_args[1].get("params", {}).get("type") == "audio"
+        assert call_args[1].get("headers", {}).get("range") == "bytes=0-2"
+        assert call_args[1].get("timeout") == 180.0
+
 
 @pytest.mark.asyncio
 class TestDownloadMedia:
@@ -124,6 +142,22 @@ class TestDownloadMedia:
         assert resp.status_code == 200
         url = mock_http_client.request.call_args[0][1]
         assert "/recordings/5/media/3/raw" in url
+
+    async def test_download_media_mp3_proxies(self, mock_http_client, mock_response):
+        mock_http_client.request = AsyncMock(return_value=mock_response(206))
+        app.state.http_client = mock_http_client
+
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            resp = await ac.get(
+                "/recordings/5/media/3/mp3",
+                headers={"x-api-key": "k", "range": "bytes=0-2"},
+            )
+
+        assert resp.status_code == 206
+        call_args = mock_http_client.request.call_args
+        assert "/recordings/5/media/3/mp3" in call_args[0][1]
+        assert call_args[1].get("headers", {}).get("range") == "bytes=0-2"
+        assert call_args[1].get("timeout") == 180.0
 
 
 @pytest.mark.asyncio

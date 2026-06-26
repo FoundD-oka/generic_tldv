@@ -20,28 +20,28 @@ interface ErrorStateProps {
 const errorConfig: Record<ErrorType, { icon: typeof AlertCircle; defaultTitle: string; defaultMessage: string }> = {
   connection: {
     icon: WifiOff,
-    defaultTitle: "Connection Error",
-    defaultMessage: "Unable to connect to the server. Please check your internet connection and try again.",
+    defaultTitle: "接続エラー",
+    defaultMessage: "サーバーに接続できません。ネットワーク接続を確認して、もう一度お試しください。",
   },
   server: {
     icon: ServerCrash,
-    defaultTitle: "Server Unavailable",
-    defaultMessage: "The server is temporarily unavailable. This might be due to maintenance or high traffic.",
+    defaultTitle: "サーバーを利用できません",
+    defaultMessage: "サーバーが一時的に利用できません。メンテナンス中、またはアクセス集中の可能性があります。",
   },
   "not-found": {
     icon: FileQuestion,
-    defaultTitle: "Not Found",
-    defaultMessage: "The requested resource could not be found.",
+    defaultTitle: "見つかりません",
+    defaultMessage: "指定された情報が見つかりませんでした。",
   },
   generic: {
     icon: AlertCircle,
-    defaultTitle: "Something went wrong",
-    defaultMessage: "An unexpected error occurred. Please try again.",
+    defaultTitle: "エラーが発生しました",
+    defaultMessage: "予期しないエラーが発生しました。もう一度お試しください。",
   },
   subscription: {
     icon: CreditCard,
-    defaultTitle: "Subscription Required",
-    defaultMessage: "A subscription is required to access this feature.",
+    defaultTitle: "契約が必要です",
+    defaultMessage: "この機能を利用するには契約が必要です。",
   },
 };
 
@@ -127,7 +127,7 @@ export function ErrorState({
             className="mt-4 border-destructive/30 hover:bg-destructive/10 hover:border-destructive/50 transition-all"
           >
             <RefreshCw className="h-4 w-4 mr-2" />
-            Try Again
+            再試行
           </Button>
         )}
       </div>

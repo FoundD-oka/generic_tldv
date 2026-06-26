@@ -1,4 +1,4 @@
-.PHONY: all all-build env build build-bot-image build-transcript-rendering up down ps logs test test-transcription init-db restore-db check_docker preflight publish promote-staging promote-latest help-tags setup-api-key
+.PHONY: all all-build env build build-bot-image build-transcript-rendering up down ps logs test test-transcription guard-runtime-profiles init-db restore-db check_docker preflight publish promote-staging promote-latest help-tags setup-api-key
 
 # --- Paths ---
 ROOT := $(shell git rev-parse --show-toplevel)
@@ -208,6 +208,7 @@ up: check_docker preflight
 		echo "LOCAL_TRANSCRIPTION=true — starting transcription-service..."; \
 		cd $(ROOT)/services/transcription-service && docker compose up -d; \
 	fi
+	@$(MAKE) --no-print-directory guard-runtime-profiles
 
 down: check_docker
 	$(COMPOSE_CMD) down
@@ -278,8 +279,11 @@ ps: check_docker
 logs:
 	$(COMPOSE_CMD) logs -f
 
+guard-runtime-profiles: check_docker
+	@$(ROOT)/deploy/compose/scripts/guard-runtime-profiles.sh
+
 # --- Test ---
-test: check_docker
+test: check_docker guard-runtime-profiles
 	@echo "Waiting for services to be ready..."
 	@DASH_PORT=$$(grep -E '^DASHBOARD_HOST_PORT=' $(ENV_FILE) 2>/dev/null | cut -d= -f2 || echo "3001"); \
 	DASH_PORT=$${DASH_PORT:-3001}; \
@@ -347,9 +351,9 @@ test-transcription:
 		-F "model=large-v3-turbo" \
 		-w "\n%{http_code}" 2>&1); \
 	HTTP=$$(echo "$$RESP" | tail -1); \
-	BODY=$$(echo "$$RESP" | head -n -1); \
+	BODY=$$(printf '%s\n' "$$RESP" | sed '$$d'); \
 	if [ "$$HTTP" = "200" ]; then \
-		TEXT=$$(echo "$$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('text','')[:80])" 2>/dev/null); \
+		TEXT=$$(printf '%s\n' "$$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('text','')[:80])" 2>/dev/null); \
 		if [ -n "$$TEXT" ]; then \
 			echo "  ✓ Transcription works: \"$$TEXT\""; \
 		else \

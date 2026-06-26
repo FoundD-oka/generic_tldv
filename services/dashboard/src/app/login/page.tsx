@@ -6,10 +6,8 @@ import Image from "next/image";
 import { signIn } from "next-auth/react";
 import { Mail, Loader2, CheckCircle, ArrowLeft, AlertTriangle, XCircle, ArrowRight, Plus } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useAuthStore } from "@/stores/auth-store";
 import { toast } from "sonner";
@@ -17,6 +15,9 @@ import { parseMeetingInput } from "@/lib/parse-meeting-input";
 import { savePendingMeetingUrl } from "@/lib/pending-meeting";
 import { cn } from "@/lib/utils";
 import { withBasePath } from "@/lib/base-path";
+import { DEFAULT_DASHBOARD_BRAND } from "@/lib/dashboard-brand";
+import { getDashboardCopy } from "@/lib/dashboard-copy";
+import { useRuntimeConfig } from "@/hooks/use-runtime-config";
 
 type LoginState = "onboarding" | "email" | "sent";
 
@@ -36,6 +37,9 @@ interface HealthStatus {
 export default function LoginPage() {
   const router = useRouter();
   const { sendMagicLink, isAuthenticated } = useAuthStore();
+  const { config } = useRuntimeConfig();
+  const brand = config?.brand || DEFAULT_DASHBOARD_BRAND;
+  const copy = getDashboardCopy(brand.locale);
   const [email, setEmail] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [state, setState] = useState<LoginState>("onboarding");
@@ -59,6 +63,10 @@ export default function LoginPage() {
       try {
         const res = await fetch(withBasePath("/api/config"));
         const config = await res.json();
+        if (config.sharedAuth?.enabled) {
+          router.replace("/meetings");
+          return;
+        }
         if (config.hostedMode && config.webappUrl) {
           const returnUrl = encodeURIComponent(window.location.origin);
           window.location.href = `${config.webappUrl}/account?returnUrl=${returnUrl}`;
@@ -96,11 +104,11 @@ export default function LoginPage() {
 
   const handleMeetingContinue = () => {
     if (!parsedInput) {
-      toast.error("Please enter a valid meeting URL");
+      toast.error(copy.login.invalidMeetingUrl);
       return;
     }
     if (!isSupportedPlatform) {
-      toast.error("Only Google Meet and Microsoft Teams are supported right now");
+      toast.error(copy.login.unsupportedPlatformToast);
       return;
     }
     savePendingMeetingUrl(meetingInput);
@@ -117,7 +125,7 @@ export default function LoginPage() {
     e.preventDefault();
 
     if (!email) {
-      toast.error("Please enter your email");
+      toast.error(copy.login.enterEmail);
       return;
     }
 
@@ -127,15 +135,19 @@ export default function LoginPage() {
 
       if (result.success) {
         if (result.mode === "direct") {
-          toast.success(result.isNewUser ? "Account created! Welcome to Vexa." : "Welcome back!");
+          toast.success(
+            result.isNewUser
+              ? copy.login.accountCreated.replace("{brand}", brand.name)
+              : copy.login.welcomeBack
+          );
           router.push("/");
           return; // Keep submitting state during redirect
         } else {
           setState("sent");
-          toast.success("Magic link sent! Check your email.");
+          toast.success(copy.login.magicLinkSent);
         }
       } else {
-        toast.error(result.error || "Failed to send magic link");
+        toast.error(result.error || copy.login.failedSend);
       }
     } finally {
       setIsSubmitting(false);
@@ -148,9 +160,9 @@ export default function LoginPage() {
       const result = await sendMagicLink(email);
 
       if (result.success) {
-        toast.success("Magic link sent again! Check your email.");
+        toast.success(copy.login.magicLinkSentAgain);
       } else {
-        toast.error(result.error || "Failed to resend magic link");
+        toast.error(result.error || copy.login.failedResend);
       }
     } finally {
       setIsSubmitting(false);
@@ -169,7 +181,7 @@ export default function LoginPage() {
       });
     } catch (error) {
       console.error("Google sign-in error:", error);
-      toast.error("Failed to sign in with Google");
+      toast.error(copy.login.failedGoogle);
     }
   };
 
@@ -181,7 +193,7 @@ export default function LoginPage() {
       });
     } catch (error) {
       console.error("Microsoft sign-in error:", error);
-      toast.error("Failed to sign in with Microsoft");
+      toast.error(copy.login.failedMicrosoft);
     }
   };
 
@@ -199,13 +211,13 @@ export default function LoginPage() {
       <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4">
         {/* Large Vexa wordmark */}
         <div className="mb-12 flex flex-col items-center gap-3">
-          <Logo size="lg" showText={false} />
-          <span className="text-lg font-semibold tracking-[-0.02em] text-foreground">vexa</span>
+          <Logo size="lg" showText={false} brand={brand} />
+          <span className="text-lg font-semibold text-foreground">{brand.shortName}</span>
         </div>
 
         {/* Hero heading */}
-        <h1 className="text-3xl sm:text-4xl md:text-5xl font-semibold tracking-[-0.03em] text-foreground text-center max-w-2xl leading-[1.1]">
-          Drop a bot to your meeting
+        <h1 className="text-3xl sm:text-4xl md:text-5xl font-semibold text-foreground text-center max-w-2xl leading-[1.1]">
+          {copy.login.heroTitle}
         </h1>
 
         {/* Input area */}
@@ -235,7 +247,7 @@ export default function LoginPage() {
             )}
             <input
               type="text"
-              placeholder="Paste meeting URL..."
+              placeholder={copy.login.meetingPlaceholder}
               value={meetingInput}
               onChange={(e) => setMeetingInput(e.target.value)}
               onKeyDown={handleMeetingKeyDown}
@@ -265,7 +277,7 @@ export default function LoginPage() {
           {/* Unsupported platform hint */}
           {meetingInput && isMeetingValid && !isSupportedPlatform && (
             <p className="mt-2 text-sm text-orange-600 dark:text-orange-400 text-center">
-              Only Google Meet and Microsoft Teams are supported right now
+              {copy.login.unsupportedPlatformHint}
             </p>
           )}
         </div>
@@ -299,7 +311,7 @@ export default function LoginPage() {
             className="flex items-center gap-2 px-4 py-2.5 rounded-full border border-dashed border-border bg-card text-sm text-muted-foreground hover:text-foreground hover:border-gray-400 transition-colors"
           >
             <Plus className="h-4 w-4" />
-            Create a Meet
+            {copy.login.createMeet}
           </a>
         </div>
 
@@ -309,11 +321,11 @@ export default function LoginPage() {
           onClick={() => setState("email")}
           className="mt-10 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
-          Already have an account? Sign in
+          {copy.login.signIn}
         </button>
 
         <p className="absolute bottom-6 text-[11.5px] text-muted-foreground">
-          Open Source · Developer-first · API-first
+          {copy.login.footer}
         </p>
       </div>
     );
@@ -324,8 +336,8 @@ export default function LoginPage() {
     <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4">
       {/* Logo */}
       <div className="mb-10 flex flex-col items-center gap-3">
-        <Logo size="lg" showText={false} />
-        <span className="text-lg font-semibold tracking-[-0.02em] text-foreground">vexa</span>
+        <Logo size="lg" showText={false} brand={brand} />
+        <span className="text-lg font-semibold text-foreground">{brand.shortName}</span>
       </div>
 
       {/* Configuration Error Banner */}
@@ -334,9 +346,9 @@ export default function LoginPage() {
           <div className="flex items-start gap-3">
             <XCircle className="h-5 w-5 text-destructive mt-0.5 flex-shrink-0" />
             <div className="flex-1">
-              <h3 className="font-medium text-destructive">Server Configuration Error</h3>
+              <h3 className="font-medium text-destructive">{copy.login.serverConfigErrorTitle}</h3>
               <p className="text-sm text-muted-foreground mt-1">
-                The server is not properly configured. Please contact the administrator.
+                {copy.login.serverConfigErrorDescription}
               </p>
               {healthStatus?.checks.adminApi.error && (
                 <p className="text-xs text-muted-foreground mt-1">
@@ -354,9 +366,9 @@ export default function LoginPage() {
           <div className="flex items-start gap-3">
             <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-500 mt-0.5 flex-shrink-0" />
             <div className="flex-1">
-              <h3 className="font-medium text-yellow-600 dark:text-yellow-500">Connection Warning</h3>
+              <h3 className="font-medium text-yellow-600 dark:text-yellow-500">{copy.login.connectionWarningTitle}</h3>
               <p className="text-sm text-muted-foreground mt-1">
-                Some services may be unavailable.
+                {copy.login.connectionWarningDescription}
               </p>
             </div>
           </div>
@@ -365,11 +377,11 @@ export default function LoginPage() {
 
       {state === "email" ? (
         <div className="w-full max-w-sm">
-          <h2 className="text-2xl font-semibold tracking-[-0.02em] text-foreground text-center mb-2">
-            Sign in to continue
+          <h2 className="text-2xl font-semibold text-foreground text-center mb-2">
+            {copy.login.signInTitle}
           </h2>
           <p className="text-sm text-muted-foreground text-center mb-8">
-            Choose your provider to get started
+            {copy.login.signInDescription}
           </p>
 
           <div className="space-y-3">
@@ -387,7 +399,7 @@ export default function LoginPage() {
                   <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
                 </svg>
                 <div className="flex-1">
-                  <span className="text-sm font-medium text-foreground">Continue with Google</span>
+                  <span className="text-sm font-medium text-foreground">{copy.login.continueGoogle}</span>
                 </div>
                 <ArrowRight className="h-4 w-4 text-muted-foreground" />
               </button>
@@ -407,7 +419,7 @@ export default function LoginPage() {
                   <rect x="11" y="11" width="9" height="9" fill="#FFB900" />
                 </svg>
                 <div className="flex-1">
-                  <span className="text-sm font-medium text-foreground">Continue with Microsoft</span>
+                  <span className="text-sm font-medium text-foreground">{copy.login.continueMicrosoft}</span>
                 </div>
                 <ArrowRight className="h-4 w-4 text-muted-foreground" />
               </button>
@@ -423,7 +435,7 @@ export default function LoginPage() {
                     <Separator />
                   </div>
                   <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-background px-2 text-muted-foreground">Or</span>
+                    <span className="bg-background px-2 text-muted-foreground">{copy.login.or}</span>
                   </div>
                 </div>
               )}
@@ -451,19 +463,19 @@ export default function LoginPage() {
                   {healthLoading ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Checking server...
+                      {copy.login.checkingServer}
                     </>
                   ) : isSubmitting ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      {isDirectMode ? "Signing in..." : "Sending link..."}
+                      {isDirectMode ? copy.login.signingIn : copy.login.sendingLink}
                     </>
                   ) : isConfigError ? (
-                    "Server Unavailable"
+                    copy.login.serverUnavailable
                   ) : isDirectMode ? (
-                    "Continue with Email"
+                    copy.login.continueEmail
                   ) : (
-                    "Continue with Email"
+                    copy.login.continueEmail
                   )}
                 </Button>
               </form>
@@ -477,7 +489,7 @@ export default function LoginPage() {
               className="text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               <ArrowLeft className="inline mr-1 h-3 w-3" />
-              Back
+              {copy.login.back}
             </button>
           </div>
         </div>
@@ -488,16 +500,16 @@ export default function LoginPage() {
               <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
             </div>
           </div>
-          <h2 className="text-2xl font-semibold tracking-[-0.02em] text-foreground text-center mb-2">
-            Check your email
+          <h2 className="text-2xl font-semibold text-foreground text-center mb-2">
+            {copy.login.checkEmailTitle}
           </h2>
           <p className="text-sm text-muted-foreground text-center mb-8">
-            We sent a magic link to <span className="font-medium text-foreground">{email}</span>
+            {copy.login.checkEmailDescription} <span className="font-medium text-foreground">{email}</span>
           </p>
 
           <div className="bg-muted/50 rounded-lg p-4 text-sm text-muted-foreground mb-4">
-            <p className="mb-2">Click the link in the email to sign in.</p>
-            <p>The link will expire in 15 minutes.</p>
+            <p className="mb-2">{copy.login.clickEmailLink}</p>
+            <p>{copy.login.linkExpires}</p>
           </div>
 
           <div className="flex flex-col gap-2">
@@ -510,10 +522,10 @@ export default function LoginPage() {
               {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Sending...
+                  {copy.login.sending}
                 </>
               ) : (
-                "Resend magic link"
+                copy.login.resendMagicLink
               )}
             </Button>
 
@@ -523,14 +535,14 @@ export default function LoginPage() {
               className="w-full"
             >
               <ArrowLeft className="mr-2 h-4 w-4" />
-              Use a different email
+              {copy.login.differentEmail}
             </Button>
           </div>
         </div>
       )}
 
       <p className="absolute bottom-6 text-[11.5px] text-muted-foreground">
-        Open Source · Developer-first · API-first
+        {copy.login.footer}
       </p>
     </div>
   );

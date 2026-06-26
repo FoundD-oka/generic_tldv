@@ -17,8 +17,6 @@ async function proxyRequest(
       { status: 500 }
     );
   }
-  const MINIO_INTERNAL_ENDPOINT = (process.env.MINIO_INTERNAL_ENDPOINT || "").trim();
-
   // Get user's token from HTTP-only cookie (set during login)
   const cookieStore = await cookies();
   const userToken = cookieStore.get(getAuthCookieName())?.value;
@@ -109,7 +107,10 @@ async function proxyRequest(
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    const isMp3MediaRequest =
+      /^recordings\/\d+\/master\/mp3$/.test(pathString) ||
+      /^recordings\/\d+\/media\/\d+\/mp3$/.test(pathString);
+    const timeoutId = setTimeout(() => controller.abort(), isMp3MediaRequest ? 180000 : 30000);
 
     const fetchOptions: RequestInit = {
       method,
@@ -136,6 +137,7 @@ async function proxyRequest(
         raw_url?: string;
         media_file_id?: number | string;
         content_type?: string;
+        filename?: string;
       };
 
       const match = pathString.match(/^recordings\/(\d+)\/master$/);
@@ -148,10 +150,13 @@ async function proxyRequest(
         );
       }
 
-      const selectedUrl = data.url || data.download_url || "";
+      const rawUrl =
+        data.raw_url ||
+        (data.media_file_id ? `/recordings/${recordingId}/media/${data.media_file_id}/raw` : "");
+      const selectedUrl = rawUrl || data.url || data.download_url || "";
       if (!selectedUrl) {
         return NextResponse.json(
-          { error: `No canonical ${mediaType} playback URL for recording ${recordingId}` },
+          { error: `No playable ${mediaType} URL for recording ${recordingId}` },
           { status: 404, headers: { "Cache-Control": "no-store" } }
         );
       }
@@ -171,16 +176,17 @@ async function proxyRequest(
         }
       } else {
         mediaUrl = new URL(selectedUrl);
-        const isHostLocalUrl = ["localhost", "127.0.0.1", "[::1]"].includes(mediaUrl.hostname);
-        if (isHostLocalUrl && (data.raw_url || data.media_file_id)) {
-          const rawUrl = data.raw_url || `/recordings/${recordingId}/media/${data.media_file_id}/raw`;
+        const isProxyUnsafeHost =
+          ["localhost", "127.0.0.1", "[::1]"].includes(mediaUrl.hostname) ||
+          !mediaUrl.hostname.includes(".");
+        if (isProxyUnsafeHost && rawUrl) {
           mediaUrl = new URL(rawUrl, `${VEXA_API_URL}/`);
           if (VEXA_API_KEY) {
             mediaHeaders["X-API-Key"] = VEXA_API_KEY;
           }
-        } else if (isHostLocalUrl && MINIO_INTERNAL_ENDPOINT) {
+        } else if (isProxyUnsafeHost) {
           return NextResponse.json(
-            { error: "Host-local presigned media URL is not proxy-safe; backend raw_url missing" },
+            { error: "Internal presigned media URL is not proxy-safe; backend raw_url missing" },
             { status: 502, headers: { "Cache-Control": "no-store" } }
           );
         }
@@ -193,24 +199,26 @@ async function proxyRequest(
         headers: mediaHeaders,
         cache: "no-store",
       });
-      const mediaBlob = await mediaResponse.blob();
-      const mediaContentType =
-        mediaResponse.headers.get("content-type") ||
-        data.content_type ||
-        "application/octet-stream";
-      return new NextResponse(mediaBlob, {
+
+      const passthroughHeaders = new Headers({ "Cache-Control": "no-store" });
+      const mediaContentType = mediaResponse.headers.get("content-type") || data.content_type;
+      if (mediaContentType) passthroughHeaders.set("Content-Type", mediaContentType);
+      for (const header of [
+        "content-length",
+        "content-range",
+        "accept-ranges",
+        "content-disposition",
+      ]) {
+        const value = mediaResponse.headers.get(header);
+        if (value) passthroughHeaders.set(header, value);
+      }
+      if (!passthroughHeaders.has("Content-Disposition") && data.filename) {
+        passthroughHeaders.set("Content-Disposition", `inline; filename="${data.filename}"`);
+      }
+
+      return new NextResponse(mediaResponse.body, {
         status: mediaResponse.status,
-        headers: {
-          "Content-Type": mediaContentType,
-          "Content-Length": mediaResponse.headers.get("content-length") || "",
-          "Cache-Control": "no-store",
-          ...(mediaResponse.headers.get("content-range") && {
-            "Content-Range": mediaResponse.headers.get("content-range")!,
-          }),
-          ...(mediaResponse.headers.get("accept-ranges") && {
-            "Accept-Ranges": mediaResponse.headers.get("accept-ranges")!,
-          }),
-        },
+        headers: passthroughHeaders,
       });
     }
 

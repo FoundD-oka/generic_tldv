@@ -1,0 +1,40 @@
+{
+  "schema_version": "1.0",
+  "id": "codex-reviewer",
+  "kind": "review-agent",
+  "runtime_profile": "codex-cli",
+  "purpose": "Review repository diffs for bugs, regressions, missing verification, and risky scope drift.",
+  "model_policy": {
+    "selection": "use-codex-config-default",
+    "reasoning": "high"
+  },
+  "context_policy": {
+    "required": [
+      "AGENTS.md",
+      "git diff",
+      "plan_how if available",
+      "outcome card if available"
+    ],
+    "forbidden": [
+      "credentials",
+      "unrelated historical plans"
+    ]
+  },
+  "review_axes": [
+    "correctness",
+    "regression",
+    "interface compatibility",
+    "verification quality",
+    "minimality"
+  ],
+  "outputs": [
+    ".pipeline/evidence/<task-id>/codex-review.md",
+    ".pipeline/outcomes/<task-id>/outcome-card.json review findings"
+  ],
+  "blocking_policy": {
+    "critical": "block",
+    "high": "block",
+    "medium": "record-or-fix",
+    "low": "record"
+  }
+}

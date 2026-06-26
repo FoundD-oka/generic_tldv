@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuthStore } from "@/stores/auth-store";
 import { savePendingMeetingUrl } from "@/lib/pending-meeting";
@@ -16,9 +16,9 @@ interface AuthProviderProps {
 export function AuthProvider({ children }: AuthProviderProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const { isAuthenticated, isLoading, checkAuth, didLogout } = useAuthStore();
-  const [shouldRedirect, setShouldRedirect] = useState(false);
+  const { isAuthenticated, isLoading, checkAuth, didLogout, signInSharedDashboard } = useAuthStore();
   const meetingUrlCaptured = useRef(false);
+  const sharedLoginAttempted = useRef(false);
 
   // Capture meetingUrl from query string and save to localStorage before any redirect
   useEffect(() => {
@@ -44,15 +44,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, [pathname, checkAuth]);
 
-  // Handle redirect in useEffect to avoid React render warning
   useEffect(() => {
-    if (!isLoading && !isAuthenticated && !isPublicRoute) {
-      setShouldRedirect(true);
-    }
-  }, [isLoading, isAuthenticated, isPublicRoute]);
+    if (isLoading || isAuthenticated || isPublicRoute) return;
 
-  useEffect(() => {
-    if (shouldRedirect) {
+    let cancelled = false;
+
+    const authenticateOrRedirect = async () => {
+      if (!sharedLoginAttempted.current) {
+        sharedLoginAttempted.current = true;
+        const sharedResult = await signInSharedDashboard();
+        if (cancelled || sharedResult.success) return;
+      }
+
       const externalAuthUrl = process.env.NEXT_PUBLIC_EXTERNAL_AUTH_URL;
       if (externalAuthUrl && !didLogout) {
         // SSO: redirect to webapp for authentication
@@ -63,8 +66,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
         router.push("/login");
       }
       // If didLogout: logout() already handles the redirect — do nothing here
-    }
-  }, [shouldRedirect, router, didLogout]);
+    };
+
+    authenticateOrRedirect();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoading, isAuthenticated, isPublicRoute, signInSharedDashboard, router, didLogout]);
 
   // If on a public route, just render children
   if (isPublicRoute) {

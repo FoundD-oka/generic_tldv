@@ -24,7 +24,7 @@ export function ThemeToggle() {
     return (
       <Button variant="ghost" size="icon" className="relative">
         <Sun className="h-5 w-5" />
-        <span className="sr-only">Toggle theme</span>
+        <span className="sr-only">テーマを切り替え</span>
       </Button>
     );
   }
@@ -35,7 +35,7 @@ export function ThemeToggle() {
         <Button variant="ghost" size="icon" className="relative">
           <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
           <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-          <span className="sr-only">Toggle theme</span>
+          <span className="sr-only">テーマを切り替え</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
@@ -44,21 +44,21 @@ export function ThemeToggle() {
           className={cn(theme === "light" && "bg-accent")}
         >
           <Sun className="mr-2 h-4 w-4" />
-          Light
+          ライト
         </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => setTheme("dark")}
           className={cn(theme === "dark" && "bg-accent")}
         >
           <Moon className="mr-2 h-4 w-4" />
-          Dark
+          ダーク
         </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => setTheme("system")}
           className={cn(theme === "system" && "bg-accent")}
         >
           <Monitor className="mr-2 h-4 w-4" />
-          System
+          システム設定
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

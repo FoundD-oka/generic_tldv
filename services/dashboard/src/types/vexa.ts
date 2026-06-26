@@ -82,6 +82,8 @@ export interface CreateBotRequest {
   language?: string;
   transcribe_enabled?: boolean;
   authenticated?: boolean;
+  video?: boolean;
+  video_receive_enabled?: boolean;
 }
 
 export interface BotConfigUpdate {
@@ -259,7 +261,7 @@ export const PLATFORM_CONFIG = {
     placeholder: "85173157171",
   },
   browser_session: {
-    name: "Browser",
+    name: "ブラウザ",
     color: "bg-gray-500",
     textColor: "text-gray-700",
     bgColor: "bg-gray-50",
@@ -270,14 +272,14 @@ export const PLATFORM_CONFIG = {
 } as const;
 
 export const MEETING_STATUS_CONFIG: Record<MeetingStatus, { label: string; color: string; bgColor: string }> = {
-  requested: { label: "Requested", color: "text-blue-600 dark:text-blue-400", bgColor: "bg-blue-100 dark:bg-blue-950/50" },
-  joining: { label: "Joining", color: "text-blue-600 dark:text-blue-400", bgColor: "bg-blue-100 dark:bg-blue-950/50" },
-  awaiting_admission: { label: "Waiting", color: "text-amber-600 dark:text-amber-400", bgColor: "bg-amber-100 dark:bg-amber-950/50" },
-  active: { label: "Active", color: "text-green-600 dark:text-green-400", bgColor: "bg-green-100 dark:bg-green-950/50" },
-  needs_human_help: { label: "Needs Help", color: "text-orange-600 dark:text-orange-400", bgColor: "bg-orange-100 dark:bg-orange-950/50" },
-  stopping: { label: "Stopping", color: "text-slate-600 dark:text-slate-400", bgColor: "bg-slate-100 dark:bg-slate-900/50" },
-  completed: { label: "Completed", color: "text-green-600 dark:text-green-400", bgColor: "bg-green-100 dark:bg-green-950/50" },
-  failed: { label: "Failed", color: "text-red-600 dark:text-red-400", bgColor: "bg-red-100 dark:bg-red-950/50" },
+  requested: { label: "受付済み", color: "text-blue-600 dark:text-blue-400", bgColor: "bg-blue-100 dark:bg-blue-950/50" },
+  joining: { label: "参加中", color: "text-blue-600 dark:text-blue-400", bgColor: "bg-blue-100 dark:bg-blue-950/50" },
+  awaiting_admission: { label: "入室待ち", color: "text-amber-600 dark:text-amber-400", bgColor: "bg-amber-100 dark:bg-amber-950/50" },
+  active: { label: "記録中", color: "text-green-600 dark:text-green-400", bgColor: "bg-green-100 dark:bg-green-950/50" },
+  needs_human_help: { label: "要対応", color: "text-orange-600 dark:text-orange-400", bgColor: "bg-orange-100 dark:bg-orange-950/50" },
+  stopping: { label: "停止中", color: "text-slate-600 dark:text-slate-400", bgColor: "bg-slate-100 dark:bg-slate-900/50" },
+  completed: { label: "完了", color: "text-green-600 dark:text-green-400", bgColor: "bg-green-100 dark:bg-green-950/50" },
+  failed: { label: "失敗", color: "text-red-600 dark:text-red-400", bgColor: "bg-red-100 dark:bg-red-950/50" },
 };
 
 // Get detailed status info based on meeting data
@@ -293,10 +295,10 @@ export function getDetailedStatus(status: MeetingStatus, data?: MeetingData): De
 
   // Fallback config in case status is invalid or config is missing
   const fallbackConfig: DetailedStatusInfo = {
-    label: "Unknown",
+    label: "不明",
     color: "text-gray-600 dark:text-gray-400",
     bgColor: "bg-gray-100 dark:bg-gray-800/50",
-    description: "Unknown status"
+    description: "状態を確認できません"
   };
 
   // For completed meetings, check completion reason
@@ -304,62 +306,62 @@ export function getDetailedStatus(status: MeetingStatus, data?: MeetingData): De
     switch (data.completion_reason) {
       case "stopped":
         return {
-          label: "Stopped",
+          label: "停止済み",
           color: "text-gray-600 dark:text-gray-400",
           bgColor: "bg-gray-100 dark:bg-gray-800/50",
-          description: "Manually stopped by user",
+          description: "ユーザーが手動で停止しました",
         };
       case "meeting_ended":
         return {
-          label: "Ended",
+          label: "終了",
           color: "text-green-600 dark:text-green-400",
           bgColor: "bg-green-100 dark:bg-green-950/50",
-          description: "Meeting ended naturally",
+          description: "会議が終了しました",
         };
       case "kicked":
       case "removed":
         return {
-          label: "Removed",
+          label: "退出済み",
           color: "text-orange-600 dark:text-orange-400",
           bgColor: "bg-orange-100 dark:bg-orange-950/50",
-          description: "Bot was removed from meeting",
+          description: "ボットが会議から退出しました",
         };
       case "awaiting_admission_rejected":
         return {
-          label: "Rejected",
+          label: "入室拒否",
           color: "text-red-600 dark:text-red-400",
           bgColor: "bg-red-100 dark:bg-red-950/50",
-          description: "Bot was not admitted to meeting",
+          description: "ボットの入室が許可されませんでした",
         };
       default:
         return {
           ...(baseConfig || fallbackConfig),
           color: "text-green-600 dark:text-green-400",
           bgColor: "bg-green-100 dark:bg-green-950/50",
-          description: "Transcription completed"
+          description: "文字起こしが完了しました"
         };
     }
   }
 
   // For failed meetings, add description based on error
   if (status === "failed") {
-    let description = "Transcription failed";
+    let description = "文字起こしに失敗しました";
     if (data?.error_code) {
       switch (data.error_code.toLowerCase()) {
         case "admission_timeout":
         case "not_admitted":
-          description = "Bot was not admitted to meeting";
+          description = "ボットの入室が許可されませんでした";
           break;
         case "meeting_ended":
-          description = "Meeting ended before bot could join";
+          description = "ボット参加前に会議が終了しました";
           break;
         case "connection_failed":
-          description = "Failed to connect to meeting";
+          description = "会議への接続に失敗しました";
           break;
       }
     }
     return {
-      label: "Failed",
+      label: "失敗",
       color: "text-red-600 dark:text-red-400",
       bgColor: "bg-red-100 dark:bg-red-950/50",
       description
@@ -369,48 +371,48 @@ export function getDetailedStatus(status: MeetingStatus, data?: MeetingData): De
   // For escalated meetings
   if (status === "needs_human_help") {
     return {
-      label: "Needs Help",
+      label: "要対応",
       color: "text-orange-600 dark:text-orange-400",
       bgColor: "bg-orange-100 dark:bg-orange-950/50",
-      description: data?.escalation_reason as string || "Bot is blocked and needs human intervention"
+      description: data?.escalation_reason as string || "ボットが止まっているため、人の確認が必要です"
     };
   }
 
   // For active meetings
   if (status === "active") {
     return {
-      label: "Active",
+      label: "記録中",
       color: "text-green-600 dark:text-green-400",
       bgColor: "bg-green-100 dark:bg-green-950/50",
-      description: "Recording in progress"
+      description: "記録中です"
     };
   }
 
   // For joining states
   if (status === "joining") {
     return {
-      label: "Joining",
+      label: "参加中",
       color: "text-blue-600 dark:text-blue-400",
       bgColor: "bg-blue-100 dark:bg-blue-950/50",
-      description: "Connecting to meeting"
+      description: "会議に接続しています"
     };
   }
 
   if (status === "awaiting_admission") {
     return {
-      label: "Waiting",
+      label: "入室待ち",
       color: "text-amber-600 dark:text-amber-400",
       bgColor: "bg-amber-100 dark:bg-amber-950/50",
-      description: "Waiting in lobby"
+      description: "ロビーで入室許可を待っています"
     };
   }
 
   if (status === "requested") {
     return {
-      label: "Requested",
+      label: "受付済み",
       color: "text-blue-600 dark:text-blue-400",
       bgColor: "bg-blue-100 dark:bg-blue-950/50",
-      description: "Starting bot"
+      description: "ボットを開始しています"
     };
   }
 
@@ -420,28 +422,28 @@ export function getDetailedStatus(status: MeetingStatus, data?: MeetingData): De
 
 // Languages supported by Whisper
 export const SUPPORTED_LANGUAGES = [
-  { code: "auto", name: "Auto-detect" },
-  { code: "en", name: "English" },
-  { code: "fr", name: "French" },
-  { code: "de", name: "German" },
-  { code: "es", name: "Spanish" },
-  { code: "it", name: "Italian" },
-  { code: "pt", name: "Portuguese" },
-  { code: "nl", name: "Dutch" },
-  { code: "pl", name: "Polish" },
-  { code: "ru", name: "Russian" },
-  { code: "zh", name: "Chinese" },
-  { code: "ja", name: "Japanese" },
-  { code: "ko", name: "Korean" },
-  { code: "ar", name: "Arabic" },
-  { code: "hi", name: "Hindi" },
-  { code: "tr", name: "Turkish" },
-  { code: "vi", name: "Vietnamese" },
-  { code: "th", name: "Thai" },
-  { code: "sv", name: "Swedish" },
-  { code: "da", name: "Danish" },
-  { code: "fi", name: "Finnish" },
-  { code: "no", name: "Norwegian" },
+  { code: "auto", name: "自動判定" },
+  { code: "en", name: "英語" },
+  { code: "fr", name: "フランス語" },
+  { code: "de", name: "ドイツ語" },
+  { code: "es", name: "スペイン語" },
+  { code: "it", name: "イタリア語" },
+  { code: "pt", name: "ポルトガル語" },
+  { code: "nl", name: "オランダ語" },
+  { code: "pl", name: "ポーランド語" },
+  { code: "ru", name: "ロシア語" },
+  { code: "zh", name: "中国語" },
+  { code: "ja", name: "日本語" },
+  { code: "ko", name: "韓国語" },
+  { code: "ar", name: "アラビア語" },
+  { code: "hi", name: "ヒンディー語" },
+  { code: "tr", name: "トルコ語" },
+  { code: "vi", name: "ベトナム語" },
+  { code: "th", name: "タイ語" },
+  { code: "sv", name: "スウェーデン語" },
+  { code: "da", name: "デンマーク語" },
+  { code: "fi", name: "フィンランド語" },
+  { code: "no", name: "ノルウェー語" },
 ] as const;
 
 // ==========================================

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getAuthCookieName } from "@/lib/auth-cookies";
 import { resolveBrowserApiUrl } from "@/lib/browser-api-url";
+import { resolveDashboardBrand } from "@/lib/dashboard-brand";
+import { getSharedDashboardEmail, isSharedDashboardAuthEnabled } from "@/lib/direct-login";
 
 /**
  * Public configuration endpoint that exposes runtime environment variables to the client.
@@ -60,8 +62,10 @@ export async function GET(request: NextRequest) {
     || process.env.VEXA_API_KEY
     || null;
 
-  // Get default bot name from environment (optional)
-  const defaultBotName = process.env.DEFAULT_BOT_NAME || null;
+  const brand = resolveDashboardBrand(process.env);
+  // Get default bot name from environment (optional). Preserve the existing Vexa
+  // default shape by returning null unless an operator explicitly configures it.
+  const defaultBotName = process.env.DEFAULT_BOT_NAME || (brand.slug !== "vexa" ? brand.botName : null);
 
   // Hosted mode flags (read at runtime, not build time)
   const hostedMode = process.env.NEXT_PUBLIC_HOSTED_MODE === "true";
@@ -74,6 +78,11 @@ export async function GET(request: NextRequest) {
     decisionListenerUrl,
     authToken: authToken || null,
     defaultBotName,
+    brand,
+    sharedAuth: {
+      enabled: isSharedDashboardAuthEnabled(),
+      email: getSharedDashboardEmail(),
+    },
     hostedMode,
     webappUrl,
   });

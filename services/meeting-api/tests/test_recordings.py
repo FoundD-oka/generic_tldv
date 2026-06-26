@@ -125,6 +125,166 @@ class TestGetRecording:
 
 
 # ===================================================================
+# GET /recordings/{id}/media/{id}/raw
+# ===================================================================
+
+
+class TestDownloadRecordingMediaRaw:
+
+    @pytest.mark.asyncio
+    async def test_range_request_reads_only_requested_storage_range(self, client, mock_db):
+        meeting = make_meeting(data={
+            "recordings": [{
+                "id": 1001,
+                "meeting_id": TEST_MEETING_ID,
+                "user_id": TEST_USER_ID,
+                "session_uid": "sess-1",
+                "source": "bot",
+                "status": "completed",
+                "media_files": [{
+                    "id": 2001,
+                    "type": "audio",
+                    "format": "webm",
+                    "storage_backend": "minio",
+                    "storage_path": "recordings/test/master.webm",
+                    "file_size_bytes": 10,
+                }],
+            }],
+        })
+        mock_db.execute = AsyncMock(return_value=MockResult([meeting]))
+        mock_storage = MagicMock()
+        mock_storage.get_file_size.return_value = 10
+        mock_storage.download_file_range.return_value = b"bc"
+
+        with patch("meeting_api.recordings.get_storage_client", return_value=mock_storage):
+            resp = await client.get(
+                "/recordings/1001/media/2001/raw",
+                headers={"Range": "bytes=1-2"},
+            )
+
+        assert resp.status_code == 206
+        assert resp.content == b"bc"
+        assert resp.headers["content-range"] == "bytes 1-2/10"
+        assert resp.headers["content-length"] == "2"
+        mock_storage.download_file_range.assert_called_once_with("recordings/test/master.webm", 1, 2)
+        mock_storage.download_file.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_full_request_keeps_legacy_full_download(self, client, mock_db):
+        meeting = make_meeting(data={
+            "recordings": [{
+                "id": 1001,
+                "meeting_id": TEST_MEETING_ID,
+                "user_id": TEST_USER_ID,
+                "session_uid": "sess-1",
+                "source": "bot",
+                "status": "completed",
+                "media_files": [{
+                    "id": 2001,
+                    "type": "audio",
+                    "format": "webm",
+                    "storage_backend": "minio",
+                    "storage_path": "recordings/test/master.webm",
+                }],
+            }],
+        })
+        mock_db.execute = AsyncMock(return_value=MockResult([meeting]))
+        mock_storage = MagicMock()
+        mock_storage.download_file.return_value = b"full-webm"
+
+        with patch("meeting_api.recordings.get_storage_client", return_value=mock_storage):
+            resp = await client.get("/recordings/1001/media/2001/raw")
+
+        assert resp.status_code == 200
+        assert resp.content == b"full-webm"
+        mock_storage.download_file.assert_called_once_with("recordings/test/master.webm")
+        mock_storage.download_file_range.assert_not_called()
+
+
+# ===================================================================
+# GET /recordings/{id}/media/{id}/mp3
+# ===================================================================
+
+
+class TestDownloadRecordingMediaMp3:
+
+    @pytest.mark.asyncio
+    async def test_range_request_uses_cached_mp3_storage_object(self, client, mock_db):
+        meeting = make_meeting(data={
+            "recordings": [{
+                "id": 1001,
+                "meeting_id": TEST_MEETING_ID,
+                "user_id": TEST_USER_ID,
+                "session_uid": "sess-1",
+                "source": "bot",
+                "status": "completed",
+                "media_files": [{
+                    "id": 2001,
+                    "type": "audio",
+                    "format": "webm",
+                    "storage_backend": "minio",
+                    "storage_path": "recordings/test/master.webm",
+                }],
+            }],
+        })
+        mock_db.execute = AsyncMock(return_value=MockResult([meeting]))
+        mock_storage = MagicMock()
+        mock_storage.file_exists.return_value = True
+        mock_storage.get_file_size.return_value = 3
+        mock_storage.download_file_range.return_value = b"ID3"
+
+        with patch("meeting_api.recordings.get_storage_client", return_value=mock_storage):
+            resp = await client.get(
+                "/recordings/1001/media/2001/mp3",
+                headers={"Range": "bytes=0-2"},
+            )
+
+        assert resp.status_code == 206
+        assert resp.content == b"ID3"
+        assert resp.headers["content-range"] == "bytes 0-2/3"
+        assert resp.headers["content-type"].startswith("audio/mpeg")
+        assert resp.headers["content-disposition"] == 'inline; filename="1001_audio.mp3"'
+        mock_storage.download_file_range.assert_called_once_with("recordings/test/master.mp3", 0, 2)
+        mock_storage.download_file_to_path.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_master_mp3_resolves_finalized_audio_master(self, client, mock_db):
+        meeting = make_meeting(data={
+            "recordings": [{
+                "id": 1001,
+                "meeting_id": TEST_MEETING_ID,
+                "user_id": TEST_USER_ID,
+                "session_uid": "sess-1",
+                "source": "bot",
+                "status": "completed",
+                "media_files": [{
+                    "id": 2001,
+                    "type": "audio",
+                    "format": "webm",
+                    "storage_backend": "minio",
+                    "storage_path": "recordings/test/master.webm",
+                    "finalized_by": "recording_finalizer.master",
+                }],
+            }],
+        })
+        mock_db.execute = AsyncMock(return_value=MockResult([meeting]))
+        mock_storage = MagicMock()
+        mock_storage.file_exists.return_value = True
+        mock_storage.get_file_size.return_value = 3
+        mock_storage.download_file_range.return_value = b"ID3"
+
+        with patch("meeting_api.recordings.get_storage_client", return_value=mock_storage):
+            resp = await client.get(
+                "/recordings/1001/master/mp3?type=audio",
+                headers={"Range": "bytes=0-2"},
+            )
+
+        assert resp.status_code == 206
+        assert resp.content == b"ID3"
+        mock_storage.download_file_range.assert_called_once_with("recordings/test/master.mp3", 0, 2)
+
+
+# ===================================================================
 # DELETE /recordings/{id}
 # ===================================================================
 

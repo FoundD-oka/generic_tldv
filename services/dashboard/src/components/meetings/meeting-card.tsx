@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { formatDistanceToNow, format } from "date-fns";
+import { ja } from "date-fns/locale";
 import { Clock, ChevronRight, Calendar, MessageSquare, FileText, Pencil, Check, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -93,10 +94,11 @@ export function MeetingCard({ meeting }: MeetingCardProps) {
     : null;
 
   const formatDuration = (minutes: number) => {
-    if (minutes < 60) return `${minutes} min`;
+    if (minutes < 1) return "1分未満";
+    if (minutes < 60) return `${minutes}分`;
     const hours = Math.floor(minutes / 60);
     const mins = minutes % 60;
-    return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+    return mins > 0 ? `${hours}時間${mins}分` : `${hours}時間`;
   };
 
   // Build detailed status info for tooltip
@@ -116,7 +118,7 @@ export function MeetingCard({ meeting }: MeetingCardProps) {
           .split("_")
           .map(word => word.charAt(0).toUpperCase() + word.slice(1))
           .join(" ");
-        lines.push(`Reason: ${formattedReason}`);
+        lines.push(`理由: ${formattedReason}`);
       }
     }
     
@@ -128,7 +130,7 @@ export function MeetingCard({ meeting }: MeetingCardProps) {
       if (lastTransition.timestamp) {
         try {
           const timestamp = parseUTCTimestamp(lastTransition.timestamp);
-          lines.push(`Last updated: ${formatDistanceToNow(timestamp, { addSuffix: true })}`);
+          lines.push(`最終更新: ${formatDistanceToNow(timestamp, { addSuffix: true, locale: ja })}`);
         } catch (e) {
           // Ignore parsing errors
         }
@@ -136,7 +138,7 @@ export function MeetingCard({ meeting }: MeetingCardProps) {
       
       // Show transition count if more than 1
       if (transitions.length > 1) {
-        lines.push(`${transitions.length} status changes`);
+        lines.push(`状態変更 ${transitions.length}回`);
       }
     }
     
@@ -144,7 +146,7 @@ export function MeetingCard({ meeting }: MeetingCardProps) {
     if (meeting.start_time) {
       try {
         const startTime = parseUTCTimestamp(meeting.start_time);
-        lines.push(`Started: ${format(startTime, "MMM d, HH:mm")}`);
+        lines.push(`開始: ${format(startTime, "M月d日 HH:mm", { locale: ja })}`);
       } catch (e) {
         // Ignore parsing errors
       }
@@ -153,7 +155,7 @@ export function MeetingCard({ meeting }: MeetingCardProps) {
     if (meeting.end_time) {
       try {
         const endTime = parseUTCTimestamp(meeting.end_time);
-        lines.push(`Ended: ${format(endTime, "MMM d, HH:mm")}`);
+        lines.push(`終了: ${format(endTime, "M月d日 HH:mm", { locale: ja })}`);
       } catch (e) {
         // Ignore parsing errors
       }
@@ -185,9 +187,9 @@ export function MeetingCard({ meeting }: MeetingCardProps) {
         name: editedTitle.trim(),
       });
       setIsEditingTitle(false);
-      toast.success("Title updated");
+      toast.success("タイトルを更新しました");
     } catch (error) {
-      toast.error("Failed to update title");
+      toast.error("タイトルの更新に失敗しました");
     } finally {
       setIsSavingTitle(false);
     }
@@ -210,9 +212,9 @@ export function MeetingCard({ meeting }: MeetingCardProps) {
           name: editedTitle.trim(),
         });
         setIsEditingTitle(false);
-        toast.success("Title updated");
+        toast.success("タイトルを更新しました");
       } catch (error) {
-        toast.error("Failed to update title");
+        toast.error("タイトルの更新に失敗しました");
       } finally {
         setIsSavingTitle(false);
       }
@@ -275,7 +277,7 @@ export function MeetingCard({ meeting }: MeetingCardProps) {
                         value={editedTitle}
                         onChange={(e) => setEditedTitle(e.target.value)}
                         className="text-base font-semibold h-8 flex-1"
-                        placeholder="Meeting title..."
+                        placeholder="会議タイトル..."
                         autoFocus
                         disabled={isSavingTitle}
                         onKeyDown={handleKeyDown}
@@ -321,8 +323,8 @@ export function MeetingCard({ meeting }: MeetingCardProps) {
                   )}
                   {meeting.data?.participants && meeting.data.participants.length > 0 ? (
                     <p className="text-xs text-muted-foreground truncate mt-0.5">
-                      With {meeting.data.participants.slice(0, 3).join(", ")}
-                      {meeting.data.participants.length > 3 && ` +${meeting.data.participants.length - 3}`}
+                      参加者: {meeting.data.participants.slice(0, 3).join(", ")}
+                      {meeting.data.participants.length > 3 && ` ほか${meeting.data.participants.length - 3}名`}
                     </p>
                   ) : displayTitle && !isEditingTitle && (
                     <p className="text-xs text-muted-foreground font-mono truncate mt-0.5">
@@ -376,7 +378,7 @@ export function MeetingCard({ meeting }: MeetingCardProps) {
                     <TooltipTrigger asChild>
                       <div className="flex items-center gap-1.5 text-muted-foreground cursor-help">
                         <Calendar className="h-3.5 w-3.5" />
-                        <span>{format(parseUTCTimestamp(meeting.start_time), "MMM d, yyyy")}</span>
+                        <span>{format(parseUTCTimestamp(meeting.start_time), "yyyy年M月d日", { locale: ja })}</span>
                       </div>
                     </TooltipTrigger>
                     <TooltipContent side="top">
@@ -397,7 +399,7 @@ export function MeetingCard({ meeting }: MeetingCardProps) {
                 {meeting.start_time && (
                   <div className="flex items-center gap-1.5 text-muted-foreground">
                     <Clock className="h-3.5 w-3.5" />
-                    <span>{formatDistanceToNow(parseUTCTimestamp(meeting.start_time), { addSuffix: true })}</span>
+                    <span>{formatDistanceToNow(parseUTCTimestamp(meeting.start_time), { addSuffix: true, locale: ja })}</span>
                   </div>
                 )}
 
@@ -413,12 +415,12 @@ export function MeetingCard({ meeting }: MeetingCardProps) {
                     <TooltipTrigger asChild>
                       <div className="flex items-center gap-1.5 text-muted-foreground cursor-help">
                         <FileText className="h-3.5 w-3.5" />
-                        <span>Note</span>
+                        <span>メモ</span>
                       </div>
                     </TooltipTrigger>
                     <TooltipContent side="top" className="max-w-xs">
                       <div className="text-xs">
-                        <div className="font-medium mb-1">Note:</div>
+                        <div className="font-medium mb-1">メモ:</div>
                         <div className="text-muted-foreground">
                           {typeof meeting.data.notes === "string" && meeting.data.notes.length > 100
                             ? `${meeting.data.notes.substring(0, 100)}...`

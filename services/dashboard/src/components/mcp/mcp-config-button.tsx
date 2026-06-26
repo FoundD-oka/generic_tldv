@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import { Copy, Check, Code, ExternalLink, ChevronDown, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,7 +44,7 @@ export function MCPConfigButton() {
         setConfig(data);
       } catch (error) {
         console.error("Failed to fetch config:", error);
-        toast.error("Failed to load configuration");
+        toast.error("設定の読み込みに失敗しました");
       } finally {
         setLoading(false);
       }
@@ -109,10 +110,10 @@ export function MCPConfigButton() {
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
-      toast.success("Copied to clipboard");
+      toast.success("クリップボードにコピーしました");
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
-      toast.error("Failed to copy to clipboard");
+      toast.error("クリップボードへのコピーに失敗しました");
     }
   };
 
@@ -143,7 +144,7 @@ export function MCPConfigButton() {
 
   const handleCursorInstall = () => {
     if (!config?.authToken) {
-      toast.error("No API token available");
+      toast.error("APIトークンがありません");
       return;
     }
 
@@ -199,15 +200,15 @@ export function MCPConfigButton() {
       link.click();
       document.body.removeChild(link);
       
-      toast.success("Opening Cursor to install MCP server...", {
-        description: "If Cursor doesn't open automatically, the config has been copied to your clipboard.",
+      toast.success("Cursorを開いてMCPサーバーを追加します", {
+        description: "Cursorが自動で開かない場合は、設定をクリップボードにコピー済みです。",
         duration: 8000,
       });
     } catch (error) {
       // Fallback: just copy config
       const filePath = getConfigFilePath("cursor");
-      toast.info("Config copied to clipboard!", {
-        description: `Please paste it into ${filePath} and merge into existing mcpServers object if needed.`,
+      toast.info("設定をクリップボードにコピーしました", {
+        description: `${filePath} に貼り付け、必要に応じて既存のmcpServersに統合してください。`,
         duration: 8000,
       });
     }
@@ -215,7 +216,7 @@ export function MCPConfigButton() {
 
   const handleVSCodeInstall = () => {
     if (!config?.authToken) {
-      toast.error("No API token available");
+      toast.error("APIトークンがありません");
       return;
     }
 
@@ -258,8 +259,8 @@ export function MCPConfigButton() {
     URL.revokeObjectURL(url);
     
     const filePath = getConfigFilePath("vscode");
-    toast.success("Config downloaded and copied!", {
-      description: `Save the downloaded mcp.json file to ${filePath} (or merge into existing file). Config is also in your clipboard.`,
+    toast.success("設定ファイルをダウンロードし、クリップボードにもコピーしました", {
+      description: `ダウンロードしたmcp.jsonを ${filePath} に保存してください。既存ファイルがある場合は内容を統合してください。`,
       duration: 10000,
     });
   };
@@ -271,7 +272,7 @@ export function MCPConfigButton() {
     }
     return (
       <div className="mr-2 h-4 w-4 relative flex items-center justify-center">
-        <img
+        <Image
           src="/icons/icons8-mcp-96 (1).png"
           alt="MCP"
           width={16}
@@ -287,7 +288,7 @@ export function MCPConfigButton() {
     return (
       <Button variant="outline" disabled>
         <MCPIcon />
-        MCP Config
+        MCP設定
       </Button>
     );
   }
@@ -296,7 +297,7 @@ export function MCPConfigButton() {
     return (
       <Button variant="outline" disabled>
         <MCPIcon />
-        MCP Config
+        MCP設定
       </Button>
     );
   }
@@ -307,33 +308,33 @@ export function MCPConfigButton() {
         <DropdownMenuTrigger asChild>
           <Button variant="outline">
             <MCPIcon />
-            Setup MCP
+            MCPを設定
             <ChevronDown className="ml-2 h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-64">
-          <DropdownMenuLabel>MCP Server Configuration</DropdownMenuLabel>
+          <DropdownMenuLabel>MCPサーバー設定</DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={handleShowConfig}>
             <Settings className="mr-2 h-4 w-4" />
             <div className="flex flex-col">
-              <span>View Config</span>
-              <span className="text-xs text-muted-foreground">View configuration JSON</span>
+              <span>設定を見る</span>
+              <span className="text-xs text-muted-foreground">設定JSONを確認</span>
             </div>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={handleCursorInstall}>
             <ExternalLink className="mr-2 h-4 w-4" />
             <div className="flex flex-col">
-              <span>Connect to Cursor</span>
-              <span className="text-xs text-muted-foreground">Install MCP Server on Cursor</span>
+              <span>Cursorに接続</span>
+              <span className="text-xs text-muted-foreground">CursorにMCPサーバーを追加</span>
             </div>
           </DropdownMenuItem>
           <DropdownMenuItem onClick={handleVSCodeInstall}>
             <ExternalLink className="mr-2 h-4 w-4" />
             <div className="flex flex-col">
-              <span>Connect to VS Code</span>
-              <span className="text-xs text-muted-foreground">Install MCP Server on VS Code</span>
+              <span>VS Codeに接続</span>
+              <span className="text-xs text-muted-foreground">VS CodeにMCPサーバーを追加</span>
             </div>
           </DropdownMenuItem>
         </DropdownMenuContent>
@@ -342,9 +343,9 @@ export function MCPConfigButton() {
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>MCP Server Configuration</DialogTitle>
+            <DialogTitle>MCPサーバー設定</DialogTitle>
             <DialogDescription>
-              Copy this configuration and add it to your mcp.json file
+              この設定をコピーして、利用中のmcp.jsonに追加してください
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -369,18 +370,18 @@ export function MCPConfigButton() {
             </div>
             <div className="text-sm text-muted-foreground space-y-2 p-4 bg-muted rounded-lg">
               <p>
-                <strong>For Cursor:</strong> Edit{" "}
-                <code className="bg-background px-1.5 py-0.5 rounded">~/.cursor/mcp.json</code> (macOS/Linux) or{" "}
-                <code className="bg-background px-1.5 py-0.5 rounded">%APPDATA%\\Cursor\\mcp.json</code> (Windows)
+                <strong>Cursorの場合:</strong>{" "}
+                <code className="bg-background px-1.5 py-0.5 rounded">~/.cursor/mcp.json</code> (macOS/Linux) または{" "}
+                <code className="bg-background px-1.5 py-0.5 rounded">%APPDATA%\\Cursor\\mcp.json</code> (Windows) を編集します
               </p>
               <p>
-                <strong>For VS Code:</strong> Edit{" "}
-                <code className="bg-background px-1.5 py-0.5 rounded">~/.vscode/mcp.json</code> (macOS/Linux) or{" "}
-                <code className="bg-background px-1.5 py-0.5 rounded">%APPDATA%\\Code\\User\\mcp.json</code> (Windows)
+                <strong>VS Codeの場合:</strong>{" "}
+                <code className="bg-background px-1.5 py-0.5 rounded">~/.vscode/mcp.json</code> (macOS/Linux) または{" "}
+                <code className="bg-background px-1.5 py-0.5 rounded">%APPDATA%\\Code\\User\\mcp.json</code> (Windows) を編集します
               </p>
               <p className="text-xs pt-2">
-                If you already have an mcp.json file, merge the Vexa configuration into the existing{" "}
-                <code className="bg-background px-1.5 py-0.5 rounded">mcpServers</code> object.
+                既にmcp.jsonがある場合は、Vexa設定を既存の{" "}
+                <code className="bg-background px-1.5 py-0.5 rounded">mcpServers</code> オブジェクトに統合してください。
               </p>
             </div>
           </div>

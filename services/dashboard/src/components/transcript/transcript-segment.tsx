@@ -121,11 +121,11 @@ export function TranscriptSegment({
                     ? "opacity-100 border-primary/40 bg-primary/10 text-primary"
                     : "opacity-80 group-hover:opacity-100 group-hover:border-primary/40 group-hover:bg-primary/10 group-hover:text-primary"
                 )}
-                aria-label="Click segment to play from this timestamp"
-                title="Click to play from this segment"
+                aria-label="この時刻から再生"
+                title="この発話から再生"
               >
                 <Play className="h-3 w-3" />
-                Play
+                再生
               </span>
             )}
           </div>

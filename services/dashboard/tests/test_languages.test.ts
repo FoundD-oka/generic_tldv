@@ -1,5 +1,5 @@
 /**
- * Unit tests for language utilities — codes, display names, sorting.
+ * Unit tests for language utilities: codes, display names, sorting.
  */
 import { describe, it, expect } from "vitest";
 import {
@@ -9,8 +9,8 @@ import {
 } from "@/lib/languages";
 
 describe("WHISPER_LANGUAGE_NAMES", () => {
-  it("contains English", () => {
-    expect(WHISPER_LANGUAGE_NAMES["en"]).toBe("English");
+  it("contains Japanese display name for English", () => {
+    expect(WHISPER_LANGUAGE_NAMES["en"]).toBe("英語");
   });
 
   it("has more than 90 languages", () => {
@@ -36,12 +36,12 @@ describe("WHISPER_LANGUAGE_CODES", () => {
 });
 
 describe("getLanguageDisplayName", () => {
-  it("returns Auto-detect for 'auto'", () => {
-    expect(getLanguageDisplayName("auto")).toBe("Auto-detect");
+  it("returns Japanese auto-detect label for 'auto'", () => {
+    expect(getLanguageDisplayName("auto")).toBe("自動判定");
   });
 
-  it("returns English for 'en'", () => {
-    expect(getLanguageDisplayName("en")).toBe("English");
+  it("returns Japanese display name for 'en'", () => {
+    expect(getLanguageDisplayName("en")).toBe("英語");
   });
 
   it("returns uppercased code for unknown codes", () => {

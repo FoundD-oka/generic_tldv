@@ -20,33 +20,33 @@ interface EmptyStateProps {
 const emptyConfig: Record<EmptyType, { icon: typeof Video; defaultTitle: string; defaultMessage: string }> = {
   meetings: {
     icon: Video,
-    defaultTitle: "No meetings yet",
-    defaultMessage: "Start your first transcription to see it here.",
+    defaultTitle: "まだ会議がありません",
+    defaultMessage: "最初の文字起こしを開始すると、ここに表示されます。",
   },
   search: {
     icon: Search,
-    defaultTitle: "No results found",
-    defaultMessage: "Try adjusting your search or filters.",
+    defaultTitle: "結果が見つかりません",
+    defaultMessage: "検索条件やフィルターを調整してください。",
   },
   transcripts: {
     icon: FileText,
-    defaultTitle: "No transcripts",
-    defaultMessage: "Transcripts will appear here once the meeting starts.",
+    defaultTitle: "文字起こしはありません",
+    defaultMessage: "会議が始まると文字起こしがここに表示されます。",
   },
   participants: {
     icon: Users,
-    defaultTitle: "No participants",
-    defaultMessage: "Participants will appear once they join.",
+    defaultTitle: "参加者はいません",
+    defaultMessage: "参加者が入室するとここに表示されます。",
   },
   calendar: {
     icon: Calendar,
-    defaultTitle: "No upcoming meetings",
-    defaultMessage: "Your scheduled meetings will appear here.",
+    defaultTitle: "今後の会議はありません",
+    defaultMessage: "予定された会議がここに表示されます。",
   },
   generic: {
     icon: Inbox,
-    defaultTitle: "Nothing here",
-    defaultMessage: "There's nothing to display at the moment.",
+    defaultTitle: "表示する内容がありません",
+    defaultMessage: "現時点で表示できる内容はありません。",
   },
 };
 

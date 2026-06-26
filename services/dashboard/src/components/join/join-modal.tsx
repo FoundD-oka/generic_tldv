@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Video, Loader2, Sparkles, Globe, Mic, Monitor, UserCheck } from "lucide-react";
+import { Video, Loader2, Sparkles, Monitor, UserCheck } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -19,18 +19,43 @@ import { useLiveStore } from "@/stores/live-store";
 import { useJoinModalStore } from "@/stores/join-modal-store";
 import { useMeetingsStore } from "@/stores/meetings-store";
 import { useRuntimeConfig } from "@/hooks/use-runtime-config";
-import type { Platform, CreateBotRequest } from "@/types/vexa";
-import { LanguagePicker } from "@/components/language-picker";
+import type { Platform } from "@/types/vexa";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { getUserFriendlyError } from "@/lib/error-messages";
 import { getWebappUrl } from "@/lib/docs/webapp-url";
 import { parseMeetingInput } from "@/lib/parse-meeting-input";
-import { DocsLink } from "@/components/docs/docs-link";
 import { useAuthStore } from "@/stores/auth-store";
 import { shouldTriggerZoomOAuth, startZoomOAuth } from "@/lib/zoom-oauth-client";
 import { withBasePath } from "@/lib/base-path";
+import { DEFAULT_DASHBOARD_BRAND } from "@/lib/dashboard-brand";
+import { getDashboardCopy } from "@/lib/dashboard-copy";
+import { withPostMeetingAutoStop } from "@/lib/bot-create-defaults";
 
+const FIXED_BOT_NAME = "カボス";
+const FIXED_TRANSCRIPTION_LANGUAGE = "ja";
+
+const VIDEO_RECORDING_COPY = {
+  en: {
+    label: "Screen recording",
+    enabledHelp: "Records the meeting view seen by the bot. This uses more CPU and storage.",
+    disabledHelp: "Turn this on only for meetings that need video. Default is off.",
+    startWithRecording: "Start with Recording",
+    joiningDescription: "The transcription bot is connecting and screen recording will start.",
+  },
+  ja: {
+    label: "画面録画",
+    enabledHelp: "ボットが見ている会議画面を録画します。負荷と保存容量が増えます。",
+    disabledHelp: "必要な会議だけオンにしてください。デフォルトはオフです。",
+    startWithRecording: "録画つきで開始",
+    joiningDescription: "文字起こしボットが接続し、画面録画も開始します。",
+  },
+} as const;
+
+type CreateBotRequestWithVideo = ReturnType<typeof withPostMeetingAutoStop> & {
+  video?: boolean;
+  video_receive_enabled?: boolean;
+};
 
 export function JoinModal() {
   const router = useRouter();
@@ -39,42 +64,27 @@ export function JoinModal() {
   const { setCurrentMeeting } = useMeetingsStore();
   const { config } = useRuntimeConfig();
   const user = useAuthStore((state) => state.user);
+  const brand = config?.brand || DEFAULT_DASHBOARD_BRAND;
+  const copy = getDashboardCopy(brand.locale).joinModal;
+  const recordingCopy = VIDEO_RECORDING_COPY[brand.locale];
 
   const [mode, setMode] = useState<"meeting" | "browser">("meeting");
   const [meetingInput, setMeetingInput] = useState("");
   const [platform, setPlatform] = useState<Platform>("google_meet");
-  const [language, setLanguage] = useState("auto");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [transcribeEnabled, setTranscribeEnabled] = useState(true);
-  const [botName, setBotName] = useState(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("vexa-join-bot-name") || "Vexa";
-    }
-    return "Vexa";
-  });
   const [passcode, setPasscode] = useState("");
+  const [videoRecordingEnabled, setVideoRecordingEnabled] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
 
-  // Persist bot name and language to localStorage
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("vexa-join-bot-name", botName);
-    }
-  }, [botName]);
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-    }
-  }, [language]);
-
-  // Reset form when modal closes (preserve bot name and languages)
+  // Reset form when modal closes.
   useEffect(() => {
     if (!isOpen) {
       setMode("meeting");
       setMeetingInput("");
       setPlatform("google_meet");
       setIsSubmitting(false);
-      setTranscribeEnabled(true);
       setPasscode("");
+      setVideoRecordingEnabled(false);
       setAuthenticated(false);
     }
   }, [isOpen]);
@@ -104,8 +114,8 @@ export function JoinModal() {
     e.preventDefault();
 
     if (!parsedInput) {
-      toast.error("Invalid meeting", {
-        description: "Please enter a valid Google Meet, Zoom, or Teams URL or meeting code",
+      toast.error(copy.invalidTitle, {
+        description: copy.invalidDescription,
       });
       return;
     }
@@ -115,16 +125,16 @@ export function JoinModal() {
     // platform in the request.
     const effectivePlatform = parsedInput.platform || platform;
     if (parsedInput.platformNeeded && !effectivePlatform) {
-      toast.error("Platform required", {
-        description: "This URL doesn't match a known meeting platform. Please select Google Meet, Zoom, or Teams.",
+      toast.error(copy.platformRequiredTitle, {
+        description: copy.platformRequiredDescription,
       });
       return;
     }
 
     const finalPasscode = parsedInput.passcode || passcode.trim() || undefined;
     if (effectivePlatform === "teams" && !finalPasscode) {
-      toast.error("Passcode required", {
-        description: "Microsoft Teams meetings require a passcode",
+      toast.error(copy.passcodeRequiredTitle, {
+        description: copy.passcodeRequiredDescription,
       });
       return;
     }
@@ -134,10 +144,10 @@ export function JoinModal() {
     // Path 3 (URL + platform): when parser identified platform, use parsed
     // meetingId. Otherwise (platformNeeded), send meeting_url + platform; backend
     // synthesizes/extracts native_meeting_id best-effort.
-    const request: CreateBotRequest = {
-        platform: effectivePlatform!,
-        native_meeting_id: parsedInput.meetingId || "",
-      };
+    const request: CreateBotRequestWithVideo = withPostMeetingAutoStop({
+      platform: effectivePlatform!,
+      native_meeting_id: parsedInput.meetingId || "",
+    });
 
     if ((effectivePlatform === "teams" || effectivePlatform === "zoom") && finalPasscode) {
       request.passcode = finalPasscode;
@@ -147,25 +157,26 @@ export function JoinModal() {
       request.meeting_url = parsedInput.originalUrl;
     }
 
-    request.bot_name = botName.trim() || config?.defaultBotName || "Vexa";
-
-    if (language && language !== "auto") {
-      request.language = language;
-    }
-
-    if (!transcribeEnabled) {
-      request.transcribe_enabled = false;
-    }
+    request.bot_name = FIXED_BOT_NAME;
+    request.language = FIXED_TRANSCRIPTION_LANGUAGE;
+    request.transcribe_enabled = true;
 
     if (authenticated) {
       request.authenticated = true;
     }
 
+    if (videoRecordingEnabled) {
+      request.video = true;
+      request.video_receive_enabled = true;
+    }
+
     try {
       const meeting = await vexaAPI.createBot(request);
 
-      toast.success("Bot joining meeting", {
-        description: "The transcription bot is connecting...",
+      toast.success(copy.botJoining, {
+        description: videoRecordingEnabled
+          ? recordingCopy.joiningDescription
+          : copy.botJoiningDescription,
       });
 
       setActiveMeeting(meeting);
@@ -177,10 +188,10 @@ export function JoinModal() {
       console.error("Failed to create bot:", error);
 
       if (error instanceof VexaAPIError && error.status === 402) {
-        toast.error("Subscription required", {
-          description: "Subscribe to a plan to create bots.",
+        toast.error(copy.subscriptionRequiredTitle, {
+          description: copy.subscriptionRequiredDescription,
           action: {
-            label: "View Plans",
+            label: getDashboardCopy(brand.locale).meetings.viewPlans,
             onClick: () => window.open(`${getWebappUrl()}/pricing`, "_blank"),
           },
         });
@@ -193,9 +204,8 @@ export function JoinModal() {
         user?.email
       ) {
         try {
-          toast.info("Zoom authentication required", {
-            description:
-              "Redirecting to Zoom. Sign in with the Zoom account that owns or is allowed to use the Vexa app to avoid \"Application not found\".",
+          toast.info(copy.zoomAuthTitle, {
+            description: copy.zoomAuthDescription,
           });
           await startZoomOAuth({
             userEmail: user.email,
@@ -204,7 +214,7 @@ export function JoinModal() {
           });
           return;
         } catch (oauthError) {
-          toast.error("Failed to start Zoom authentication", {
+          toast.error(copy.zoomAuthStartFailed, {
             description: (oauthError as Error).message,
           });
         }
@@ -215,7 +225,21 @@ export function JoinModal() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [parsedInput, passcode, botName, language, transcribeEnabled, authenticated, config, setActiveMeeting, setCurrentMeeting, closeModal, router, user]);
+  }, [
+    parsedInput,
+    platform,
+    passcode,
+    videoRecordingEnabled,
+    authenticated,
+    brand.locale,
+    copy,
+    recordingCopy,
+    setActiveMeeting,
+    setCurrentMeeting,
+    closeModal,
+    router,
+    user,
+  ]);
 
   const handleBrowserSession = useCallback(async () => {
     setIsSubmitting(true);
@@ -239,7 +263,7 @@ export function JoinModal() {
         throw new Error(err.detail || "Failed to create browser session");
       }
       const meeting = await response.json();
-      toast.success("Browser session starting...");
+      toast.success(copy.starting);
       closeModal();
       setTimeout(() => router.push(`/meetings/${meeting.id}`), 2000);
     } catch (error) {
@@ -248,7 +272,7 @@ export function JoinModal() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [closeModal, router]);
+  }, [closeModal, copy.starting, router]);
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && closeModal()}>
@@ -258,10 +282,10 @@ export function JoinModal() {
             <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
               <Video className="h-4 w-4 text-primary-foreground" />
             </div>
-            Join a Meeting
+            {copy.title}
           </DialogTitle>
           <DialogDescription>
-            Paste a Google Meet, Zoom, or Teams URL to start transcribing automatically
+            {copy.description}
           </DialogDescription>
         </DialogHeader>
 
@@ -276,7 +300,7 @@ export function JoinModal() {
             onClick={() => setMode("meeting")}
           >
             <Video className="h-3.5 w-3.5" />
-            Meeting
+            {copy.modeMeeting}
           </button>
           <button
             type="button"
@@ -287,14 +311,14 @@ export function JoinModal() {
             onClick={() => setMode("browser")}
           >
             <Monitor className="h-3.5 w-3.5" />
-            Browser
+            {copy.modeBrowser}
           </button>
         </div>
 
         {mode === "browser" ? (
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Remote browser with VNC, CDP, and SSH. Configure git workspace in Profile settings.
+              {copy.browserDescription}
             </p>
             <Button
               className="w-full h-12 text-base"
@@ -304,12 +328,12 @@ export function JoinModal() {
               {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                  Starting...
+                  {copy.starting}
                 </>
               ) : (
                 <>
                   <Monitor className="mr-2 h-5 w-5" />
-                  Start Browser Session
+                  {copy.startBrowserSession}
                 </>
               )}
             </Button>
@@ -320,7 +344,7 @@ export function JoinModal() {
           {/* Meeting Input */}
           <div className="space-y-2">
             <Label htmlFor="meetingInput" className="sr-only">
-              Meeting URL or Code
+              {copy.meetingInputLabel}
             </Label>
             <div className="relative">
               {parsedInput && (
@@ -346,7 +370,7 @@ export function JoinModal() {
               )}
               <Input
                 id="meetingInput"
-                placeholder="Paste meeting URL (Google Meet, Zoom, or Teams)..."
+                placeholder={copy.meetingInputPlaceholder}
                 value={meetingInput}
                 onChange={(e) => setMeetingInput(e.target.value)}
                 className={cn(
@@ -394,9 +418,9 @@ export function JoinModal() {
             {parsedInput && parsedInput.platformNeeded && (
               <div className="space-y-2 animate-fade-in rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
                 <p className="text-xs text-amber-700 dark:text-amber-300">
-                  <span className="font-semibold">URL recognized as a meeting link, but vendor isn&apos;t auto-detected.</span> Pick the platform — the bot will navigate the URL directly.
+                  {copy.platformNeeded}
                 </p>
-                <fieldset className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Select meeting platform">
+                <fieldset className="grid grid-cols-3 gap-2" role="radiogroup" aria-label={copy.platformRadioLabel}>
                   <button
                     type="button"
                     role="radio"
@@ -473,64 +497,30 @@ export function JoinModal() {
             )}
           </div>
 
-          {/* Bot Name */}
-          <div className="space-y-2">
-            <Label htmlFor="botName" className="text-sm">
-              Bot Name
-            </Label>
-            <Input
-              id="botName"
-              placeholder="Vexa"
-              value={botName}
-              onChange={(e) => setBotName(e.target.value)}
-              className="h-10"
-            />
-          </div>
-
-          {/* Transcription Toggle */}
-          <div className="flex items-center justify-between">
-            <Label htmlFor="transcribe" className="text-sm flex items-center gap-2 cursor-pointer">
-              <Mic className="h-3.5 w-3.5" />
-              Real-time Transcription
-            </Label>
-            <Switch
-              id="transcribe"
-              checked={transcribeEnabled}
-              onCheckedChange={setTranscribeEnabled}
-            />
-          </div>
-          {!transcribeEnabled && (
-            <p className="text-xs text-muted-foreground -mt-2">
-              Bot will record audio only. You can transcribe later from the meeting page.
-            </p>
-          )}
-
-          {/* Language Selection - multi-select, only shown when transcription is enabled */}
-          {transcribeEnabled && (
-            <div className="space-y-2">
-              <Label htmlFor="language" className="text-sm flex items-center gap-2">
-                <Globe className="h-3.5 w-3.5" />
-                Transcription Language
+          {/* Video Recording Toggle */}
+          <div className="space-y-1.5 rounded-lg border bg-muted/30 p-3">
+            <div className="flex items-center justify-between gap-4">
+              <Label htmlFor="modalVideoRecordingEnabled" className="text-sm flex items-center gap-2 cursor-pointer">
+                <Monitor className="h-3.5 w-3.5" />
+                {recordingCopy.label}
               </Label>
-              <LanguagePicker
-                value={language}
-                onValueChange={setLanguage}
-                triggerClassName="h-10 w-full justify-between"
+              <Switch
+                id="modalVideoRecordingEnabled"
+                checked={videoRecordingEnabled}
+                onCheckedChange={setVideoRecordingEnabled}
               />
-              {language === "auto" && (
-                <p className="text-xs text-muted-foreground">
-                  Auto-detect: the service will detect the language automatically.
-                </p>
-              )}
             </div>
-          )}
+            <p className="text-xs text-muted-foreground">
+              {videoRecordingEnabled ? recordingCopy.enabledHelp : recordingCopy.disabledHelp}
+            </p>
+          </div>
 
           {/* Authenticated Toggle — coming soon */}
           <div className="flex items-center justify-between opacity-50">
             <Label htmlFor="authenticated" className="text-sm flex items-center gap-2 cursor-not-allowed">
               <UserCheck className="h-3.5 w-3.5" />
-              Authenticated
-              <span className="text-[10px] font-medium bg-muted px-1.5 py-0.5 rounded">Soon</span>
+              {copy.authenticated}
+              <span className="text-[10px] font-medium bg-muted px-1.5 py-0.5 rounded">{copy.soon}</span>
             </Label>
             <Switch
               id="authenticated"
@@ -543,11 +533,11 @@ export function JoinModal() {
           {(platform === "teams" || platform === "zoom") && (
             <div className="space-y-2">
               <Label htmlFor="passcode" className="text-sm">
-                Passcode {platform === "teams" ? "(required for Teams)" : "(optional for Zoom)"}
+                {platform === "teams" ? copy.passcodeLabelTeams : copy.passcodeLabelZoom}
               </Label>
               <Input
                 id="passcode"
-                placeholder="Enter meeting passcode"
+                placeholder={copy.passcodePlaceholder}
                 value={passcode}
                 onChange={(e) => setPasscode(e.target.value)}
                 className="h-10"
@@ -568,16 +558,15 @@ export function JoinModal() {
               {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                  Connecting...
+                  {copy.connecting}
                 </>
               ) : (
                 <>
                   <Sparkles className="mr-2 h-5 w-5" />
-                  {transcribeEnabled ? "Start Transcription" : "Start Recording"}
+                  {videoRecordingEnabled ? recordingCopy.startWithRecording : copy.startTranscription}
                 </>
               )}
             </Button>
-            {/* <DocsLink href="/docs/rest/bots#create-bot" /> */}
           </div>
         </form>
         )}

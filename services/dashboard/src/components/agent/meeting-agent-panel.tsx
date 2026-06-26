@@ -274,17 +274,17 @@ export function MeetingAgentPanel({ meetingId, platform }: MeetingAgentPanelProp
       <div className="flex items-center justify-between px-3 py-2 border-b shrink-0">
         <div className="flex items-center gap-2">
           <Bot className="h-4 w-4 text-primary" />
-          <span className="font-semibold text-sm">Meeting Agent</span>
+          <span className="font-semibold text-sm">会議エージェント</span>
           {isStreaming && (
             <Badge variant="secondary" className="text-xs">
               <Loader2 className="h-3 w-3 animate-spin mr-1" />
-              Thinking...
+              考え中...
             </Badge>
           )}
         </div>
         <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={handleReset}>
           <RotateCcw className="h-3 w-3 mr-1" />
-          Reset
+          リセット
         </Button>
       </div>
 
@@ -294,9 +294,9 @@ export function MeetingAgentPanel({ meetingId, platform }: MeetingAgentPanelProp
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-2 py-8">
             <Bot className="h-8 w-8 opacity-50" />
             <p className="text-xs text-center">
-              Ask me anything about this meeting.
+              この会議について何でも質問できます。
               <br />
-              I can read the transcript and answer questions.
+              文字起こしを読んで回答します。
             </p>
           </div>
         )}
@@ -312,7 +312,7 @@ export function MeetingAgentPanel({ meetingId, platform }: MeetingAgentPanelProp
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask about this meeting..."
+            placeholder="この会議について質問..."
             disabled={isStreaming}
             className="flex-1 h-8 text-sm"
           />
