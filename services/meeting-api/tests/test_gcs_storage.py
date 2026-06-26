@@ -182,6 +182,13 @@ def test_delete_removes_object(gcs):
     assert client.file_exists("k") is False
 
 
+def test_gcs_requires_explicit_bucket(monkeypatch):
+    monkeypatch.delenv("GCS_BUCKET", raising=False)
+    monkeypatch.setenv("MINIO_BUCKET", "legacy-minio-bucket")
+    with pytest.raises(ValueError, match="GCS_BUCKET is required"):
+        GCSStorageClient(client=FakeGCSClient())
+
+
 # --------------------------------------------------------------------------
 # Signed URLs — fall back, never fail silently
 # --------------------------------------------------------------------------

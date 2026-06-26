@@ -309,11 +309,10 @@ class GCSStorageClient(StorageClient):
         project: Optional[str] = None,
         client=None,
     ):
-        self.bucket_name = (
-            bucket
-            or os.environ.get("GCS_BUCKET")
-            or os.environ.get("MINIO_BUCKET", "vexa-recordings")
-        )
+        bucket_name = (bucket or os.environ.get("GCS_BUCKET") or "").strip()
+        if not bucket_name:
+            raise ValueError("GCS_BUCKET is required when STORAGE_BACKEND=gcs")
+        self.bucket_name = bucket_name
         self.project = project or os.environ.get("GCS_PROJECT") or None
         # Optional explicit signing SA email; otherwise we derive it from the
         # ADC credentials' service_account_email when signing.

@@ -62,6 +62,9 @@ MINIO_SECURE=false
 # GCS_BUCKET=vexa-recordings
 # GCS_PROJECT=                       # optional; inferred from ADC if omitted
 # GCS_SIGNING_SERVICE_ACCOUNT=       # optional; runtime SA email for signBlob, derived from ADC if omitted
+# GOOGLE_CLOUD_PROJECT=              # optional; defaults to GCS_PROJECT in compose
+# GOOGLE_APPLICATION_CREDENTIALS_HOST=~/.config/gcloud/application_default_credentials.json
+# GOOGLE_APPLICATION_CREDENTIALS=/var/secrets/google/application_default_credentials.json
 
 # Local GPU transcription (uncomment to self-host)
 # LOCAL_TRANSCRIPTION=true

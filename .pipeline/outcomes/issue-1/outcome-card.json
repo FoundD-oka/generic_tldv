@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0",
+  "task_id": "issue-1",
+  "runtime_profile": "codex-app",
+  "size": "L",
+  "result": {
+    "at_pass": true,
+    "fp_pass": true,
+    "nft_pass": true,
+    "hd_resolved": true,
+    "blocking_findings": 0
+  },
+  "evidence": {
+    "session_ledger": ".pipeline/sessions/issue-1/events.jsonl",
+    "verification": [
+      "python -m pytest services/meeting-api/tests/test_gcs_storage.py services/meeting-api/tests/test_recording_gcs_metadata.py services/meeting-api/tests/test_recording_download_fallback.py services/meeting-api/tests/test_recording_purge.py -q",
+      "python -m pytest services/meeting-api/tests/ -q --ignore=services/meeting-api/tests/test_integration_live.py --ignore=services/meeting-api/tests/collector",
+      "npx tsx services/vexa-bot/core/src/services/recording-sweep.test.ts",
+      "bash scripts/harness/outcome-judge.sh issue-1"
+    ],
+    "review": [
+      ".pipeline/evidence/issue-1/qa-judgment.json",
+      ".pipeline/evidence/issue-1/test-results.md"
+    ],
+    "sidechain_synthesis": ".pipeline/evidence/manual/sidechain/synthesis.json"
+  },
+  "notes": [
+    "GCS backend now fails fast when GCS_BUCKET is unset instead of falling back to MINIO_BUCKET.",
+    "Meeting-level recording purge now also targets lazy MP3 sidecars generated beside source media.",
+    "Outcome card and minimal session ledger added so outcome-judge can evaluate issue-1."
+  ]
+}

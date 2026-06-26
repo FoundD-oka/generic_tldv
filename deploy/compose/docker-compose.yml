@@ -290,6 +290,8 @@ services:
       - GCS_BUCKET=${GCS_BUCKET:-}
       - GCS_PROJECT=${GCS_PROJECT:-}
       - GCS_SIGNING_SERVICE_ACCOUNT=${GCS_SIGNING_SERVICE_ACCOUNT:-}
+      - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT:-${GCS_PROJECT:-}}
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-/var/secrets/google/application_default_credentials.json}
       - RECORDING_ENABLED=${RECORDING_ENABLED:-true}
       - CAPTURE_MODES=${CAPTURE_MODES:-audio}
       - TRANSCRIPTION_SERVICE_URL=${TRANSCRIPTION_SERVICE_URL:-}
@@ -299,6 +301,7 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     volumes:
       - ${LOCAL_STORAGE_VOLUME_SOURCE:-recordings-data}:/data/recordings
+      - ${GOOGLE_APPLICATION_CREDENTIALS_HOST:-/dev/null}:${GOOGLE_APPLICATION_CREDENTIALS:-/var/secrets/google/application_default_credentials.json}:ro
     init: true
     depends_on:
       - redis
