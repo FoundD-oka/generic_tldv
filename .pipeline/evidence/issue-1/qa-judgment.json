@@ -1,0 +1,21 @@
+{
+  "task": "issue-1",
+  "judge": "independent qa-judge subagent (context-separated)",
+  "overall": "pass",
+  "criteria": [
+    {"id": "AC1", "verdict": "pass", "note": "create_storage_client('gcs')->GCSStorageClient; factory dispatch + GCS upload verified by test and independent source read."},
+    {"id": "AC2", "verdict": "pass", "note": "media_files entry persists storage_path key + storage_backend/content_type/storage_class_policy/delete_after/upload_status; no signed URL field written; presigned minted on demand only."},
+    {"id": "AC3", "verdict": "pass", "note": "lifecycle.json: one SetStorageClass NEARLINE @ age 14 matchesStorageClass STANDARD; asserted by test."},
+    {"id": "AC4", "verdict": "pass", "note": "lifecycle.json: one Delete @ age 60; asserted by test; 14->60 = 46d respects Nearline 30-day minimum."},
+    {"id": "AC5", "verdict": "pass", "note": "existing finally-block unlink preserved; recording-sweep.ts SIGKILL safety net wired with excludeSessionUid=connectionId; 7/7 sweep tests."},
+    {"id": "AC6", "verdict": "pass", "note": "get_storage_client_for dispatches on persisted storage_backend (default->singleton, different->dedicated cached, missing/init-fail->default); 4 unit tests; 206 path unchanged."},
+    {"id": "AC7", "verdict": "pass", "note": "verified against source: download_file_range inclusive end ((0,0)->1 byte); get_file_size via get_blob().size with zero body downloads."},
+    {"id": "AC8", "verdict": "pass", "note": "RESOLVED post-review: download_media_file now falls back to /raw when presigned URL is None (matches local backend) — endpoint never returns null url; new test TestDownloadRecordingMediaDownloadFallback. Originally needs_human."}
+  ],
+  "gaps": [
+    "index.ts wiring of sweepOrphanRecordings not typechecked locally (no node_modules); recording-sweep.ts itself transpiles+passes via tsx. CI bot build will fully typecheck.",
+    "No e2e test that internal_upload_recording writes to GCS when STORAGE_BACKEND=gcs (write path uses default client; gcs routing inferred from env). Acceptable for this PR.",
+    "Full suite re-verified by author venv (py3.11); judge independently re-verified correctness-critical GCS assertions against source."
+  ],
+  "gate_status": {"residency": "pass", "preflight": "warn (no blocks; only google-cloud-storage dependency additions flagged)"}
+}
