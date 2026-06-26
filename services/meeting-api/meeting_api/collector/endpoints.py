@@ -56,6 +56,27 @@ def _extract_storage_targets_from_meeting_data(data: Optional[Dict]) -> List[Tup
     return targets
 
 
+def _mp3_sidecar_path(storage_path: str) -> Optional[str]:
+    base, _ = os.path.splitext(storage_path)
+    if not base:
+        return None
+    sidecar = f"{base}.mp3"
+    return None if sidecar == storage_path else sidecar
+
+
+def _add_storage_delete_targets(
+    targets_by_backend: Dict[str, set[str]],
+    backend: Optional[str],
+    path: str,
+) -> None:
+    backend_name = backend if isinstance(backend, str) and backend else os.getenv("STORAGE_BACKEND", "minio")
+    backend_name = str(backend_name).strip().lower()
+    targets_by_backend.setdefault(backend_name, set()).add(path)
+    mp3_sidecar = _mp3_sidecar_path(path)
+    if mp3_sidecar:
+        targets_by_backend[backend_name].add(mp3_sidecar)
+
+
 async def _purge_recordings_for_meeting(
     db: AsyncSession,
     meeting: Meeting,
@@ -68,7 +89,7 @@ async def _purge_recordings_for_meeting(
     # backend -> set(paths)
     targets_by_backend: Dict[str, set[str]] = {}
     for backend, path in _extract_storage_targets_from_meeting_data(meeting.data):
-        targets_by_backend.setdefault(backend, set()).add(path)
+        _add_storage_delete_targets(targets_by_backend, backend, path)
 
     # Collect normalized recording rows/media paths and mark rows for deletion.
     table_exists_result = await db.execute(text("SELECT to_regclass('public.recordings') IS NOT NULL"))
@@ -90,7 +111,7 @@ async def _purge_recordings_for_meeting(
         for media_file in (recording.media_files or []):
             if media_file.storage_path:
                 backend = (media_file.storage_backend or os.getenv("STORAGE_BACKEND", "minio")).strip().lower()
-                targets_by_backend.setdefault(backend, set()).add(media_file.storage_path)
+                _add_storage_delete_targets(targets_by_backend, backend, media_file.storage_path)
         await db.delete(recording)
         model_recordings_deleted += 1
 
