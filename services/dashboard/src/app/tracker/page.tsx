@@ -167,11 +167,11 @@ export default function TrackerPage() {
       if (!res.ok) throw new Error(await res.text());
       const updated: TrackerConfig = await res.json();
       setConfig(updated);
-      toast.success("Tracker config saved", {
-        description: "The listener will use the new config on the next LLM call.",
+      toast.success("トラッカー設定を保存しました", {
+        description: "次回のLLM呼び出しから新しい設定が使われます。",
       });
     } catch (e) {
-      toast.error("Failed to save config", { description: String(e) });
+      toast.error("設定の保存に失敗しました", { description: String(e) });
     } finally {
       setIsSaving(false);
     }
@@ -184,9 +184,9 @@ export default function TrackerPage() {
       if (!res.ok) throw new Error(await res.text());
       const defaults: TrackerConfig = await res.json();
       setConfig(defaults);
-      toast.success("Reset to defaults");
+      toast.success("初期設定に戻しました");
     } catch (e) {
-      toast.error("Failed to reset", { description: String(e) });
+      toast.error("リセットに失敗しました", { description: String(e) });
     } finally {
       setIsResetting(false);
     }
@@ -211,8 +211,8 @@ export default function TrackerPage() {
     if (!config) return;
     const newCat: TrackerCategory = {
       key: `category_${config.categories.length + 1}`,
-      label: `Category ${config.categories.length + 1}`,
-      description: "Describe what to capture",
+      label: `カテゴリ ${config.categories.length + 1}`,
+      description: "抽出したい内容を説明してください",
       enabled: true,
     };
     setConfig({ ...config, categories: [...config.categories, newCat] });
@@ -224,7 +224,7 @@ export default function TrackerPage() {
     return (
       <div className="flex items-center gap-2 text-muted-foreground py-12 justify-center">
         <Loader2 className="h-5 w-5 animate-spin" />
-        Loading tracker config…
+        トラッカー設定を読み込み中...
       </div>
     );
   }
@@ -236,10 +236,10 @@ export default function TrackerPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
             <Zap className="h-7 w-7 text-amber-500" />
-            Tracker Config
+            トラッカー設定
           </h1>
           <p className="text-muted-foreground mt-1">
-            Define what the real-time listener detects during meetings. Changes take effect immediately — no restart needed.
+            会議中にリアルタイム検出する項目を定義します。変更は再起動なしですぐに反映されます。
           </p>
         </div>
 
@@ -258,7 +258,7 @@ export default function TrackerPage() {
               "h-1.5 w-1.5 rounded-full",
               listenerStatus === "online" ? "bg-green-500" : "bg-red-400"
             )} />
-            Listener {listenerStatus === "online" ? "online" : listenerStatus === "offline" ? "offline" : "…"}
+            リスナー {listenerStatus === "online" ? "オンライン" : listenerStatus === "offline" ? "オフライン" : "..."}
           </span>
         </div>
       </div>
@@ -268,8 +268,8 @@ export default function TrackerPage() {
           <CardContent className="pt-4 flex items-center gap-3 text-sm">
             <AlertCircle className="h-4 w-4 text-destructive shrink-0" />
             <span>
-              Decision listener is offline at <code className="bg-muted px-1 rounded">{decisionListenerUrl}</code>.
-              Start it first, then reload this page.
+              Decision listener が <code className="bg-muted px-1 rounded">{decisionListenerUrl}</code> でオフラインです。
+              先に起動してから、このページを再読み込みしてください。
             </span>
           </CardContent>
         </Card>
@@ -280,26 +280,26 @@ export default function TrackerPage() {
           {/* General */}
           <Card>
             <CardHeader>
-              <CardTitle>General</CardTitle>
-              <CardDescription>Name and description for this tracker configuration.</CardDescription>
+              <CardTitle>基本設定</CardTitle>
+              <CardDescription>このトラッカー設定の名前と説明です。</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="tracker-name">Tracker name</Label>
+                <Label htmlFor="tracker-name">トラッカー名</Label>
                 <Input
                   id="tracker-name"
                   value={config.name}
                   onChange={(e) => setConfig({ ...config, name: e.target.value })}
-                  placeholder="e.g. Meeting Intelligence"
+                  placeholder="例: 会議インテリジェンス"
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="tracker-desc">Description</Label>
+                <Label htmlFor="tracker-desc">説明</Label>
                 <Input
                   id="tracker-desc"
                   value={config.description}
                   onChange={(e) => setConfig({ ...config, description: e.target.value })}
-                  placeholder="One-line description of what this tracker captures"
+                  placeholder="このトラッカーが抽出する内容を1行で説明"
                 />
               </div>
             </CardContent>
@@ -310,13 +310,13 @@ export default function TrackerPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Categories</CardTitle>
+                  <CardTitle>カテゴリ</CardTitle>
                   <CardDescription className="mt-1">
-                    Each category maps to a type the LLM can emit. Disable to hide without deleting.
+                    各カテゴリはLLMが出力できる種類に対応します。削除せず非表示にする場合は無効化してください。
                   </CardDescription>
                 </div>
                 <Badge variant="outline" className="shrink-0">
-                  {config.categories.filter((c) => c.enabled).length} active
+                  有効 {config.categories.filter((c) => c.enabled).length}件
                 </Badge>
               </div>
             </CardHeader>
@@ -333,7 +333,7 @@ export default function TrackerPage() {
               ))}
               <Button variant="outline" size="sm" className="w-full gap-1.5 h-9" onClick={addCategory}>
                 <Plus className="h-4 w-4" />
-                Add category
+                カテゴリを追加
               </Button>
             </CardContent>
           </Card>
@@ -341,16 +341,16 @@ export default function TrackerPage() {
           {/* Extra instructions */}
           <Card>
             <CardHeader>
-              <CardTitle>Extra Instructions</CardTitle>
+              <CardTitle>追加指示</CardTitle>
               <CardDescription>
-                Additional rules appended to the LLM system prompt. Use plain prose — each sentence becomes a bullet point.
+                LLMのシステムプロンプトに追加するルールです。通常の文章で入力すると、文ごとに箇条書きとして扱われます。
               </CardDescription>
             </CardHeader>
             <CardContent>
               <Textarea
                 value={config.extra_instructions}
                 onChange={(e) => setConfig({ ...config, extra_instructions: e.target.value })}
-                placeholder="e.g. Be conservative. Only capture explicit agreements, not tentative suggestions."
+                placeholder="例: 保守的に判断し、明確な合意だけを抽出する。仮の提案は含めない。"
                 className="min-h-[100px] resize-none text-sm"
               />
             </CardContent>
@@ -359,8 +359,8 @@ export default function TrackerPage() {
           {/* Preview */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm">System Prompt Preview</CardTitle>
-              <CardDescription>What the LLM sees (reconstructed from your settings above).</CardDescription>
+              <CardTitle className="text-sm">システムプロンプトのプレビュー</CardTitle>
+              <CardDescription>上の設定から再構成された、LLMに渡される内容です。</CardDescription>
             </CardHeader>
             <CardContent>
               <pre className="text-xs bg-muted rounded-md p-3 whitespace-pre-wrap font-mono overflow-auto max-h-64">
@@ -373,7 +373,7 @@ export default function TrackerPage() {
           <div className="flex items-center gap-3 pb-8">
             <Button onClick={handleSave} disabled={isSaving || listenerStatus === "offline"} className="gap-2">
               {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              Save & Apply
+              保存して反映
             </Button>
             <Button
               variant="outline"
@@ -382,7 +382,7 @@ export default function TrackerPage() {
               className="gap-2"
             >
               {isResetting ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
-              Reset to defaults
+              初期設定に戻す
             </Button>
           </div>
         </>

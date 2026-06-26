@@ -85,6 +85,68 @@ class TestExitCallback:
         assert data["meeting_id"] == TEST_MEETING_ID
 
     @pytest.mark.asyncio
+    async def test_duplicate_exit_for_terminal_meeting_is_noop(self, client, mock_db, mock_redis):
+        """Duplicate exit callback after completion must not re-finalize or bump end_time."""
+        completed_at = datetime.utcnow()
+        meeting = make_meeting(
+            status=MeetingStatus.COMPLETED.value,
+            end_time=completed_at,
+            data={
+                "recordings": [],
+                "exit_callback_processed_at": completed_at.isoformat(),
+            },
+        )
+
+        with _patch_find_meeting(meeting):
+            with patch("meeting_api.callbacks.update_meeting_status", new_callable=AsyncMock) as mock_update:
+                with patch("meeting_api.callbacks.finalize_recording_master", new_callable=AsyncMock) as mock_finalize:
+                    with patch("meeting_api.callbacks.publish_meeting_status_change", new_callable=AsyncMock) as mock_pub:
+                        with patch("meeting_api.callbacks.run_all_tasks", new_callable=AsyncMock) as mock_tasks:
+                            resp = await client.post("/bots/internal/callback/exited", json={
+                                "connection_id": TEST_SESSION_UID,
+                                "exit_code": 0,
+                                "reason": "self_initiated_leave",
+                            })
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "ignored"
+        assert data["final_status"] == MeetingStatus.COMPLETED.value
+        assert meeting.end_time is completed_at
+        mock_update.assert_not_called()
+        mock_finalize.assert_not_called()
+        mock_pub.assert_not_called()
+        mock_tasks.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_terminal_without_exit_marker_still_processes_exit(self, client, mock_db, mock_redis):
+        """A status_change-first terminal meeting still needs its exit callback finalizer."""
+        completed_at = datetime.utcnow()
+        meeting = make_meeting(
+            status=MeetingStatus.COMPLETED.value,
+            end_time=completed_at,
+            data={"recordings": []},
+        )
+
+        with _patch_find_meeting(meeting):
+            with patch("meeting_api.callbacks.update_meeting_status", new_callable=AsyncMock, return_value=True) as mock_update:
+                with patch("meeting_api.callbacks.finalize_recording_master", new_callable=AsyncMock) as mock_finalize:
+                    with patch("meeting_api.callbacks.publish_meeting_status_change", new_callable=AsyncMock):
+                        with patch("meeting_api.callbacks.run_all_tasks", new_callable=AsyncMock):
+                            resp = await client.post("/bots/internal/callback/exited", json={
+                                "connection_id": TEST_SESSION_UID,
+                                "exit_code": 0,
+                                "reason": "self_initiated_leave",
+                            })
+
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "callback processed"
+        assert meeting.end_time is not completed_at
+        assert meeting.data["exit_callback_processed_at"]
+        mock_update.assert_called_once()
+        mock_finalize.assert_awaited_once()
+
+    @pytest.mark.asyncio
     async def test_exit_code_nonzero_fails_meeting(self, client, mock_db, mock_redis):
         """Exit code != 0 → meeting status FAILED."""
         meeting = make_meeting(status=MeetingStatus.ACTIVE.value)

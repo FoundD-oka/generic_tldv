@@ -2,26 +2,15 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Settings, Menu, LogOut, User, BookOpen, ExternalLink } from "lucide-react";
+import { Menu, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/ui/logo";
 import { VersionChip } from "@/components/version-chip";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuthStore } from "@/stores/auth-store";
-import { getDocsUrl } from "@/lib/docs/webapp-url";
 import { useRuntimeConfig } from "@/hooks/use-runtime-config";
+import { DEFAULT_DASHBOARD_BRAND } from "@/lib/dashboard-brand";
+import { getDashboardCopy } from "@/lib/dashboard-copy";
 
 interface HeaderProps {
   onMenuClick?: () => void;
@@ -29,10 +18,15 @@ interface HeaderProps {
 
 export function Header({ onMenuClick }: HeaderProps) {
   const router = useRouter();
-  const { user, logout } = useAuthStore();
-  const { config } = useRuntimeConfig();
+  const { logout } = useAuthStore();
+  const { config, isLoading: isConfigLoading } = useRuntimeConfig();
+  const brand = config?.brand || DEFAULT_DASHBOARD_BRAND;
+  const copy = getDashboardCopy(brand.locale);
+  const isSharedAuth = config?.sharedAuth?.enabled === true;
+  const showLogout = !isConfigLoading && !isSharedAuth;
 
   const handleLogout = () => {
+    if (isSharedAuth) return;
     logout();
     router.push("/login");
   };
@@ -48,14 +42,14 @@ export function Header({ onMenuClick }: HeaderProps) {
           onClick={onMenuClick}
         >
           <Menu className="h-5 w-5" />
-          <span className="sr-only">Toggle menu</span>
+          <span className="sr-only">{copy.header.toggleMenu}</span>
         </Button>
 
         {/* Logo + version chip */}
         <div className="flex items-center gap-2.5">
           <Link href="/" className="flex items-center gap-2 group">
-            <Logo size="md" showText={false} className="group-hover:scale-105 transition-transform" />
-            <span className="hidden sm:inline-block text-[15px] font-semibold tracking-[-0.01em] text-foreground">vexa</span>
+            <Logo size="md" showText={false} brand={brand} className="group-hover:scale-105 transition-transform" />
+            <span className="hidden sm:inline-block text-[15px] font-semibold text-foreground">{brand.shortName}</span>
           </Link>
           <VersionChip className="hidden sm:inline-flex" />
         </div>
@@ -65,62 +59,19 @@ export function Header({ onMenuClick }: HeaderProps) {
 
         {/* Actions */}
         <div className="flex items-center gap-2">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" asChild className="text-muted-foreground">
-                {/* v0.10.5.3 Pack D-2: link to canonical docs.vexa.ai (was internal /docs).
-                    External link via <a> + getDocsUrl() since docs live in a separate site. */}
-                <a href={getDocsUrl("/")} target="_blank" rel="noopener noreferrer">
-                  <BookOpen className="h-5 w-5" />
-                  <span className="sr-only">Full Documentation</span>
-                </a>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Full API Documentation</p>
-            </TooltipContent>
-          </Tooltip>
-
           <ThemeToggle />
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon">
-                <User className="h-5 w-5" />
-                <span className="sr-only">User menu</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              {user && (
-                <>
-                  <div className="px-2 py-1.5 text-sm">
-                    <p className="font-medium">{user.name || user.email}</p>
-                    <p className="text-xs text-muted-foreground">{user.email}</p>
-                  </div>
-                  <DropdownMenuSeparator />
-                </>
-              )}
-              <DropdownMenuItem asChild>
-                <Link href="/profile">
-                  <Settings className="mr-2 h-4 w-4" />
-                  Profile & API Key
-                </Link>
-              </DropdownMenuItem>
-              {config?.hostedMode && (
-                <DropdownMenuItem asChild>
-                  <a href={`${config?.webappUrl || "https://vexa.ai"}/account`}>
-                    <ExternalLink className="mr-2 h-4 w-4" />
-                    Account
-                  </a>
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:text-destructive">
-                <LogOut className="mr-2 h-4 w-4" />
-                Logout
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {showLogout && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleLogout}
+              className="text-muted-foreground hover:text-destructive"
+            >
+              <LogOut className="h-5 w-5" />
+              <span className="sr-only">{copy.header.logout}</span>
+            </Button>
+          )}
         </div>
       </div>
     </header>

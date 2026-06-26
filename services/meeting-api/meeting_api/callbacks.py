@@ -222,6 +222,33 @@ async def _classify_stopped_exit(
 
     return (MeetingStatus.COMPLETED, requested_reason)
 
+
+async def _persist_chat_messages_from_redis(
+    meeting: Meeting,
+    redis_client: Any,
+) -> None:
+    if not redis_client:
+        return
+
+    try:
+        chat_raw = await redis_client.lrange(f"meeting:{meeting.id}:chat_messages", 0, -1)
+        if not chat_raw:
+            return
+
+        messages = []
+        for raw in chat_raw:
+            try:
+                messages.append(json.loads(raw))
+            except json.JSONDecodeError:
+                pass
+
+        if messages:
+            updated = dict(meeting.data) if isinstance(meeting.data, dict) else {}
+            updated["chat_messages"] = messages
+            meeting.data = updated
+    except Exception as e:
+        logger.warning(f"Failed to persist chat messages for meeting {meeting.id}: {e}")
+
 router = APIRouter(dependencies=[Depends(require_internal_secret)])
 
 
@@ -307,8 +334,30 @@ async def bot_exit_callback(
             logger.error(f"Exit callback: session {session_uid} not found")
             return {"status": "error", "detail": "Meeting session not found"}
 
-        meeting_id = meeting.id
         old_status = meeting.status
+        terminal_statuses = {MeetingStatus.COMPLETED.value, MeetingStatus.FAILED.value}
+        exit_callback_already_processed = (
+            isinstance(meeting.data, dict)
+            and bool(meeting.data.get("exit_callback_processed_at"))
+        )
+        if old_status in terminal_statuses and exit_callback_already_processed:
+            await _persist_chat_messages_from_redis(meeting, redis_client)
+            if redis_client:
+                session_token = (meeting.data or {}).get("session_token") if isinstance(meeting.data, dict) else None
+                if session_token:
+                    await redis_client.delete(f"browser_session:{session_token}")
+                await redis_client.delete(f"browser_session:{meeting.id}")
+            await db.commit()
+            logger.info(
+                f"Exit callback: meeting {meeting.id} already terminal ({old_status}); "
+                f"ignoring duplicate exit callback for session {session_uid}"
+            )
+            return {
+                "status": "ignored",
+                "detail": "Meeting already in terminal state",
+                "meeting_id": meeting.id,
+                "final_status": meeting.status,
+            }
 
         if exit_code == 0:
             # Check pending_completion_reason (set by scheduler timeout) — overrides bot-reported reason
@@ -526,36 +575,18 @@ async def bot_exit_callback(
 
         # Persist chat messages from Redis list → meeting.data.chat_messages JSONB.
         #
-        # Runs unconditionally — independent of `success`. Race we're guarding
-        # against: when the user sends DELETE, meetings.py's [Delayed Stop]
-        # timer can mark the meeting `completed` BEFORE the bot's exit
-        # callback fires. The exit callback's status update then tries
-        # `completed → completed` and returns False ("Invalid status
-        # transition"). If we returned early on `not success`, chat messages
-        # would be stuck in Redis forever — which was happening: every
-        # DELETE-terminated meeting had zero persisted chat (observed
-        # 2026-04-26 across all meetings). The chat-persistence block
-        # doesn't depend on status state, so it's safe to run regardless.
-        if redis_client:
-            try:
-                chat_raw = await redis_client.lrange(f"meeting:{meeting_id}:chat_messages", 0, -1)
-                if chat_raw:
-                    messages = []
-                    for raw in chat_raw:
-                        try:
-                            messages.append(json.loads(raw))
-                        except json.JSONDecodeError:
-                            pass
-                    if messages:
-                        if not meeting.data:
-                            meeting.data = {}
-                        updated = dict(meeting.data)
-                        updated["chat_messages"] = messages
-                        meeting.data = updated
-            except Exception as e:
-                logger.warning(f"Failed to persist chat messages for meeting {meeting_id}: {e}")
+        # Runs unconditionally for first-pass terminalization. Duplicate
+        # terminal exit callbacks return near the top after this same helper,
+        # so they cannot bump end_time or re-run post-meeting finalizers.
+        await _persist_chat_messages_from_redis(meeting, redis_client)
 
-        meeting.end_time = datetime.utcnow()
+        exit_finished_at = datetime.utcnow()
+        updated_data = dict(meeting.data) if isinstance(meeting.data, dict) else {}
+        updated_data["exit_callback_processed_at"] = exit_finished_at.isoformat()
+        updated_data["exit_callback_session_uid"] = session_uid
+        updated_data["exit_callback_exit_code"] = exit_code
+        meeting.data = updated_data
+        meeting.end_time = exit_finished_at
         await db.commit()
         await db.refresh(meeting)
 

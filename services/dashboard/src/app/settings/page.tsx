@@ -70,20 +70,20 @@ function SettingsContent() {
       const result = await vexaAPI.testConnection();
       if (result.success) {
         setConnectionStatus("connected");
-        toast.success("Connection successful", {
-          description: "Successfully connected to Vexa API",
+        toast.success("接続に成功しました", {
+          description: "Vexa APIに接続できました",
         });
       } else {
         setConnectionStatus("error");
-        setConnectionError(result.error || "Unknown error");
-        toast.error("Connection failed", {
+        setConnectionError(result.error || "不明なエラー");
+        toast.error("接続に失敗しました", {
           description: result.error,
         });
       }
     } catch (error) {
       setConnectionStatus("error");
       setConnectionError((error as Error).message);
-      toast.error("Connection failed", {
+      toast.error("接続に失敗しました", {
         description: (error as Error).message,
       });
     } finally {
@@ -95,9 +95,9 @@ function SettingsContent() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
+        <h1 className="text-3xl font-bold tracking-tight">設定</h1>
         <p className="text-muted-foreground">
-          Configure your Vexa Dashboard connection
+          カボス ダッシュボードの接続設定を確認します
         </p>
       </div>
 
@@ -107,10 +107,10 @@ function SettingsContent() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Settings className="h-5 w-5" />
-              Vexa API Configuration
+              Vexa API設定
             </CardTitle>
             <CardDescription>
-              Configure the connection to your Vexa instance. These settings are managed via environment variables.
+              Vexaインスタンスへの接続情報です。これらの値は環境変数で管理されています。
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -119,12 +119,12 @@ function SettingsContent() {
               <Label htmlFor="apiUrl">API URL</Label>
               <Input
                 id="apiUrl"
-                value={runtimeConfig?.apiUrl || "Loading..."}
+                value={runtimeConfig?.apiUrl || "読み込み中..."}
                 disabled
                 className="font-mono bg-muted"
               />
               <p className="text-xs text-muted-foreground">
-                Set via <code className="bg-muted px-1 rounded">VEXA_API_URL</code> environment variable
+                <code className="bg-muted px-1 rounded">VEXA_API_URL</code> 環境変数で設定します
               </p>
             </div>
 
@@ -133,28 +133,28 @@ function SettingsContent() {
               <Label htmlFor="wsUrl">WebSocket URL</Label>
               <Input
                 id="wsUrl"
-                value={runtimeConfig?.wsUrl || "Loading..."}
+                value={runtimeConfig?.wsUrl || "読み込み中..."}
                 disabled
                 className="font-mono bg-muted"
               />
               <p className="text-xs text-muted-foreground">
-                Auto-derived from <code className="bg-muted px-1 rounded">VEXA_API_URL</code>
+                <code className="bg-muted px-1 rounded">VEXA_API_URL</code> から自動生成されます
               </p>
             </div>
 
             {/* Admin API Key Status */}
             <div className="space-y-2">
-              <Label>Admin API Key</Label>
+              <Label>管理者APIキー</Label>
               <div className="flex items-center gap-2">
                 <Input
                   value="••••••••••••••••••••••••••••••••"
                   disabled
                   className="font-mono bg-muted"
                 />
-                <Badge variant="secondary">Configured</Badge>
+                <Badge variant="secondary">設定済み</Badge>
               </div>
               <p className="text-xs text-muted-foreground">
-                Set via <code className="bg-muted px-1 rounded">VEXA_ADMIN_API_KEY</code> environment variable
+                <code className="bg-muted px-1 rounded">VEXA_ADMIN_API_KEY</code> 環境変数で設定します
               </p>
             </div>
 
@@ -163,24 +163,24 @@ function SettingsContent() {
             {/* Test Connection */}
             <div className="flex items-center justify-between">
               <div className="space-y-1">
-                <p className="font-medium">Connection Status</p>
+                <p className="font-medium">接続状態</p>
                 <div className="flex items-center gap-2">
                   {connectionStatus === "connected" && (
                     <>
                       <CheckCircle2 className="h-4 w-4 text-green-500" />
-                      <span className="text-sm text-green-600">Connected</span>
+                      <span className="text-sm text-green-600">接続済み</span>
                     </>
                   )}
                   {connectionStatus === "error" && (
                     <>
                       <XCircle className="h-4 w-4 text-red-500" />
                       <span className="text-sm text-red-600">
-                        {connectionError || "Connection failed"}
+                        {connectionError || "接続に失敗しました"}
                       </span>
                     </>
                   )}
                   {connectionStatus === "unknown" && (
-                    <span className="text-sm text-muted-foreground">Not tested</span>
+                    <span className="text-sm text-muted-foreground">未確認</span>
                   )}
                 </div>
               </div>
@@ -188,10 +188,10 @@ function SettingsContent() {
                 {isTesting ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Testing...
+                    テスト中...
                   </>
                 ) : (
-                  "Test Connection"
+                  "接続テスト"
                 )}
               </Button>
             </div>
@@ -203,31 +203,31 @@ function SettingsContent() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Sparkles className="h-5 w-5" />
-              AI Assistant Configuration
+              AIアシスタント設定
             </CardTitle>
             <CardDescription>
-              AI settings for meeting transcript analysis. Configure via environment variables.
+              会議文字起こし分析用のAI設定です。環境変数で管理されています。
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             {isLoadingAIConfig ? (
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Checking AI configuration...</span>
+                <span>AI設定を確認中...</span>
               </div>
             ) : aiConfig?.enabled ? (
               <>
                 {/* Status */}
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="h-5 w-5 text-green-500" />
-                  <span className="font-medium text-green-600">AI Assistant Enabled</span>
+                  <span className="font-medium text-green-600">AIアシスタント有効</span>
                 </div>
 
                 {/* Provider */}
                 <div className="space-y-2">
-                  <Label>Provider</Label>
+                  <Label>プロバイダー</Label>
                   <Input
-                    value={aiConfig.provider || "Unknown"}
+                    value={aiConfig.provider || "不明"}
                     disabled
                     className="font-mono bg-muted capitalize"
                   />
@@ -235,9 +235,9 @@ function SettingsContent() {
 
                 {/* Model */}
                 <div className="space-y-2">
-                  <Label>Model</Label>
+                  <Label>モデル</Label>
                   <Input
-                    value={aiConfig.model || "Unknown"}
+                    value={aiConfig.model || "不明"}
                     disabled
                     className="font-mono bg-muted"
                   />
@@ -245,7 +245,7 @@ function SettingsContent() {
 
                 {/* API Key Status */}
                 <div className="space-y-2">
-                  <Label>API Key</Label>
+                  <Label>APIキー</Label>
                   <div className="flex items-center gap-2">
                     <Input
                       value="••••••••••••••••••••••••••••••••"
@@ -253,7 +253,7 @@ function SettingsContent() {
                       className="font-mono bg-muted"
                     />
                     <Badge variant={aiConfig.hasApiKey ? "secondary" : "destructive"}>
-                      {aiConfig.hasApiKey ? "Configured" : "Missing"}
+                      {aiConfig.hasApiKey ? "設定済み" : "未設定"}
                     </Badge>
                   </div>
                 </div>
@@ -261,14 +261,14 @@ function SettingsContent() {
                 {/* Base URL (if set) */}
                 {aiConfig.hasBaseUrl && (
                   <div className="space-y-2">
-                    <Label>Custom Base URL</Label>
+                    <Label>カスタムBase URL</Label>
                     <div className="flex items-center gap-2">
                       <Input
-                        value="Custom endpoint configured"
+                        value="カスタムエンドポイント設定済み"
                         disabled
                         className="bg-muted"
                       />
-                      <Badge variant="secondary">Set</Badge>
+                      <Badge variant="secondary">設定済み</Badge>
                     </div>
                   </div>
                 )}
@@ -278,10 +278,10 @@ function SettingsContent() {
                 <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
                   <AlertCircle className="h-6 w-6 text-muted-foreground" />
                 </div>
-                <h3 className="font-medium mb-1">AI Not Configured</h3>
+                <h3 className="font-medium mb-1">AIが未設定です</h3>
                 <p className="text-sm text-muted-foreground max-w-sm">
-                  Set <code className="bg-muted px-1 rounded">AI_MODEL</code> and{" "}
-                  <code className="bg-muted px-1 rounded">AI_API_KEY</code> environment variables to enable AI features.
+                  AI機能を有効にするには <code className="bg-muted px-1 rounded">AI_MODEL</code> と{" "}
+                  <code className="bg-muted px-1 rounded">AI_API_KEY</code> 環境変数を設定してください。
                 </p>
               </div>
             )}
@@ -291,9 +291,9 @@ function SettingsContent() {
         {/* Environment Variables */}
         <Card>
           <CardHeader>
-            <CardTitle>Environment Variables</CardTitle>
+            <CardTitle>環境変数</CardTitle>
             <CardDescription>
-              To configure the dashboard, create a <code className="bg-muted px-1 rounded">.env.local</code> file with these variables
+              ダッシュボードを設定するには、以下の変数を含む <code className="bg-muted px-1 rounded">.env.local</code> を作成してください
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -313,17 +313,17 @@ AI_API_KEY=your_ai_api_key_here`}
         {/* About */}
         <Card>
           <CardHeader>
-            <CardTitle>About</CardTitle>
+            <CardTitle>このダッシュボードについて</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Version</span>
+              <span className="text-muted-foreground">バージョン</span>
               <span className="font-medium">1.0.0</span>
             </div>
             <Separator />
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">
-                Vexa Dashboard is an open source web interface for Vexa, the self-hosted meeting transcription API.
+                カボス ダッシュボードは、セルフホスト可能な会議文字起こしAPIであるVexa向けのWeb管理画面です。
               </p>
               <div className="flex gap-4">
                 <a

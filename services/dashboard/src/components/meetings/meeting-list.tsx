@@ -20,7 +20,7 @@ export function MeetingList({
   meetings,
   isLoading,
   limit,
-  emptyMessage = "No meetings found",
+  emptyMessage = "会議は見つかりませんでした",
   showJoinCTA = true,
 }: MeetingListProps) {
   const openJoinModal = useJoinModalStore((state) => state.openModal);
@@ -56,7 +56,7 @@ export function MeetingList({
           </div>
 
           {/* Message */}
-          <h3 className="text-xl font-semibold mb-2 text-foreground/90">No meetings yet</h3>
+          <h3 className="text-xl font-semibold mb-2 text-foreground/90">会議はまだありません</h3>
           <p className="text-muted-foreground text-center max-w-sm mb-8 leading-relaxed">
             {emptyMessage}
           </p>
@@ -69,7 +69,7 @@ export function MeetingList({
               className="shadow-lg shadow-primary/25 hover:shadow-primary/40 transition-all duration-300 hover:scale-105"
             >
               <Sparkles className="h-4 w-4 mr-2" />
-              Start Your First Transcription
+              最初の文字起こしを開始
             </Button>
           )}
 

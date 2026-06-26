@@ -981,6 +981,12 @@ async def request_bot(
     else:
         meeting_data["recording_enabled"] = os.getenv("RECORDING_ENABLED", "true").lower() == "true"
 
+    video_receive_enabled = req.video_receive_enabled
+    if video_receive_enabled is None and req.video:
+        video_receive_enabled = True
+    if video_receive_enabled is not None:
+        meeting_data["video_receive_enabled"] = bool(video_receive_enabled)
+
     # Store webhook config in meeting.data (from gateway headers or user config)
     webhook_url = request.headers.get("X-User-Webhook-URL", "")
     if webhook_url:
@@ -1107,6 +1113,8 @@ async def request_bot(
         bot_config["recordingEnabled"] = bool(req.recording_enabled)
     if req.voice_agent_enabled is not None:
         bot_config["voiceAgentEnabled"] = bool(req.voice_agent_enabled)
+    if video_receive_enabled is not None:
+        bot_config["videoReceiveEnabled"] = bool(video_receive_enabled)
     if req.default_avatar_url:
         bot_config["defaultAvatarUrl"] = req.default_avatar_url
     if os.getenv("SHOW_AVATAR", "true").lower() == "false":

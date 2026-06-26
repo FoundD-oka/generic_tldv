@@ -13,6 +13,7 @@ import { useLiveStore } from "@/stores/live-store";
 import { useMeetingsStore } from "@/stores/meetings-store";
 import { getUserFriendlyError } from "@/lib/error-messages";
 import { withBasePath } from "@/lib/base-path";
+import { withPostMeetingAutoStop } from "@/lib/bot-create-defaults";
 
 type CallbackState = "loading" | "starting_meeting" | "success" | "error";
 
@@ -70,7 +71,7 @@ function ZoomCallbackContent() {
         if (!mounted) return;
         setState("starting_meeting");
         try {
-          const meeting = await vexaAPI.createBot(pendingRequest);
+          const meeting = await vexaAPI.createBot(withPostMeetingAutoStop(pendingRequest));
           if (!mounted) return;
           setActiveMeeting(meeting);
           setCurrentMeeting(meeting);

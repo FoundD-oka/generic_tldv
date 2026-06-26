@@ -618,6 +618,10 @@ class MeetingCreate(BaseModel):
         False,
         description="Enable video recording (Xvfb screen capture of the bot's browser view). Default: off. When true, sets recording_enabled=true and capture_modes=['audio', 'video']. Opt-in — leaving this false (or unset) gives audio-only recording, which is the expected default for transcription-focused deployments."
     )
+    video_receive_enabled: Optional[bool] = Field(
+        None,
+        description="Receive and render participant video in the bot browser. Required when video recording should include participant camera tiles. Unset keeps the default off unless video=true; explicit false preserves the CPU-saving video block."
+    )
     authenticated: Optional[bool] = Field(
         False,
         description="Use stored browser userdata for authenticated join. Requires prior browser_session setup."

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { formatDistanceToNow, format } from "date-fns";
+import { ja } from "date-fns/locale";
 import {
   Bot,
   RefreshCw,
@@ -44,14 +45,14 @@ import { toast } from "sonner";
 import type { Meeting, MeetingStatus, Platform } from "@/types/vexa";
 
 const STATUS_CONFIG: Record<MeetingStatus, { label: string; color: string; icon: React.ElementType }> = {
-  requested: { label: "Requested", color: "bg-gray-100 text-gray-700", icon: Clock },
-  joining: { label: "Joining", color: "bg-yellow-100 text-yellow-700", icon: Play },
-  awaiting_admission: { label: "Waiting", color: "bg-orange-100 text-orange-700", icon: Clock },
-  active: { label: "Active", color: "bg-green-100 text-green-700", icon: CheckCircle },
-  needs_human_help: { label: "Needs Help", color: "bg-amber-100 text-amber-700", icon: AlertTriangle },
-  stopping: { label: "Stopping", color: "bg-slate-100 text-slate-700", icon: Loader2 },
-  completed: { label: "Completed", color: "bg-blue-100 text-blue-700", icon: CheckCircle },
-  failed: { label: "Failed", color: "bg-red-100 text-red-700", icon: XCircle },
+  requested: { label: "起動要求", color: "bg-gray-100 text-gray-700", icon: Clock },
+  joining: { label: "参加中", color: "bg-yellow-100 text-yellow-700", icon: Play },
+  awaiting_admission: { label: "承認待ち", color: "bg-orange-100 text-orange-700", icon: Clock },
+  active: { label: "進行中", color: "bg-green-100 text-green-700", icon: CheckCircle },
+  needs_human_help: { label: "要確認", color: "bg-amber-100 text-amber-700", icon: AlertTriangle },
+  stopping: { label: "停止中", color: "bg-slate-100 text-slate-700", icon: Loader2 },
+  completed: { label: "完了", color: "bg-blue-100 text-blue-700", icon: CheckCircle },
+  failed: { label: "失敗", color: "bg-red-100 text-red-700", icon: XCircle },
 };
 
 export default function AdminBotsPage() {
@@ -72,7 +73,7 @@ export default function AdminBotsPage() {
       setRunningBots(botsData.running_bots || []);
     } catch (error) {
       console.error("Failed to fetch data:", error);
-      toast.error("Failed to load data");
+      toast.error("データの読み込みに失敗しました");
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -98,11 +99,11 @@ export default function AdminBotsPage() {
     setStoppingBots(prev => new Set(prev).add(key));
     try {
       await vexaAPI.stopBot(platform, nativeId);
-      toast.success("Bot stopped successfully");
+      toast.success("ボットを停止しました");
       // Wait a bit before refreshing to let the backend update
       setTimeout(() => fetchData(true), 500);
     } catch (error) {
-      toast.error("Failed to stop bot", {
+      toast.error("ボットの停止に失敗しました", {
         description: (error as Error).message,
       });
     } finally {
@@ -147,10 +148,10 @@ export default function AdminBotsPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
             <Bot className="h-8 w-8" />
-            Bots & Meetings
+            ボットと会議
           </h1>
           <p className="text-muted-foreground">
-            Monitor and manage transcription bots
+            文字起こしボットを監視・管理します
           </p>
         </div>
         <Button
@@ -173,7 +174,7 @@ export default function AdminBotsPage() {
               </div>
               <div>
                 <p className="text-2xl font-bold">{runningBots.length}</p>
-                <p className="text-sm text-muted-foreground">Running Bots</p>
+                <p className="text-sm text-muted-foreground">実行中ボット</p>
               </div>
             </div>
           </CardContent>
@@ -187,7 +188,7 @@ export default function AdminBotsPage() {
               </div>
               <div>
                 <p className="text-2xl font-bold">{activeMeetings.length}</p>
-                <p className="text-sm text-muted-foreground">Active Sessions</p>
+                <p className="text-sm text-muted-foreground">進行中セッション</p>
               </div>
             </div>
           </CardContent>
@@ -201,7 +202,7 @@ export default function AdminBotsPage() {
               </div>
               <div>
                 <p className="text-2xl font-bold">{completedMeetings.length}</p>
-                <p className="text-sm text-muted-foreground">Completed</p>
+                <p className="text-sm text-muted-foreground">完了</p>
               </div>
             </div>
           </CardContent>
@@ -215,7 +216,7 @@ export default function AdminBotsPage() {
               </div>
               <div>
                 <p className="text-2xl font-bold">{failedMeetings.length}</p>
-                <p className="text-sm text-muted-foreground">Failed</p>
+                <p className="text-sm text-muted-foreground">失敗</p>
               </div>
             </div>
           </CardContent>
@@ -228,10 +229,10 @@ export default function AdminBotsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-green-700 dark:text-green-400">
               <Play className="h-5 w-5" />
-              Running Bots ({runningBots.length})
+              実行中ボット ({runningBots.length})
             </CardTitle>
             <CardDescription>
-              Currently active bot containers
+              現在稼働中のボットコンテナ
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -248,7 +249,7 @@ export default function AdminBotsPage() {
                     <div>
                       <p className="font-medium font-mono text-sm">{bot.native_meeting_id}</p>
                       <p className="text-xs text-muted-foreground">
-                        {bot.platform} • Container: {bot.container_id.slice(0, 12)}
+                        {bot.platform} ・ コンテナ: {bot.container_id.slice(0, 12)}
                       </p>
                     </div>
                   </div>
@@ -264,26 +265,25 @@ export default function AdminBotsPage() {
                         ) : (
                           <>
                             <StopCircle className="mr-1 h-4 w-4" />
-                            Stop
+                            停止
                           </>
                         )}
                       </Button>
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
-                        <AlertDialogTitle>Stop this bot?</AlertDialogTitle>
+                        <AlertDialogTitle>このボットを停止しますか？</AlertDialogTitle>
                         <AlertDialogDescription>
-                          This will stop the transcription bot for meeting {bot.native_meeting_id}.
-                          The meeting will be marked as completed.
+                          会議 {bot.native_meeting_id} の文字起こしボットを停止します。会議は完了として扱われます。
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogCancel>キャンセル</AlertDialogCancel>
                         <AlertDialogAction
                           className="bg-destructive hover:bg-destructive/90"
                           onClick={() => handleStopBot(bot.platform as Platform, bot.native_meeting_id)}
                         >
-                          Stop Bot
+                          ボットを停止
                         </AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
@@ -300,19 +300,19 @@ export default function AdminBotsPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Video className="h-5 w-5" />
-            All Meetings ({meetings.length})
+            すべての会議 ({meetings.length})
           </CardTitle>
           <CardDescription>
-            History of all bot sessions
+            すべてのボットセッション履歴
           </CardDescription>
         </CardHeader>
         <CardContent>
           {meetings.length === 0 ? (
             <div className="text-center py-12">
               <Video className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
-              <h3 className="text-lg font-medium mb-2">No meetings yet</h3>
+              <h3 className="text-lg font-medium mb-2">会議はまだありません</h3>
               <p className="text-muted-foreground">
-                Meetings will appear here when bots join calls
+                ボットが会議に参加すると、ここに表示されます
               </p>
             </div>
           ) : (
@@ -320,12 +320,12 @@ export default function AdminBotsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Meeting ID</TableHead>
-                    <TableHead>Platform</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead>Duration</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead>会議ID</TableHead>
+                    <TableHead>プラットフォーム</TableHead>
+                    <TableHead>状態</TableHead>
+                    <TableHead>作成</TableHead>
+                    <TableHead>時間</TableHead>
+                    <TableHead className="text-right">操作</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -357,10 +357,10 @@ export default function AdminBotsPage() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-muted-foreground">
-                          <span suppressHydrationWarning>{formatDistanceToNow(parseUTCTimestamp(meeting.created_at), { addSuffix: true })}</span>
+                          <span suppressHydrationWarning>{formatDistanceToNow(parseUTCTimestamp(meeting.created_at), { addSuffix: true, locale: ja })}</span>
                         </TableCell>
                         <TableCell className="text-muted-foreground">
-                          {duration ? `${duration} min` : "-"}
+                          {duration ? `${duration}分` : "-"}
                         </TableCell>
                         <TableCell className="text-right">
                           {isActive && (
@@ -381,18 +381,18 @@ export default function AdminBotsPage() {
                               </AlertDialogTrigger>
                               <AlertDialogContent>
                                 <AlertDialogHeader>
-                                  <AlertDialogTitle>Stop this bot?</AlertDialogTitle>
+                                  <AlertDialogTitle>このボットを停止しますか？</AlertDialogTitle>
                                   <AlertDialogDescription>
-                                    This will stop the transcription bot for this meeting.
+                                    この会議の文字起こしボットを停止します。
                                   </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogCancel>キャンセル</AlertDialogCancel>
                                   <AlertDialogAction
                                     className="bg-destructive hover:bg-destructive/90"
                                     onClick={() => handleStopBot(meeting.platform, meeting.platform_specific_id)}
                                   >
-                                    Stop Bot
+                                    ボットを停止
                                   </AlertDialogAction>
                                 </AlertDialogFooter>
                               </AlertDialogContent>

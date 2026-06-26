@@ -115,6 +115,34 @@ class TestCreateMeeting:
         assert call_args[1].get("profile") == "meeting" or call_args[0][0] == "meeting"
 
     @pytest.mark.asyncio
+    async def test_video_recording_enables_participant_video_receive(self, client, mock_db, mock_redis):
+        """video=true should render participant video in the bot browser."""
+        _setup_create_meeting_db(mock_db)
+
+        runtime_resp = {"container_id": TEST_CONTAINER_ID, "name": TEST_CONTAINER_NAME}
+        with patch("meeting_api.meetings._spawn_via_runtime_api", new_callable=AsyncMock, return_value=runtime_resp) as mock_spawn:
+            with patch("meeting_api.meetings.mint_meeting_token", return_value="fake.jwt.token"):
+                with patch("meeting_api.meetings.async_session_local") as mock_sf:
+                    inner = AsyncMock()
+                    inner.add = MagicMock()
+                    inner.commit = AsyncMock()
+                    mock_sf.return_value.__aenter__ = AsyncMock(return_value=inner)
+                    mock_sf.return_value.__aexit__ = AsyncMock(return_value=False)
+
+                    resp = await client.post("/bots", json={
+                        "platform": "google_meet",
+                        "native_meeting_id": "abc-defg-hij",
+                        "video": True,
+                    })
+
+        assert resp.status_code == 201
+        mock_spawn.assert_awaited_once()
+        kwargs = mock_spawn.await_args.kwargs
+        bot_config = json.loads(kwargs["config"]["env"]["BOT_CONFIG"])
+        assert bot_config["captureModes"] == ["audio", "video"]
+        assert bot_config["videoReceiveEnabled"] is True
+
+    @pytest.mark.asyncio
     async def test_create_meeting_runtime_failure(self, client, mock_db, mock_redis):
         """POST /bots → 500 when Runtime API fails."""
         _setup_create_meeting_db(mock_db)

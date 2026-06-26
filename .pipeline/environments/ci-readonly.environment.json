@@ -1,0 +1,39 @@
+{
+  "schema_version": "1.0",
+  "id": "ci-readonly",
+  "kind": "ci-runner",
+  "runtime_profile": "codex-github-action",
+  "sandbox": {
+    "mode": "read-only",
+    "writable_paths": [
+      ".pipeline/sessions",
+      ".pipeline/outcomes",
+      ".pipeline/evidence"
+    ],
+    "network": "ci-policy"
+  },
+  "approval_policy": "never",
+  "secret_policy": {
+    "credentials_in_sandbox": false,
+    "allowed_sources": [
+      "Codex GitHub Action proxy",
+      "GitHub token in separate patch/PR job"
+    ],
+    "forbidden_sources": [
+      "OPENAI_API_KEY exposed to repository-controlled build steps",
+      "CODEX_API_KEY as job-level environment variable"
+    ]
+  },
+  "expected_tools": [
+    "git",
+    "bash",
+    "python3"
+  ],
+  "validation": {
+    "preflight": "scripts/harness/validate-runtime-profile.sh",
+    "required_paths": [
+      "AGENTS.md",
+      ".pipeline/config.json"
+    ]
+  }
+}

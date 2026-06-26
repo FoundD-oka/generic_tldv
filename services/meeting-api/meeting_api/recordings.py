@@ -7,8 +7,10 @@ import asyncio
 import json
 import logging
 import os
+import subprocess
+import tempfile
 import uuid as uuid_lib
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile, status
@@ -36,6 +38,29 @@ logger = logging.getLogger("meeting_api.recordings")
 
 router = APIRouter()
 
+# --- Recording retention metadata (issue #1) ---
+# The GCS bucket lifecycle does the real work (14d Standard -> Nearline,
+# delete at 60d — see deploy/gcs/lifecycle.json). These constants stamp
+# advisory/auditable metadata onto each media_file so operators and sweeps
+# can reason about retention without reading bucket config.
+RECORDING_STORAGE_CLASS_POLICY = "standard_14d_nearline_until_60d"
+RECORDING_DELETE_AFTER_DAYS = 60
+
+
+def _compute_delete_after(anchor_iso: Optional[str]) -> Optional[str]:
+    """delete_after = anchor (≈ recording start) + retention window, ISO.
+
+    Advisory only — never used to delete; the bucket lifecycle deletes by
+    object age. Returns None if the anchor can't be parsed.
+    """
+    if not anchor_iso:
+        return None
+    try:
+        return (datetime.fromisoformat(anchor_iso) + timedelta(days=RECORDING_DELETE_AFTER_DAYS)).isoformat()
+    except Exception:
+        return None
+
+
 # --- Storage client (lazy init) ---
 _storage_client = None
 
@@ -45,6 +70,42 @@ def get_storage_client():
     if _storage_client is None:
         _storage_client = create_storage_client()
     return _storage_client
+
+
+# Per-backend client cache for migration safety (issue #1). A media_file
+# persists the storage_backend it was WRITTEN with, so reads/deletes must
+# dispatch on that value — not the current default. Without this, flipping
+# STORAGE_BACKEND to "gcs" would orphan every historical MinIO object on the
+# playback path. Writes still use get_storage_client() (current default).
+_storage_clients_by_backend: Dict[str, Any] = {}
+
+
+def get_storage_client_for(backend: Optional[str]):
+    """Return a storage client for a media_file's persisted backend.
+
+    The common case — the file's backend matches the current default — reuses
+    the shared singleton (so a single deployment keeps one client and existing
+    callers/tests are unaffected). Only a file written under a DIFFERENT backend
+    (e.g. a legacy MinIO object read after the cutover to gcs) gets a dedicated,
+    cached client. Missing/unknown backends fall back to the default.
+    """
+    default_backend = os.environ.get("STORAGE_BACKEND", "minio")
+    if not backend or backend == default_backend:
+        return get_storage_client()
+    cached = _storage_clients_by_backend.get(backend)
+    if cached is not None:
+        return cached
+    try:
+        client = create_storage_client(backend)
+    except Exception as e:
+        logger.warning(
+            "[recordings] storage client init failed for backend=%s (%s); "
+            "falling back to default backend",
+            backend, e,
+        )
+        return get_storage_client()
+    _storage_clients_by_backend[backend] = client
+    return client
 
 
 async def require_recording_upload_token(request: Request) -> dict:
@@ -95,6 +156,123 @@ def media_content_type(media_type: str, media_format: str) -> str:
         "png": "image/png",
     }
     return content_types.get(fmt, "application/octet-stream")
+
+
+def _parse_range_header(range_header: str, total_size: int) -> tuple[int, int]:
+    if total_size <= 0:
+        raise HTTPException(
+            status_code=416,
+            detail="Range not satisfiable",
+            headers={"Content-Range": "bytes */0"},
+        )
+    if not range_header.startswith("bytes="):
+        raise HTTPException(status_code=416, detail="Invalid Range header")
+
+    spec = range_header[6:].split(",", 1)[0].strip()
+    start_s, separator, end_s = spec.partition("-")
+    if not separator:
+        raise HTTPException(status_code=416, detail="Invalid Range header")
+
+    try:
+        if start_s:
+            start = int(start_s)
+            end = int(end_s) if end_s else total_size - 1
+        else:
+            suffix_length = int(end_s)
+            if suffix_length <= 0:
+                raise ValueError
+            start = max(total_size - suffix_length, 0)
+            end = total_size - 1
+    except ValueError:
+        raise HTTPException(status_code=416, detail="Invalid Range header")
+
+    if start < 0 or start >= total_size or end < start:
+        raise HTTPException(
+            status_code=416,
+            detail="Range not satisfiable",
+            headers={"Content-Range": f"bytes */{total_size}"},
+        )
+    return start, min(end, total_size - 1)
+
+
+def _find_media_file(recording: Dict[str, Any], media_file_id: int) -> Optional[Dict[str, Any]]:
+    for media_file in recording.get("media_files") or []:
+        if int(media_file.get("id", -1)) == media_file_id:
+            return media_file
+    return None
+
+
+def _mp3_storage_path(storage_path: str) -> str:
+    base, _ = os.path.splitext(storage_path)
+    return f"{base}.mp3"
+
+
+def _ensure_mp3_media_file(storage, source_storage_path: str, source_format: str) -> str:
+    """Return an MP3 storage path, converting and caching it when needed."""
+    source_format = str(source_format or "").lower()
+    if source_format == "mp3":
+        if not storage.file_exists(source_storage_path):
+            raise FileNotFoundError(source_storage_path)
+        return source_storage_path
+
+    mp3_storage_path = _mp3_storage_path(source_storage_path)
+    if storage.file_exists(mp3_storage_path):
+        return mp3_storage_path
+    if not storage.file_exists(source_storage_path):
+        raise FileNotFoundError(source_storage_path)
+
+    bitrate = os.environ.get("RECORDING_MP3_BITRATE", "128k")
+    timeout_seconds = int(os.environ.get("RECORDING_MP3_TIMEOUT_SECONDS", "900"))
+    _, source_ext = os.path.splitext(source_storage_path)
+    source_ext = source_ext or ".media"
+
+    with tempfile.TemporaryDirectory(prefix="vexa-mp3-") as tmpdir:
+        source_path = os.path.join(tmpdir, f"source{source_ext}")
+        mp3_path = os.path.join(tmpdir, "audio.mp3")
+        storage.download_file_to_path(source_storage_path, source_path)
+        result = subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-i",
+                source_path,
+                "-vn",
+                "-codec:a",
+                "libmp3lame",
+                "-b:a",
+                bitrate,
+                mp3_path,
+            ],
+            capture_output=True,
+            timeout=timeout_seconds,
+        )
+        if result.returncode != 0:
+            stderr = result.stderr.decode(errors="replace")[:500]
+            logger.error("MP3 conversion failed for %s: %s", source_storage_path, stderr)
+            raise RuntimeError("MP3 conversion failed")
+        if not os.path.exists(mp3_path) or os.path.getsize(mp3_path) <= 0:
+            logger.error("MP3 conversion produced an empty file for %s", source_storage_path)
+            raise RuntimeError("MP3 conversion produced an empty file")
+        storage.upload_file_path(mp3_storage_path, mp3_path, content_type="audio/mpeg")
+    return mp3_storage_path
+
+
+def _build_storage_media_response(storage, storage_path: str, content_type: str, filename: str, request: Request) -> Response:
+    headers = {"Content-Disposition": f'inline; filename="{filename}"', "Accept-Ranges": "bytes"}
+    range_header = request.headers.get("range")
+    if range_header and range_header.startswith("bytes="):
+        total = storage.get_file_size(storage_path)
+        start, end = _parse_range_header(range_header, total)
+        chunk = storage.download_file_range(storage_path, start, end)
+        headers["Content-Range"] = f"bytes {start}-{end}/{total}"
+        headers["Content-Length"] = str(len(chunk))
+        return Response(content=chunk, media_type=content_type, status_code=206, headers=headers)
+
+    data = storage.download_file(storage_path)
+    return Response(content=data, media_type=content_type, headers=headers)
 
 
 async def _list_meeting_data_recordings(db: AsyncSession, user_id: int, meeting_id: Optional[int] = None) -> List[Dict]:
@@ -344,6 +522,15 @@ async def internal_upload_recording(
         "is_final": new_is_final,
         "finalized_at": (prior_same_type or {}).get("finalized_at"),
         "finalized_by": (prior_same_type or {}).get("finalized_by"),
+        # Issue #1 — retention/storage metadata. content_type is stored so the
+        # download path doesn't have to re-derive it; storage_class_policy and
+        # delete_after are advisory (lifecycle does the real Nearline/delete).
+        # No signed URL is ever persisted here — playback mints a short-TTL URL
+        # on demand and playback_url stays a stable route.
+        "content_type": content_type,
+        "storage_class_policy": RECORDING_STORAGE_CLASS_POLICY,
+        "delete_after": _compute_delete_after(first_chunk_at),
+        "upload_status": "uploaded",
     })
     rec_payload["media_files"] = existing_media_files
     logger.info(
@@ -453,6 +640,40 @@ async def get_recording_master(
     return response
 
 
+@router.get("/recordings/{recording_id}/master/mp3", summary="Download the canonical master audio as MP3")
+async def download_recording_master_mp3(
+    recording_id: int,
+    request: Request,
+    type: str = Query("audio", regex="^audio$", description="Media type: audio"),
+    auth: tuple = Depends(get_user_and_token),
+    db: AsyncSession = Depends(get_db),
+):
+    """Resolve the finalized master audio file and return an MP3 download.
+
+    The MP3 is generated lazily on first request, cached in storage next to
+    the master media, and served with Range support so Cloud-hosted dashboards
+    can download it in bounded chunks.
+    """
+    _, user = auth
+
+    _, rec = await _find_meeting_data_recording(db, user.id, recording_id)
+    if rec is None:
+        raise HTTPException(status_code=404, detail="Recording not found")
+
+    master_mf = None
+    for mf in rec.get("media_files") or []:
+        if mf.get("type") == type and mf.get("finalized_by") == "recording_finalizer.master":
+            master_mf = mf
+            break
+    if not master_mf:
+        raise HTTPException(status_code=404, detail=f"No master audio file for recording {recording_id} (still finalizing or not produced)")
+    media_file_id = master_mf.get("id")
+    if media_file_id is None:
+        raise HTTPException(status_code=404, detail="Master media file id missing")
+
+    return await download_media_file_mp3(recording_id, int(media_file_id), request, auth, db)
+
+
 @router.get("/recordings/{recording_id}/media/{media_file_id}/download", summary="Get presigned download URL for a media file")
 async def download_media_file(
     recording_id: int, media_file_id: int,
@@ -485,11 +706,7 @@ async def download_media_file(
     _, rec = await _find_meeting_data_recording(db, user.id, recording_id)
     if rec is None:
         raise HTTPException(status_code=404, detail="Recording not found")
-    mf = None
-    for f in rec.get("media_files") or []:
-        if int(f.get("id", -1)) == media_file_id:
-            mf = f
-            break
+    mf = _find_media_file(rec, media_file_id)
     if not mf:
         raise HTTPException(status_code=404, detail="Media file not found")
     fmt = str(mf.get("format", "bin")).lower()
@@ -502,7 +719,7 @@ async def download_media_file(
     if not storage_path:
         raise HTTPException(status_code=404, detail="Media file storage path not set")
 
-    storage = get_storage_client()
+    storage = get_storage_client_for(storage_backend)
     # Master may not exist yet: meeting still in progress, or finalizer
     # crashed before producing the concatenated master. Surface a 404 so
     # the dashboard can fall back to /raw (Pack P: this is the LAST
@@ -515,14 +732,22 @@ async def download_media_file(
     if not master_present:
         raise HTTPException(status_code=404, detail="Media file content not found in storage")
 
+    raw_fallback = f"/recordings/{recording_id}/media/{media_file_id}/raw"
     if storage_backend == "local":
         # Local backend can't mint presigned URLs (no signed-URL semantics
         # on filesystem). Fall back to the legacy /raw proxy path. This is
         # an explicit per-deployment decision (Pack P), not a runtime
         # fallback — local storage is dev-only.
-        url = f"/recordings/{recording_id}/media/{media_file_id}/raw"
+        url = raw_fallback
     else:
         url = storage.get_presigned_url(storage_path, expires=3600)
+        # Issue #1: signing may be unavailable (e.g. GCS signBlob not granted
+        # to the runtime SA — get_presigned_url returns None and logs a
+        # warning). Fall back to the authenticated /raw proxy here so the
+        # endpoint never hands the client a null url; this keeps playback
+        # working without depending on the consumer to interpret null.
+        if not url:
+            url = raw_fallback
 
     return {
         "url": url,
@@ -553,46 +778,78 @@ async def download_media_file_raw(
     ct = "application/octet-stream"
     filename = ""
 
+    storage_backend = None
     _, rec = await _find_meeting_data_recording(db, user.id, recording_id)
     if rec is None:
         raise HTTPException(status_code=404, detail="Recording not found")
-    for f in rec.get("media_files") or []:
-        if int(f.get("id", -1)) == media_file_id:
-            storage_path = f.get("storage_path")
-            fmt = str(f.get("format", "bin")).lower()
-            type_label = str(f.get("type", "audio"))
-            ct = media_content_type(type_label, fmt)
-            filename = f"{recording_id}_{type_label}.{fmt}"
-            break
+    mf = _find_media_file(rec, media_file_id)
+    if mf:
+        storage_path = mf.get("storage_path")
+        storage_backend = mf.get("storage_backend")
+        fmt = str(mf.get("format", "bin")).lower()
+        type_label = str(mf.get("type", "audio"))
+        ct = media_content_type(type_label, fmt)
+        filename = f"{recording_id}_{type_label}.{fmt}"
 
     if not storage_path:
         raise HTTPException(status_code=404, detail="Media file not found")
 
+    storage = get_storage_client_for(storage_backend)
     try:
-        data = get_storage_client().download_file(storage_path)
+        return _build_storage_media_response(storage, storage_path, ct, filename, request)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Media file content not found in storage")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to download media file {media_file_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to read media file")
 
-    headers = {"Content-Disposition": f'inline; filename="{filename}"', "Accept-Ranges": "bytes"}
 
-    # Range request support
-    range_header = request.headers.get("range")
-    if range_header and range_header.startswith("bytes="):
-        total = len(data)
-        spec = range_header[6:].strip()
-        start_s, _, end_s = spec.partition("-")
-        start = int(start_s) if start_s else total - int(end_s)
-        end = int(end_s) if end_s and start_s else total - 1
-        end = min(end, total - 1)
-        chunk = data[start:end + 1]
-        headers["Content-Range"] = f"bytes {start}-{end}/{total}"
-        headers["Content-Length"] = str(len(chunk))
-        return Response(content=chunk, media_type=ct, status_code=206, headers=headers)
+@router.get("/recordings/{recording_id}/media/{media_file_id}/mp3", summary="Download an audio media file as MP3")
+async def download_media_file_mp3(
+    recording_id: int, media_file_id: int,
+    request: Request,
+    auth: tuple = Depends(get_user_and_token),
+    db: AsyncSession = Depends(get_db),
+):
+    _, user = auth
 
-    return Response(content=data, media_type=ct, headers=headers)
+    _, rec = await _find_meeting_data_recording(db, user.id, recording_id)
+    if rec is None:
+        raise HTTPException(status_code=404, detail="Recording not found")
+    mf = _find_media_file(rec, media_file_id)
+    if not mf:
+        raise HTTPException(status_code=404, detail="Media file not found")
+    if str(mf.get("type", "audio")).lower() != "audio":
+        raise HTTPException(status_code=400, detail="MP3 download is only available for audio media")
+
+    storage_path = mf.get("storage_path")
+    if not storage_path:
+        raise HTTPException(status_code=404, detail="Media file storage path not set")
+
+    storage = get_storage_client_for(mf.get("storage_backend"))
+    try:
+        mp3_storage_path = await asyncio.to_thread(
+            _ensure_mp3_media_file,
+            storage,
+            storage_path,
+            str(mf.get("format", "bin")).lower(),
+        )
+        return _build_storage_media_response(
+            storage,
+            mp3_storage_path,
+            "audio/mpeg",
+            f"{recording_id}_audio.mp3",
+            request,
+        )
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Media file content not found in storage")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to prepare MP3 media file {media_file_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to prepare MP3 media file")
 
 
 @router.delete("/recordings/{recording_id}", summary="Delete a recording and its media files")
@@ -605,12 +862,15 @@ async def delete_recording(
     meeting, rec = await _find_meeting_data_recording(db, user.id, recording_id)
     if meeting is None or rec is None:
         raise HTTPException(status_code=404, detail="Recording not found")
-    storage = get_storage_client()
     for mf in rec.get("media_files") or []:
         path = mf.get("storage_path")
         if path:
             try:
+                storage = get_storage_client_for(mf.get("storage_backend"))
                 storage.delete_file(path)
+                mp3_path = _mp3_storage_path(path)
+                if mp3_path != path:
+                    storage.delete_file(mp3_path)
             except Exception as e:
                 logger.warning(f"Failed to delete {path}: {e}")
     current = dict(meeting.data or {})

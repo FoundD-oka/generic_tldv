@@ -2,66 +2,55 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { getDocsUrl, getWebappUrl } from "@/lib/docs/webapp-url";
+import { getWebappUrl } from "@/lib/docs/webapp-url";
 import {
   Video,
   Plus,
-  Settings,
   X,
-  Users,
-  Shield,
-  LogOut,
-  Lock,
-  Bot,
-  BookOpen,
   Zap,
   CreditCard,
-  Webhook,
-  User,
   Bug,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useJoinModalStore } from "@/stores/join-modal-store";
-import { useAdminAuthStore } from "@/stores/admin-auth-store";
-import { AdminAuthModal } from "@/components/admin/admin-auth-modal";
 import { useRuntimeConfig } from "@/hooks/use-runtime-config";
-import { VersionChip } from "@/components/version-chip";
 import { withBasePath } from "@/lib/base-path";
+import { DEFAULT_DASHBOARD_BRAND } from "@/lib/dashboard-brand";
+import { getDashboardCopy, type DashboardCopy } from "@/lib/dashboard-copy";
 
 interface SidebarProps {
   isOpen?: boolean;
   onClose?: () => void;
 }
 
-const navigation = [
-  { name: "Meetings", href: "/meetings", icon: Video },
-  ...(process.env.NEXT_PUBLIC_TRACKER_ENABLED === "true"
-    ? [{ name: "Tracker", href: "/tracker", icon: Zap }]
-    : []),
-];
-
-const adminNavigation = [
-  { name: "Users", href: "/admin/users", icon: Users },
-  { name: "Bots", href: "/admin/bots", icon: Bot },
-  { name: "Settings", href: "/settings", icon: Settings },
-];
-
 // IS_HOSTED is determined at runtime via /api/config, not build time
 
-function BillingStatus() {
+function BillingStatus({ copy }: { copy: DashboardCopy }) {
   const [status, setStatus] = useState<{
     subscription_status: string | null;
     subscription_tier: string | null;
     subscription_trial_end: string | null;
+    trial_days_left?: number;
   } | null>(null);
 
   useEffect(() => {
     fetch(withBasePath("/api/billing/status"))
       .then((r) => r.json())
-      .then(setStatus)
+      .then((data) => {
+        const trialDaysLeft = data.subscription_trial_end
+          ? Math.max(
+              0,
+              Math.ceil(
+                (new Date(data.subscription_trial_end).getTime() - Date.now()) /
+                  (1000 * 60 * 60 * 24)
+              )
+            )
+          : undefined;
+        setStatus({ ...data, trial_days_left: trialDaysLeft });
+      })
       .catch(() => {});
   }, []);
 
@@ -71,17 +60,11 @@ function BillingStatus() {
     status;
 
   if (subscription_status === "trialing" && subscription_trial_end) {
-    const daysLeft = Math.max(
-      0,
-      Math.ceil(
-        (new Date(subscription_trial_end).getTime() - Date.now()) /
-          (1000 * 60 * 60 * 24)
-      )
-    );
+    const daysLeft = status.trial_days_left ?? 0;
     return (
       <div className="px-3 py-1.5">
         <span className="text-xs font-medium text-amber-500">
-          Trial: {daysLeft} day{daysLeft !== 1 ? "s" : ""} left
+          {copy.billing.trialPrefix}: {daysLeft} {daysLeft === 1 ? copy.billing.day : copy.billing.days} {copy.billing.left}
         </span>
       </div>
     );
@@ -93,14 +76,14 @@ function BillingStatus() {
   ) {
     return (
       <div className="px-3 py-1.5 flex items-center justify-between">
-        <span className="text-xs font-medium text-red-500">Plan expired</span>
+        <span className="text-xs font-medium text-red-500">{copy.billing.planExpired}</span>
         <a
           href={`${getWebappUrl()}/pricing`}
           target="_blank"
           rel="noopener noreferrer"
           className="text-xs font-medium text-primary hover:underline"
         >
-          Subscribe
+          {copy.billing.subscribe}
         </a>
       </div>
     );
@@ -113,7 +96,7 @@ function BillingStatus() {
     return (
       <div className="px-3 py-1.5">
         <span className="text-xs font-medium text-muted-foreground">
-          {label} plan
+          {label} {copy.billing.activePlanSuffix}
         </span>
       </div>
     );
@@ -124,35 +107,21 @@ function BillingStatus() {
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
-  const router = useRouter();
   const openJoinModal = useJoinModalStore((state) => state.openModal);
-  const { isAdminAuthenticated, logout: adminLogout } = useAdminAuthStore();
-  const [showAdminAuthModal, setShowAdminAuthModal] = useState(false);
   const { config } = useRuntimeConfig();
   const isHosted = config?.hostedMode ?? false;
+  const brand = config?.brand || DEFAULT_DASHBOARD_BRAND;
+  const copy = getDashboardCopy(brand.locale);
+  const navigation = [
+    { name: copy.nav.meetings, href: "/meetings", icon: Video },
+    ...(process.env.NEXT_PUBLIC_TRACKER_ENABLED === "true"
+      ? [{ name: copy.nav.tracker, href: "/tracker", icon: Zap }]
+      : []),
+  ];
 
   const handleJoinClick = () => {
     openJoinModal();
     onClose?.();
-  };
-
-  const handleAdminClick = (href: string) => {
-    if (isAdminAuthenticated) {
-      router.push(href);
-      onClose?.();
-    } else {
-      setShowAdminAuthModal(true);
-    }
-  };
-
-  const handleAdminAuthSuccess = () => {
-    // Redirect to admin after successful auth
-    router.push("/admin/users");
-    onClose?.();
-  };
-
-  const handleAdminLogout = () => {
-    adminLogout();
   };
 
   return (
@@ -180,7 +149,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         <div className="flex h-full flex-col">
           {/* Mobile header */}
           <div className="flex h-14 items-center justify-between border-b px-4 md:hidden shrink-0">
-            <span className="font-semibold">Menu</span>
+            <span className="font-semibold">{copy.nav.menu}</span>
             <Button variant="ghost" size="icon" onClick={onClose}>
               <X className="h-5 w-5" />
             </Button>
@@ -218,122 +187,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors text-muted-foreground hover:bg-accent hover:text-accent-foreground"
               >
                 <Plus className="h-5 w-5" />
-                Join Meeting
+                {copy.nav.joinMeeting}
               </button>
-
-              {/* Below the line: integrations & settings */}
-              <div className="mt-4 pt-4 border-t space-y-1">
-                {/* Webhooks */}
-                <Link
-                  href="/webhooks"
-                  onClick={onClose}
-                  className={cn(
-                    "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                    pathname.startsWith("/webhooks")
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                  )}
-                >
-                  <Webhook className="h-5 w-5" />
-                  Webhooks
-                </Link>
-                {/* MCP Setup */}
-                <Link
-                  href="/mcp"
-                  onClick={onClose}
-                  className={cn(
-                    "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                    pathname.startsWith("/mcp")
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                  )}
-                >
-                  <span className="h-5 w-5 flex items-center justify-center">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src="/icons/icons8-mcp-96 (1).png"
-                      alt="MCP"
-                      width={20}
-                      height={20}
-                      className={cn(
-                        "dark:invert opacity-70",
-                        pathname.startsWith("/mcp") && "invert dark:invert-0 opacity-100"
-                      )}
-                    />
-                  </span>
-                  MCP Setup
-                </Link>
-                {/* Profile */}
-                <Link
-                  href="/profile"
-                  onClick={onClose}
-                  className={cn(
-                    "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                    pathname.startsWith("/profile")
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                  )}
-                >
-                  <User className="h-5 w-5" />
-                  Profile
-                </Link>
-              </div>
-
-              {/* Admin Section */}
-              <div className="mt-6 pt-4 border-t">
-                <div className="flex items-center justify-between px-3 mb-2">
-                  <div className="flex items-center gap-2">
-                    <Shield className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                      Admin
-                    </span>
-                  </div>
-                  {isAdminAuthenticated && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6"
-                      onClick={handleAdminLogout}
-                      title="Logout from admin"
-                    >
-                      <LogOut className="h-3 w-3 text-muted-foreground" />
-                    </Button>
-                  )}
-                </div>
-
-                {isAdminAuthenticated ? (
-                  // Show admin navigation when authenticated
-                  adminNavigation.map((item) => {
-                    const isActive = pathname.startsWith(item.href);
-
-                    return (
-                      <Link
-                        key={item.name}
-                        href={item.href}
-                        onClick={onClose}
-                        className={cn(
-                          "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                          isActive
-                            ? "bg-primary text-primary-foreground"
-                            : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                        )}
-                      >
-                        <item.icon className="h-5 w-5" />
-                        {item.name}
-                      </Link>
-                    );
-                  })
-                ) : (
-                  // Show login prompt when not authenticated
-                  <button
-                    onClick={() => setShowAdminAuthModal(true)}
-                    className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                  >
-                    <Lock className="h-5 w-5" />
-                    <span>Unlock Admin</span>
-                  </button>
-                )}
-              </div>
             </nav>
           </ScrollArea>
 
@@ -341,54 +196,30 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           <div className="border-t border-border p-4 shrink-0 space-y-2">
             {isHosted && (
               <>
-                <BillingStatus />
+                <BillingStatus copy={copy} />
                 <a
                   href={`${config?.webappUrl || "https://vexa.ai"}/account`}
                   onClick={onClose}
                   className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                 >
                   <CreditCard className="h-4 w-4" />
-                  Account & Billing
+                  {copy.nav.accountBilling}
                 </a>
               </>
             )}
             <a
-              href={getDocsUrl("/")}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={onClose}
-              className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-            >
-              <BookOpen className="h-4 w-4" />
-              API Docs
-            </a>
-            <a
-              href="https://github.com/Vexa-ai/vexa/issues/new?labels=bug,hosted&title=[Hosted]%20&body=%23%23%20Environment%0AHosted%20service%20(dashboard.vexa.ai)%0A%0A%23%23%20Description%0A%0A%23%23%20Steps%20to%20reproduce%0A1.%20%0A%0A%23%23%20Expected%20behavior%0A%0A%23%23%20Actual%20behavior%0A"
+              href={brand.issueUrl}
               target="_blank"
               rel="noopener noreferrer"
               onClick={onClose}
               className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors text-muted-foreground hover:bg-accent hover:text-accent-foreground"
             >
               <Bug className="h-4 w-4" />
-              Report a Bug
+              {copy.nav.reportBug}
             </a>
-
-            <div className="px-3">
-              <div className="flex items-center gap-1.5">
-                <span className="text-[11px] text-muted-foreground">vexa</span>
-                <VersionChip variant="minimal" look="pill" />
-              </div>
-            </div>
           </div>
         </div>
       </aside>
-
-      {/* Admin Auth Modal */}
-      <AdminAuthModal
-        open={showAdminAuthModal}
-        onOpenChange={setShowAdminAuthModal}
-        onSuccess={handleAdminAuthSuccess}
-      />
     </>
   );
 }

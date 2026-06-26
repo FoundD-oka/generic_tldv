@@ -61,6 +61,12 @@ class TestRecordingRoutes:
     def test_download_media_exists(self):
         assert ("GET", "/recordings/{recording_id}/media/{media_file_id}/download") in ROUTES
 
+    def test_download_master_mp3_exists(self):
+        assert ("GET", "/recordings/{recording_id}/master/mp3") in ROUTES
+
+    def test_download_media_mp3_exists(self):
+        assert ("GET", "/recordings/{recording_id}/media/{media_file_id}/mp3") in ROUTES
+
     def test_recording_config_get_exists(self):
         assert ("GET", "/recording-config") in ROUTES
 

@@ -1,0 +1,45 @@
+{
+  "schema_version": "1.0",
+  "id": "codex-executor",
+  "kind": "implementation-agent",
+  "runtime_profile": "codex-cli",
+  "purpose": "Implement scoped repository changes, run required verification, and emit machine-readable session evidence.",
+  "model_policy": {
+    "selection": "use-codex-config-default",
+    "reasoning": "medium-for-M-high-for-L"
+  },
+  "context_policy": {
+    "required": [
+      "AGENTS.md",
+      "task brief",
+      "plan_how for M/L",
+      "task contract for L"
+    ],
+    "forbidden": [
+      "plan_why during implementation",
+      "unscoped brainstorm documents",
+      "credentials"
+    ]
+  },
+  "tools": [
+    "shell",
+    "apply_patch",
+    "project tests",
+    "git diff"
+  ],
+  "outputs": [
+    ".pipeline/sessions/<task-id>/events.jsonl",
+    ".pipeline/outcomes/<task-id>/outcome-card.json",
+    "working tree diff"
+  ],
+  "completion_contract": {
+    "must_run": [
+      "mandatory verification from AGENTS.md",
+      "scripts/harness/outcome-judge.sh <task-id>"
+    ],
+    "must_not_claim": [
+      "tests passed without command evidence",
+      "PR ready without outcome judgment"
+    ]
+  }
+}

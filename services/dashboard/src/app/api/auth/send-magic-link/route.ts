@@ -2,9 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import jwt from "jsonwebtoken";
 import { sendMagicLinkEmail } from "@/lib/email";
 import { getRegistrationConfig, validateEmailForRegistration } from "@/lib/registration";
-import { findUserByEmail, createUser, createUserToken } from "@/lib/vexa-admin-api";
-import { cookies } from "next/headers";
-import { getAuthCookieName, getUserInfoCookieName } from "@/lib/auth-cookies";
+import { handleDirectLogin } from "@/lib/direct-login";
 
 const JWT_SECRET = process.env.JWT_SECRET || process.env.VEXA_ADMIN_API_KEY || "default-secret-change-me";
 const MAGIC_LINK_EXPIRY = "15m"; // 15 minutes
@@ -19,7 +17,7 @@ function isSmtpConfigured(): boolean {
   return !!(smtpHost && smtpUser && smtpPass);
 }
 
-function isDirectLoginAllowed(_request: NextRequest): boolean {
+function isDirectLoginAllowed(): boolean {
   const raw = (process.env.VEXA_ALLOW_DIRECT_LOGIN || "").toLowerCase();
   return ["1", "true", "yes"].includes(raw);
 }
@@ -75,105 +73,6 @@ async function checkUserExists(email: string): Promise<{ exists: boolean; error?
 }
 
 /**
- * Direct login - authenticate user without email verification
- * Used when SMTP is not configured
- */
-function isSecureRequest(): boolean {
-  // Secure cookies only on HTTPS. NODE_ENV=production is always true in Next.js
-  // production builds, even when serving over HTTP (self-hosted).
-  return process.env.NEXTAUTH_URL?.startsWith("https://") ||
-         process.env.DASHBOARD_URL?.startsWith("https://") ||
-         false;
-}
-
-async function handleDirectLogin(email: string): Promise<NextResponse> {
-  // Find or create user
-  const findResult = await findUserByEmail(email);
-
-  let user;
-  let isNewUser = false;
-
-  if (findResult.success && findResult.data) {
-    user = findResult.data;
-  } else if (findResult.error?.code === "NOT_FOUND") {
-    // Check registration restrictions
-    const config = getRegistrationConfig();
-    const validationError = validateEmailForRegistration(email, false, config);
-
-    if (validationError) {
-      return NextResponse.json(
-        { error: validationError },
-        { status: 403 }
-      );
-    }
-
-    // Create new user
-    const createResult = await createUser({ email });
-
-    if (!createResult.success || !createResult.data) {
-      return NextResponse.json(
-        { error: createResult.error?.message || "Failed to create user" },
-        { status: 500 }
-      );
-    }
-
-    user = createResult.data;
-    isNewUser = true;
-  } else if (findResult.error) {
-    return NextResponse.json(
-      { error: findResult.error.message, code: findResult.error.code },
-      { status: 503 }
-    );
-  }
-
-  // Create API token
-  const tokenResult = await createUserToken(user!.id);
-
-  if (!tokenResult.success || !tokenResult.data) {
-    return NextResponse.json(
-      { error: tokenResult.error?.message || "Failed to create session" },
-      { status: 500 }
-    );
-  }
-
-  const apiToken = tokenResult.data.token;
-
-  // Set cookies
-  const cookieStore = await cookies();
-  cookieStore.set(getAuthCookieName(), apiToken, {
-    httpOnly: true,
-    secure: isSecureRequest(),
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 30, // 30 days
-    path: "/",
-  });
-  // Set user-info cookie so getAuthenticatedUserId can resolve the user
-  // (mirrors what the verify endpoint and SSO flow set)
-  cookieStore.set(getUserInfoCookieName(), JSON.stringify({ email: user!.email, name: user!.name }), {
-    httpOnly: true,
-    secure: isSecureRequest(),
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 30,
-    path: "/",
-  });
-
-  // Return direct login response
-  return NextResponse.json({
-    success: true,
-    mode: "direct",
-    isNewUser,
-    user: {
-      id: user!.id,
-      email: user!.email,
-      name: user!.name,
-      max_concurrent_bots: user!.max_concurrent_bots,
-      created_at: user!.created_at,
-    },
-    token: apiToken,
-  });
-}
-
-/**
  * Send magic link endpoint - sends an email with verification link
  * OR directly authenticates if SMTP is not configured
  */
@@ -210,7 +109,7 @@ export async function POST(request: NextRequest) {
     // Check if SMTP is configured
     const smtpEnabled = isSmtpConfigured();
 
-    if (!smtpEnabled && isDirectLoginAllowed(request)) {
+    if (!smtpEnabled && isDirectLoginAllowed()) {
       console.log("Direct login enabled for local/dev dashboard:", email);
       return handleDirectLogin(email);
     }

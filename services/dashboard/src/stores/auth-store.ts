@@ -6,7 +6,7 @@ import { withBasePath } from "@/lib/base-path";
 interface LoginResult {
   success: boolean;
   error?: string;
-  mode?: "direct" | "magic-link";
+  mode?: "direct" | "magic-link" | "shared";
   user?: VexaUser;
   token?: string;
   isNewUser?: boolean;
@@ -21,6 +21,7 @@ interface AuthState {
 
   // Actions
   sendMagicLink: (email: string) => Promise<LoginResult>;
+  signInSharedDashboard: () => Promise<LoginResult>;
   setAuth: (user: VexaUser, token: string) => void;
   logout: () => void;
   setUser: (user: VexaUser | null) => void;
@@ -78,6 +79,43 @@ export const useAuthStore = create<AuthState>()(
           return {
             success: true,
             mode: "magic-link",
+          };
+        } catch (error) {
+          set({ isLoading: false });
+          return { success: false, error: (error as Error).message };
+        }
+      },
+
+      signInSharedDashboard: async (): Promise<LoginResult> => {
+        set({ isLoading: true });
+        try {
+          const response = await fetch(withBasePath("/api/auth/shared-login"), {
+            method: "POST",
+          });
+          const data = await response.json().catch(() => ({}));
+
+          if (!response.ok || !data.user || !data.token) {
+            set({ isLoading: false });
+            return {
+              success: false,
+              error: data.error || "Shared dashboard auth is not available",
+            };
+          }
+
+          set({
+            user: data.user,
+            token: data.token,
+            isAuthenticated: true,
+            isLoading: false,
+            didLogout: false,
+          });
+
+          return {
+            success: true,
+            mode: "shared",
+            user: data.user,
+            token: data.token,
+            isNewUser: data.isNewUser,
           };
         } catch (error) {
           set({ isLoading: false });

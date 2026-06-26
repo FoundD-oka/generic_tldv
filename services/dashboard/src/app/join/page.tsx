@@ -26,9 +26,9 @@ export default function JoinPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Join Meeting</h1>
+        <h1 className="text-3xl font-bold tracking-tight">会議に参加</h1>
         <p className="text-muted-foreground">
-          Send a transcription bot to record and transcribe your meeting in real-time
+          文字起こしボットを会議に参加させ、リアルタイムで記録・文字起こしします
         </p>
       </div>
 

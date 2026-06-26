@@ -12,6 +12,8 @@ import { RELEASE, releaseUrl } from "@/lib/release-version";
 type Variant = "full" | "compact" | "minimal";
 type Look = "pill" | "text";
 
+const VERSION_SUFFIX = "ａ";
+
 export function VersionChip({
   variant = "minimal",
   look = "pill",
@@ -22,18 +24,19 @@ export function VersionChip({
   className?: string;
 }) {
   const url = releaseUrl(RELEASE.version);
+  const versionLabel = `${RELEASE.version}${VERSION_SUFFIX}`;
 
   let label: string;
   switch (variant) {
     case "full":
-      label = `Running ${RELEASE.version} · updated ${RELEASE.releaseDate}`;
+      label = `Running ${versionLabel} · updated ${RELEASE.releaseDate}`;
       break;
     case "compact":
-      label = `${RELEASE.version} · ${RELEASE.releaseDate}`;
+      label = `${versionLabel} · ${RELEASE.releaseDate}`;
       break;
     case "minimal":
     default:
-      label = RELEASE.version;
+      label = versionLabel;
   }
 
   const baseClasses =
@@ -46,7 +49,7 @@ export function VersionChip({
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      title={`Vexa ${RELEASE.version} · released ${RELEASE.releaseDate} · click for release notes`}
+      title={`Vexa ${versionLabel} · released ${RELEASE.releaseDate} · click for release notes`}
       className={baseClasses + " " + className}
     >
       <span>{label}</span>
