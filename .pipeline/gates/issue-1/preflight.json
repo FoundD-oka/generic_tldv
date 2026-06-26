@@ -1,0 +1,36 @@
+{
+  "timestamp": "2026-06-26T08:44:25.531637+00:00",
+  "status": "warn",
+  "diff_hash": "sha256:31079fac031ca2a1a0c988dd44d2d22cb69ef74232a0582585ebf4cf6d400194",
+  "changed_files": [
+    "deploy/compose/docker-compose.yml",
+    "deploy/env-example",
+    "deploy/gcs/README.md",
+    "deploy/gcs/apply-lifecycle.sh",
+    "deploy/gcs/lifecycle.json",
+    "deploy/helm/charts/vexa/templates/deployment-meeting-api.yaml",
+    "deploy/helm/charts/vexa/values.yaml",
+    "services/meeting-api/meeting_api/collector/endpoints.py",
+    "services/meeting-api/meeting_api/recording_finalizer.py",
+    "services/meeting-api/meeting_api/recordings.py",
+    "services/meeting-api/meeting_api/storage.py",
+    "services/meeting-api/pyproject.toml",
+    "services/meeting-api/requirements.txt",
+    "services/meeting-api/tests/test_gcs_storage.py",
+    "services/meeting-api/tests/test_recording_gcs_metadata.py",
+    "services/vexa-bot/core/src/index.ts",
+    "services/vexa-bot/core/src/services/recording-sweep.test.ts",
+    "services/vexa-bot/core/src/services/recording-sweep.ts"
+  ],
+  "flags": [
+    {
+      "path": "services/meeting-api/pyproject.toml",
+      "reason": "python dependency file changed"
+    },
+    {
+      "path": "services/meeting-api/requirements.txt",
+      "reason": "python dependency file changed"
+    }
+  ],
+  "blocks": []
+}
