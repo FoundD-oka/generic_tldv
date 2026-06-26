@@ -1,0 +1,8 @@
+{
+  "task": "issue-1",
+  "verdict": "pass",
+  "judge": "independent qa-judge subagent (context-separated)",
+  "summary": "All AC1-AC8 pass. AC8 (failure-not-silent) hardened post-review: download_media_file falls back to /raw when the GCS presigned URL is None, so the endpoint never returns a null url. See .pipeline/evidence/issue-1/qa-judgment.json for the full per-criterion judgment.",
+  "criteria_pass": ["AC1","AC2","AC3","AC4","AC5","AC6","AC7","AC8"],
+  "full_report": ".pipeline/evidence/issue-1/qa-judgment.json"
+}
