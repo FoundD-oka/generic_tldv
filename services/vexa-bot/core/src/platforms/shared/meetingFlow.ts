@@ -34,6 +34,59 @@ function generateReasonTokens(platform: string): {
   };
 }
 
+function shouldCleanUiBeforeVideoRecording(platform: string, botConfig: BotConfig, page: Page | null): boolean {
+  return platform === "google_meet" &&
+    !!page &&
+    !!botConfig.recordingEnabled &&
+    Array.isArray(botConfig.captureModes) &&
+    botConfig.captureModes.includes("video");
+}
+
+async function cleanGoogleMeetUiBeforeVideoRecording(page: Page): Promise<void> {
+  try {
+    await page.evaluate(() => {
+      const isVisible = (el: Element): boolean => {
+        const rect = (el as HTMLElement).getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      };
+      const textFor = (el: Element): string => [
+        el.getAttribute("aria-label") || "",
+        el.getAttribute("data-tooltip") || "",
+        el.textContent || "",
+      ].join(" ").toLowerCase();
+      const surroundingTextFor = (el: Element): string => {
+        const parts: string[] = [];
+        let current: Element | null = el;
+        for (let depth = 0; current && depth < 6; depth += 1) {
+          parts.push(textFor(current));
+          current = current.parentElement;
+        }
+        return parts.join(" ");
+      };
+      const closePattern = /(close|dismiss|閉じる|閉じ)/i;
+      const panelPattern = /(in-call messages|microphone muted by system|send a message|chat|messages|メッセージ|マイク)/i;
+
+      const closeButtons = Array.from(document.querySelectorAll("button, [role='button']"))
+        .filter((el) => isVisible(el) && closePattern.test(textFor(el)));
+
+      for (const button of closeButtons) {
+        const contextText = surroundingTextFor(button);
+        if (panelPattern.test(contextText) || closeButtons.length <= 2) {
+          (button as HTMLElement).click();
+        }
+      }
+    });
+
+    await page.keyboard.press("Escape").catch(() => {});
+    await page.keyboard.press("Escape").catch(() => {});
+    await page.mouse.move(1, 1).catch(() => {});
+    await page.waitForTimeout(500);
+    log("[VideoRecording] Cleared transient Google Meet UI before video capture");
+  } catch (err: any) {
+    log(`[VideoRecording] Google Meet UI cleanup before capture failed (non-fatal): ${err?.message || err}`);
+  }
+}
+
 export type PlatformStrategies = {
   join: (page: Page | null, botConfig: BotConfig) => Promise<void>;
   waitForAdmission: (page: Page | null, timeoutMs: number, botConfig: BotConfig) => Promise<AdmissionResult>;
@@ -179,8 +232,19 @@ export async function runMeetingFlow(
       // Continue to recording phase even if callback/verification fails
     }
 
+    const shouldPrepareVideoUi = shouldCleanUiBeforeVideoRecording(platform, botConfig, page);
+    if (shouldPrepareVideoUi && page) {
+      await cleanGoogleMeetUiBeforeVideoRecording(page);
+    }
+
     // Enter fullscreen via CDP to hide tabs/address bar before recording starts.
     await enterBrowserFullscreen();
+
+    // Chrome shows a transient "press Esc to exit full screen" overlay after
+    // CDP fullscreen. Start capture after it has faded so it is not recorded.
+    if (shouldPrepareVideoUi && page) {
+      await page.waitForTimeout(2500);
+    }
 
     // Start video recording now (same time as audio) so they stay in sync.
     startVideoRecordingIfNeeded();
@@ -254,5 +318,3 @@ export async function runMeetingFlow(
     await gracefulLeaveFunction(page, 1, "post_join_setup_error", errorDetails);
   }
 }
-
-

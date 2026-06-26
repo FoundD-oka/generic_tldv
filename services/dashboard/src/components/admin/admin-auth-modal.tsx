@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Shield, Eye, EyeOff, Loader2, AlertCircle, Lock } from "lucide-react";
 import {
   Dialog,
@@ -26,14 +26,18 @@ export function AdminAuthModal({ open, onOpenChange, onSuccess }: AdminAuthModal
   const [showToken, setShowToken] = useState(false);
   const { isVerifying, error, verifyAdminToken, clearError } = useAdminAuthStore();
 
-  // Clear state when modal opens/closes
-  useEffect(() => {
-    if (open) {
-      setToken("");
-      setShowToken(false);
-      clearError();
+  const resetLocalState = () => {
+    setToken("");
+    setShowToken(false);
+    clearError();
+  };
+
+  const handleDialogOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      resetLocalState();
     }
-  }, [open, clearError]);
+    onOpenChange(nextOpen);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,22 +47,23 @@ export function AdminAuthModal({ open, onOpenChange, onSuccess }: AdminAuthModal
     const success = await verifyAdminToken(token.trim());
 
     if (success) {
+      resetLocalState();
       onOpenChange(false);
       onSuccess?.();
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader className="space-y-4">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/20">
             <Shield className="h-8 w-8 text-primary" />
           </div>
           <div className="text-center">
-            <DialogTitle className="text-xl">Admin Authentication</DialogTitle>
+            <DialogTitle className="text-xl">管理者認証</DialogTitle>
             <DialogDescription className="mt-2">
-              Enter your admin API token to access the administration panel
+              管理画面にアクセスするため、管理者APIトークンを入力してください
             </DialogDescription>
           </div>
         </DialogHeader>
@@ -74,13 +79,13 @@ export function AdminAuthModal({ open, onOpenChange, onSuccess }: AdminAuthModal
           <div className="space-y-2">
             <Label htmlFor="admin-token" className="flex items-center gap-2">
               <Lock className="h-4 w-4 text-muted-foreground" />
-              Admin Token
+              管理者トークン
             </Label>
             <div className="relative">
               <Input
                 id="admin-token"
                 type={showToken ? "text" : "password"}
-                placeholder="Enter your admin API token..."
+                placeholder="管理者APIトークンを入力..."
                 value={token}
                 onChange={(e) => setToken(e.target.value)}
                 className="pr-10 font-mono text-sm"
@@ -102,7 +107,7 @@ export function AdminAuthModal({ open, onOpenChange, onSuccess }: AdminAuthModal
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              This is the VEXA_ADMIN_API_KEY configured in your environment
+              環境変数に設定されている VEXA_ADMIN_API_KEY です
             </p>
           </div>
 
@@ -114,7 +119,7 @@ export function AdminAuthModal({ open, onOpenChange, onSuccess }: AdminAuthModal
               onClick={() => onOpenChange(false)}
               disabled={isVerifying}
             >
-              Cancel
+              キャンセル
             </Button>
             <Button
               type="submit"
@@ -124,12 +129,12 @@ export function AdminAuthModal({ open, onOpenChange, onSuccess }: AdminAuthModal
               {isVerifying ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Verifying...
+                  確認中...
                 </>
               ) : (
                 <>
                   <Shield className="mr-2 h-4 w-4" />
-                  Authenticate
+                  認証する
                 </>
               )}
             </Button>
@@ -138,8 +143,8 @@ export function AdminAuthModal({ open, onOpenChange, onSuccess }: AdminAuthModal
 
         <div className="mt-4 pt-4 border-t">
           <p className="text-xs text-center text-muted-foreground">
-            Admin access is required to manage users, tokens, and system settings.
-            Your session will expire after 24 hours.
+            ユーザー、トークン、システム設定の管理には管理者権限が必要です。
+            セッションは24時間後に期限切れになります。
           </p>
         </div>
       </DialogContent>

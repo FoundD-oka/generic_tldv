@@ -28,17 +28,17 @@ interface BotStatusIndicatorProps {
 }
 
 const STATUS_STEPS_REALTIME = [
-  { key: "requested", label: "Requested", description: "Bot is starting up" },
-  { key: "joining", label: "Joining", description: "Connecting to meeting" },
-  { key: "awaiting_admission", label: "Waiting", description: "Waiting to be admitted" },
-  { key: "active", label: "Recording", description: "Transcribing audio in real-time" },
+  { key: "requested", label: "起動要求", description: "ボットを起動しています" },
+  { key: "joining", label: "参加中", description: "会議に接続しています" },
+  { key: "awaiting_admission", label: "承認待ち", description: "入室承認を待っています" },
+  { key: "active", label: "録音中", description: "音声をリアルタイムで文字起こししています" },
 ] as const;
 
 const STATUS_STEPS_RECORDING = [
-  { key: "requested", label: "Requested", description: "Bot is starting up" },
-  { key: "joining", label: "Joining", description: "Connecting to meeting" },
-  { key: "awaiting_admission", label: "Waiting", description: "Waiting to be admitted" },
-  { key: "active", label: "Recording", description: "Recording audio (transcription after meeting)" },
+  { key: "requested", label: "起動要求", description: "ボットを起動しています" },
+  { key: "joining", label: "参加中", description: "会議に接続しています" },
+  { key: "awaiting_admission", label: "承認待ち", description: "入室承認を待っています" },
+  { key: "active", label: "録音中", description: "音声を録音しています（文字起こしは会議後）" },
 ] as const;
 
 const STATUS_ORDER: Record<string, number> = {
@@ -62,12 +62,12 @@ export function BotStatusIndicator({ status, platform, meetingId, createdAt, upd
     setIsStopping(true);
     try {
       await vexaAPI.stopBot(platform as Platform, meetingId);
-      toast.success("Bot stopped", {
-        description: "The bot has been stopped and resources freed.",
+      toast.success("ボットを停止しました", {
+        description: "ボットを停止し、利用枠を解放しました。",
       });
       onStopped?.();
     } catch (error) {
-      toast.error("Failed to stop bot", {
+      toast.error("ボットの停止に失敗しました", {
         description: (error as Error).message,
       });
     } finally {
@@ -136,18 +136,18 @@ export function BotStatusIndicator({ status, platform, meetingId, createdAt, upd
               <AlertTriangle className="h-8 w-8 text-orange-500" />
             </div>
             <h2 className="text-xl font-semibold mb-2 text-orange-600 dark:text-orange-400">
-              {isJoiningStuck ? "Bot Connection Lost" : "Bot Failed to Start"}
+              {isJoiningStuck ? "ボットの接続が切れました" : "ボットの起動に失敗しました"}
             </h2>
             <p className="text-sm text-muted-foreground max-w-sm mb-2">
               {isJoiningStuck
-                ? `The bot has been trying to join for ${elapsedSeconds} seconds but the connection was lost.`
-                : `The bot has been waiting for ${elapsedSeconds} seconds but the container never started.`
+                ? `ボットは${elapsedSeconds}秒間参加を試みましたが、接続が切れました。`
+                : `ボットは${elapsedSeconds}秒間待機しましたが、コンテナが起動しませんでした。`
               }
             </p>
             <p className="text-xs text-muted-foreground max-w-sm mb-4">
               {isJoiningStuck
-                ? "This can happen due to Google's security checks or meeting access issues. Stop this bot to free up your slot and try again."
-                : "This may be due to server issues or resource limits. Stop this bot to free up your slot and try again."
+                ? "Googleのセキュリティ確認や会議のアクセス条件で起きることがあります。ボットを停止して枠を空け、もう一度お試しください。"
+                : "サーバー状態やリソース上限が原因の可能性があります。ボットを停止して枠を空け、もう一度お試しください。"
               }
             </p>
             <div className="flex gap-2">
@@ -163,7 +163,7 @@ export function BotStatusIndicator({ status, platform, meetingId, createdAt, upd
                 ) : (
                   <StopCircle className="h-4 w-4" />
                 )}
-                Stop Bot
+                ボットを停止
               </Button>
               {onRetry && (
                 <Button
@@ -174,7 +174,7 @@ export function BotStatusIndicator({ status, platform, meetingId, createdAt, upd
                   className="gap-2"
                 >
                   <RefreshCw className="h-4 w-4" />
-                  Retry
+                  再試行
                 </Button>
               )}
             </div>
@@ -207,13 +207,13 @@ export function BotStatusIndicator({ status, platform, meetingId, createdAt, upd
   const getStatusMessage = () => {
     switch (status) {
       case "requested":
-        return transcribeEnabled ? "Starting transcription bot" : "Starting recording bot";
+        return transcribeEnabled ? "文字起こしボットを起動中" : "録音ボットを起動中";
       case "joining":
-        return "Joining the meeting";
+        return "会議に参加中";
       case "awaiting_admission":
-        return "Please admit the bot to the meeting";
+        return "ボットの入室を承認してください";
       default:
-        return "Preparing";
+        return "準備中";
     }
   };
 
@@ -245,9 +245,9 @@ export function BotStatusIndicator({ status, platform, meetingId, createdAt, upd
 
           <p className="text-sm text-muted-foreground max-w-sm">
             {status === "awaiting_admission" ? (
-              <>Look for <span className="font-medium text-foreground">Vexa Bot</span> in your meeting&apos;s waiting room and click admit</>
+              <>会議の待機室にいる <span className="font-medium text-foreground">カボス</span> を承認してください</>
             ) : (
-              "This usually takes a few seconds"
+              "通常は数秒で完了します"
             )}
           </p>
         </div>
@@ -325,7 +325,7 @@ export function BotStatusIndicator({ status, platform, meetingId, createdAt, upd
             ) : (
               <StopCircle className="h-4 w-4" />
             )}
-            Cancel and stop bot
+            キャンセルしてボットを停止
           </Button>
         </div>
       </CardContent>
@@ -352,24 +352,24 @@ export function BotFailedIndicator({
       switch (errorCode.toLowerCase()) {
         case "admission_timeout":
         case "not_admitted":
-          return "Bot was not admitted";
+          return "ボットが承認されませんでした";
         case "meeting_ended":
-          return "Meeting has ended";
+          return "会議が終了しています";
         case "kicked":
         case "removed":
-          return "Bot was removed from meeting";
+          return "ボットが会議から退出させられました";
         case "connection_failed":
-          return "Connection failed";
+          return "接続に失敗しました";
         default:
-          return "Transcription failed";
+          return "文字起こしに失敗しました";
       }
     }
-    return "Transcription failed";
+    return "文字起こしに失敗しました";
   };
 
   const getDefaultMessage = () => {
     if (errorMessage) return errorMessage;
-    return "The bot was unable to join or complete the transcription. This can happen if the meeting ended or the bot was removed.";
+    return "ボットが会議に参加できなかったか、文字起こしを完了できませんでした。会議が終了していた、またはボットが退出させられた可能性があります。";
   };
 
   return (
@@ -387,7 +387,7 @@ export function BotFailedIndicator({
           </p>
           {errorCode && (
             <p className="text-xs text-muted-foreground/60 font-mono mb-4">
-              Error: {errorCode}
+              エラー: {errorCode}
             </p>
           )}
           {onRetry && (
@@ -395,7 +395,7 @@ export function BotFailedIndicator({
               onClick={onRetry}
               className="text-sm font-medium text-primary hover:underline"
             >
-              Try again with a new bot
+              新しいボットでもう一度試す
             </button>
           )}
         </div>

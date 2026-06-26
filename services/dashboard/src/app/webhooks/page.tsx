@@ -31,6 +31,19 @@ const WEBHOOK_EVENTS = [
   { key: "meeting.status_change", label: "meeting.status_change", defaultEnabled: false },
 ];
 
+function getDeliveryStatusLabel(status: WebhookDeliveryStatus): string {
+  switch (status) {
+    case "delivered":
+      return "配信済み";
+    case "retrying":
+      return "再試行中";
+    case "failed":
+      return "失敗";
+    default:
+      return status;
+  }
+}
+
 function StatusDot({ status }: { status: WebhookDeliveryStatus }) {
   return (
     <span
@@ -45,7 +58,7 @@ function StatusDot({ status }: { status: WebhookDeliveryStatus }) {
 }
 
 function StatusBadge({ code }: { code: number | null }) {
-  if (code === null) return <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-red-900/30 text-red-300">timeout</span>;
+  if (code === null) return <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-red-900/30 text-red-300">タイムアウト</span>;
   const isSuccess = code >= 200 && code < 300;
   return (
     <span
@@ -59,17 +72,17 @@ function StatusBadge({ code }: { code: number | null }) {
   );
 }
 
-function formatResponseTime(ms: number | null): string {
-  if (ms === null) return "30s";
-  if (ms >= 1000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${ms}ms`;
+function formatResponseTime(ms: number | null | undefined): string {
+  if (ms === null || ms === undefined) return "30秒";
+  if (ms >= 1000) return `${(ms / 1000).toFixed(1)}秒`;
+  return `${ms}ミリ秒`;
 }
 
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr);
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) +
+  return d.toLocaleDateString("ja-JP", { month: "short", day: "numeric" }) +
     ", " +
-    d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
+    d.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
 export default function WebhooksPage() {
@@ -128,14 +141,14 @@ export default function WebhooksPage() {
     try {
       const result = await testWebhook(webhookUrl);
       if (result.success) {
-        toast.success("Webhook test successful", {
-          description: `Status ${result.status} in ${result.time_ms}ms`,
+        toast.success("Webhookテストに成功しました", {
+          description: `ステータス ${result.status} / ${formatResponseTime(result.time_ms)}`,
         });
       } else {
-        toast.error("Webhook test failed", { description: result.error });
+        toast.error("Webhookテストに失敗しました", { description: result.error });
       }
     } catch (error) {
-      toast.error("Test failed", { description: (error as Error).message });
+      toast.error("テストに失敗しました", { description: (error as Error).message });
     } finally {
       setIsTesting(false);
       fetchDeliveries();
@@ -146,13 +159,13 @@ export default function WebhooksPage() {
     setIsRotating(true);
     try {
       await rotateSecret();
-      toast.success("Signing secret rotated", {
-        description: "The new secret is active immediately.",
+      toast.success("署名シークレットを更新しました", {
+        description: "新しいシークレットはすぐに有効になります。",
       });
       setShowSecret(true);
       setTimeout(() => setShowSecret(false), 10000);
     } catch (error) {
-      toast.error("Failed to rotate secret", { description: (error as Error).message });
+      toast.error("シークレットの更新に失敗しました", { description: (error as Error).message });
     } finally {
       setIsRotating(false);
     }
@@ -164,9 +177,9 @@ export default function WebhooksPage() {
         endpoint_url: webhookUrl,
         events: webhookEvents,
       });
-      toast.success("Webhook settings saved");
+      toast.success("Webhook設定を保存しました");
     } catch (error) {
-      toast.error("Failed to save settings", { description: (error as Error).message });
+      toast.error("設定の保存に失敗しました", { description: (error as Error).message });
     }
   };
 
@@ -179,10 +192,10 @@ export default function WebhooksPage() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-semibold tracking-[-0.02em] text-foreground">
-          Webhooks
+          Webhook設定
         </h1>
         <p className="text-sm text-muted-foreground">
-          Configure webhook delivery and monitor delivery history
+          会議イベントのWebhook配信を設定し、配信履歴を確認できます
         </p>
       </div>
 
@@ -191,16 +204,16 @@ export default function WebhooksPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Webhook className="h-5 w-5" />
-            Configuration
+            配信設定
           </CardTitle>
           <CardDescription>
-            Configure webhook delivery for meeting events
+            会議イベントを受け取るエンドポイントと対象イベントを設定します
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Endpoint URL */}
           <div className="space-y-1.5">
-            <Label className="text-sm text-muted-foreground">Endpoint URL</Label>
+            <Label className="text-sm text-muted-foreground">エンドポイントURL</Label>
             <div className="flex gap-2">
               <Input
                 type="url"
@@ -217,7 +230,7 @@ export default function WebhooksPage() {
                 {isTesting ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  "Test"
+                  "テスト"
                 )}
               </Button>
             </div>
@@ -225,13 +238,13 @@ export default function WebhooksPage() {
 
           {/* Signing Secret */}
           <div className="space-y-1.5">
-            <Label className="text-sm text-muted-foreground">Signing Secret</Label>
+            <Label className="text-sm text-muted-foreground">署名シークレット</Label>
             <div className="flex items-center gap-2">
               <Input
                 type={showSecret ? "text" : "password"}
                 value={webhookSecret}
                 onChange={(e) => setWebhookSecret(e.target.value)}
-                placeholder="whsec_... or enter your own secret"
+                placeholder="whsec_... または任意のシークレットを入力"
                 className="flex-1 font-mono text-sm"
               />
               <Button
@@ -259,13 +272,13 @@ export default function WebhooksPage() {
               </Button>
             </div>
             <p className="text-[11px] text-muted-foreground">
-              Use this secret to verify webhook signatures.
+              Webhook署名の検証に使うシークレットです。
             </p>
           </div>
 
           {/* Event toggles */}
           <div className="space-y-1.5">
-            <Label className="text-sm text-muted-foreground">Events</Label>
+            <Label className="text-sm text-muted-foreground">イベント</Label>
             <div className="flex flex-wrap gap-2">
               {WEBHOOK_EVENTS.map((event) => {
                 const enabled = webhookEvents[event.key] ?? event.defaultEnabled;
@@ -298,10 +311,10 @@ export default function WebhooksPage() {
               {isSavingConfig ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Saving...
+                  保存中...
                 </>
               ) : (
-                "Save"
+                "保存"
               )}
             </Button>
           </div>
@@ -312,7 +325,7 @@ export default function WebhooksPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold tracking-[-0.02em] text-foreground">
-            Delivery History
+            配信履歴
           </h2>
         </div>
         <div className="flex items-center gap-3">
@@ -321,13 +334,13 @@ export default function WebhooksPage() {
             onValueChange={(v) => setStatusFilter(v as WebhookDeliveryStatus | "all")}
           >
             <SelectTrigger className="w-[150px]">
-              <SelectValue placeholder="All statuses" />
+              <SelectValue placeholder="すべての状態" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All statuses</SelectItem>
-              <SelectItem value="delivered">Delivered</SelectItem>
-              <SelectItem value="retrying">Retrying</SelectItem>
-              <SelectItem value="failed">Failed</SelectItem>
+              <SelectItem value="all">すべての状態</SelectItem>
+              <SelectItem value="delivered">配信済み</SelectItem>
+              <SelectItem value="retrying">再試行中</SelectItem>
+              <SelectItem value="failed">失敗</SelectItem>
             </SelectContent>
           </Select>
           <Select
@@ -335,12 +348,12 @@ export default function WebhooksPage() {
             onValueChange={(v) => setTimeRange(v as "24h" | "7d" | "30d")}
           >
             <SelectTrigger className="w-[150px]">
-              <SelectValue placeholder="Last 7 days" />
+              <SelectValue placeholder="過去7日" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="24h">Last 24 hours</SelectItem>
-              <SelectItem value="7d">Last 7 days</SelectItem>
-              <SelectItem value="30d">Last 30 days</SelectItem>
+              <SelectItem value="24h">過去24時間</SelectItem>
+              <SelectItem value="7d">過去7日</SelectItem>
+              <SelectItem value="30d">過去30日</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -350,25 +363,25 @@ export default function WebhooksPage() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-4 pb-4">
-            <p className="text-xs text-muted-foreground mb-0.5">Total</p>
+            <p className="text-xs text-muted-foreground mb-0.5">合計</p>
             <p className="text-xl font-semibold">{stats.total}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-4 pb-4">
-            <p className="text-xs text-muted-foreground mb-0.5">Delivered</p>
+            <p className="text-xs text-muted-foreground mb-0.5">配信済み</p>
             <p className="text-xl font-semibold text-emerald-400">{stats.delivered}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-4 pb-4">
-            <p className="text-xs text-muted-foreground mb-0.5">Retrying</p>
+            <p className="text-xs text-muted-foreground mb-0.5">再試行中</p>
             <p className="text-xl font-semibold text-amber-400">{stats.retrying}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-4 pb-4">
-            <p className="text-xs text-muted-foreground mb-0.5">Failed</p>
+            <p className="text-xs text-muted-foreground mb-0.5">失敗</p>
             <p className="text-xl font-semibold text-red-400">{stats.failed}</p>
           </CardContent>
         </Card>
@@ -380,12 +393,12 @@ export default function WebhooksPage() {
           <table className="w-full">
             <thead>
               <tr className="border-b text-xs text-muted-foreground uppercase tracking-wider">
-                <th className="text-left px-5 py-3 font-medium">Event</th>
-                <th className="text-left px-5 py-3 font-medium">Meeting</th>
-                <th className="text-left px-5 py-3 font-medium">Status</th>
-                <th className="text-left px-5 py-3 font-medium">Attempts</th>
-                <th className="text-left px-5 py-3 font-medium">Response</th>
-                <th className="text-left px-5 py-3 font-medium">Time</th>
+                <th className="text-left px-5 py-3 font-medium">イベント</th>
+                <th className="text-left px-5 py-3 font-medium">会議</th>
+                <th className="text-left px-5 py-3 font-medium">状態</th>
+                <th className="text-left px-5 py-3 font-medium">試行回数</th>
+                <th className="text-left px-5 py-3 font-medium">レスポンス</th>
+                <th className="text-left px-5 py-3 font-medium">日時</th>
               </tr>
             </thead>
             <tbody className="text-sm">
@@ -401,7 +414,7 @@ export default function WebhooksPage() {
                     <div className="flex flex-col items-center gap-2">
                       <Webhook className="h-8 w-8 text-muted-foreground/50" />
                       <p className="text-sm text-muted-foreground">
-                        No webhook deliveries found
+                        Webhook配信履歴はまだありません
                       </p>
                     </div>
                   </td>
@@ -429,7 +442,7 @@ export default function WebhooksPage() {
                             delivery.status === "failed" && "text-red-400"
                           )}
                         >
-                          {delivery.status}
+                          {getDeliveryStatusLabel(delivery.status)}
                         </span>
                       </span>
                     </td>

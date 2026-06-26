@@ -158,3 +158,24 @@ class TestDryRunSchemaField:
         )
         assert m.dry_run is True
         assert m.platform.value == "zoom"
+
+
+# ===================================================================
+# Video recording receive path — schema field
+# ===================================================================
+
+
+class TestVideoReceiveSchemaField:
+    """video_receive_enabled is the explicit participant-video receive knob."""
+
+    def test_video_receive_default_unset(self):
+        m = MeetingCreate(platform="google_meet", native_meeting_id="abc-defg-hij")
+        assert m.video_receive_enabled is None
+
+    def test_video_receive_explicit_true(self):
+        m = MeetingCreate(
+            platform="google_meet",
+            native_meeting_id="abc-defg-hij",
+            video_receive_enabled=True,
+        )
+        assert m.video_receive_enabled is True

@@ -10,7 +10,7 @@ import { useAuthStore } from "@/stores/auth-store";
 import { useLiveStore } from "@/stores/live-store";
 import { useMeetingsStore } from "@/stores/meetings-store";
 import { getUserFriendlyError } from "@/lib/error-messages";
-import type { CreateBotRequest } from "@/types/vexa";
+import { withPostMeetingAutoStop } from "@/lib/bot-create-defaults";
 
 export function usePendingMeeting() {
   const router = useRouter();
@@ -33,10 +33,10 @@ export function usePendingMeeting() {
       return;
     }
 
-    const request: CreateBotRequest = {
+    const request = withPostMeetingAutoStop({
       platform: parsed.platform,
       native_meeting_id: parsed.meetingId,
-    };
+    });
     if (parsed.passcode) {
       request.passcode = parsed.passcode;
     }

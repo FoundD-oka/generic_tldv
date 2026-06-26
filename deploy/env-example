@@ -55,6 +55,14 @@ MINIO_SECRET_KEY=vexa-secret-key
 MINIO_BUCKET=vexa
 MINIO_SECURE=false
 
+# Google Cloud Storage backend (issue #1) — recordings source of truth with a
+# 14d Standard -> Nearline / 60d delete lifecycle. Uses ADC / Workload Identity
+# (no HMAC key in the app); signed URLs via IAM signBlob. See deploy/gcs/README.md.
+# STORAGE_BACKEND=gcs
+# GCS_BUCKET=vexa-recordings
+# GCS_PROJECT=                       # optional; inferred from ADC if omitted
+# GCS_SIGNING_SERVICE_ACCOUNT=       # optional; runtime SA email for signBlob, derived from ADC if omitted
+
 # Local GPU transcription (uncomment to self-host)
 # LOCAL_TRANSCRIPTION=true
 

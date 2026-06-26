@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
+import { ja } from "date-fns/locale";
 import {
   Users,
   Plus,
@@ -67,17 +68,17 @@ export default function AdminUsersPage() {
 
   const handleCreateUser = async () => {
     if (!newUserData.email) {
-      toast.error("Email is required");
+      toast.error("メールアドレスを入力してください");
       return;
     }
 
     const user = await createUser(newUserData);
     if (user) {
-      toast.success(`User "${user.email}" created successfully`);
+      toast.success(`ユーザー「${user.email}」を作成しました`);
       setIsCreateDialogOpen(false);
       setNewUserData({ email: "", name: "", max_concurrent_bots: 3 });
     } else {
-      toast.error("Failed to create user");
+      toast.error("ユーザーの作成に失敗しました");
     }
   };
 
@@ -88,10 +89,10 @@ export default function AdminUsersPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
             <Users className="h-8 w-8" />
-            Users
+            ユーザー
           </h1>
           <p className="text-muted-foreground">
-            Manage users and API tokens
+            ユーザーとAPIトークンを管理します
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -109,21 +110,21 @@ export default function AdminUsersPage() {
               <DialogTrigger asChild>
                 <Button>
                   <Plus className="mr-2 h-4 w-4" />
-                  New User
+                  新規ユーザー
                 </Button>
               </DialogTrigger>
               <DocsLink href="/docs/admin/users#create-user" />
             </div>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Create New User</DialogTitle>
+                <DialogTitle>新規ユーザーを作成</DialogTitle>
                 <DialogDescription>
-                  Add a new user to the system. They will need an API token to access the API.
+                  システムに新しいユーザーを追加します。API利用にはAPIトークンが必要です。
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email *</Label>
+                  <Label htmlFor="email">メールアドレス *</Label>
                   <Input
                     id="email"
                     type="email"
@@ -135,7 +136,7 @@ export default function AdminUsersPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="name">Name</Label>
+                  <Label htmlFor="name">名前</Label>
                   <Input
                     id="name"
                     placeholder="John Doe"
@@ -146,7 +147,7 @@ export default function AdminUsersPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="maxBots">Max Concurrent Bots</Label>
+                  <Label htmlFor="maxBots">同時実行ボット上限</Label>
                   <Input
                     id="maxBots"
                     type="number"
@@ -161,7 +162,7 @@ export default function AdminUsersPage() {
                     }
                   />
                   <p className="text-xs text-muted-foreground">
-                    Maximum number of bots this user can run simultaneously
+                    このユーザーが同時に実行できるボット数の上限です
                   </p>
                 </div>
               </div>
@@ -170,10 +171,10 @@ export default function AdminUsersPage() {
                   variant="outline"
                   onClick={() => setIsCreateDialogOpen(false)}
                 >
-                  Cancel
+                  キャンセル
                 </Button>
                 <Button onClick={handleCreateUser} disabled={isCreatingUser}>
-                  {isCreatingUser ? "Creating..." : "Create User"}
+                  {isCreatingUser ? "作成中..." : "ユーザーを作成"}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -187,7 +188,7 @@ export default function AdminUsersPage() {
           <div className="relative">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search users by email or name..."
+              placeholder="メールアドレスまたは名前で検索..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9"
@@ -222,17 +223,17 @@ export default function AdminUsersPage() {
           <CardContent className="py-12 text-center">
             <Users className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
             <h3 className="text-lg font-medium mb-2">
-              {searchQuery ? "No users found" : "No users yet"}
+              {searchQuery ? "ユーザーが見つかりません" : "ユーザーはまだいません"}
             </h3>
             <p className="text-muted-foreground mb-4">
               {searchQuery
-                ? "Try adjusting your search query"
-                : "Create your first user to get started"}
+                ? "検索条件を変更してください"
+                : "最初のユーザーを作成して開始してください"}
             </p>
             {!searchQuery && (
               <Button onClick={() => setIsCreateDialogOpen(true)}>
                 <Plus className="mr-2 h-4 w-4" />
-                Create User
+                ユーザーを作成
               </Button>
             )}
           </CardContent>
@@ -265,10 +266,10 @@ export default function AdminUsersPage() {
                     <div className="hidden sm:flex items-center gap-4">
                       <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                         <Bot className="h-4 w-4" />
-                        <span>{user.max_concurrent_bots} max</span>
+                        <span>上限 {user.max_concurrent_bots}</span>
                       </div>
                       <div className="text-sm text-muted-foreground">
-                        <span suppressHydrationWarning>{formatDistanceToNow(parseUTCTimestamp(user.created_at), { addSuffix: true })}</span>
+                        <span suppressHydrationWarning>{formatDistanceToNow(parseUTCTimestamp(user.created_at), { addSuffix: true, locale: ja })}</span>
                       </div>
                     </div>
 
@@ -282,7 +283,7 @@ export default function AdminUsersPage() {
 
           {/* Stats */}
           <div className="text-sm text-muted-foreground text-center pt-4">
-            Showing {filteredUsers.length} of {users.length} users
+            {users.length}人中 {filteredUsers.length}人を表示
           </div>
         </div>
       )}

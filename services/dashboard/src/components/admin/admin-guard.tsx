@@ -45,7 +45,7 @@ export function AdminGuard({ children }: AdminGuardProps) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground">Verifying admin access...</p>
+        <p className="text-sm text-muted-foreground">管理者権限を確認しています...</p>
       </div>
     );
   }
@@ -61,9 +61,9 @@ export function AdminGuard({ children }: AdminGuardProps) {
                 <Lock className="h-10 w-10 text-orange-600 dark:text-orange-400" />
               </div>
               <div>
-                <CardTitle className="text-xl">Admin Access Required</CardTitle>
+                <CardTitle className="text-xl">管理者権限が必要です</CardTitle>
                 <CardDescription className="mt-2">
-                  You need to authenticate with an admin token to access this area
+                  このエリアにアクセスするには、管理者トークンで認証してください
                 </CardDescription>
               </div>
             </CardHeader>
@@ -73,7 +73,7 @@ export function AdminGuard({ children }: AdminGuardProps) {
                 onClick={() => setShowAuthModal(true)}
               >
                 <Shield className="mr-2 h-4 w-4" />
-                Enter Admin Token
+                管理者トークンを入力
               </Button>
               <Button
                 variant="outline"
@@ -81,14 +81,14 @@ export function AdminGuard({ children }: AdminGuardProps) {
                 onClick={() => router.push("/")}
               >
                 <ArrowLeft className="mr-2 h-4 w-4" />
-                Back to Dashboard
+                ダッシュボードに戻る
               </Button>
             </CardContent>
           </Card>
 
           <p className="text-xs text-muted-foreground text-center max-w-sm">
-            Admin access allows you to manage users, API tokens, and system settings.
-            Contact your administrator if you need access.
+            管理者権限では、ユーザー、APIトークン、システム設定を管理できます。
+            アクセスが必要な場合は管理者に確認してください。
           </p>
         </div>
 

@@ -1,0 +1,136 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://local/outcome-card.schema.json",
+  "title": "Harness Outcome Card",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "task_id",
+    "runtime_profile",
+    "size",
+    "result",
+    "evidence"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string"
+    },
+    "task_id": {
+      "type": "string"
+    },
+    "runtime_profile": {
+      "type": "string"
+    },
+    "size": {
+      "type": "string",
+      "enum": [
+        "S",
+        "M",
+        "L"
+      ]
+    },
+    "result": {
+      "type": "object",
+      "required": [
+        "at_pass",
+        "fp_pass",
+        "nft_pass",
+        "hd_resolved",
+        "blocking_findings"
+      ],
+      "properties": {
+        "at_pass": {
+          "type": "boolean"
+        },
+        "fp_pass": {
+          "type": "boolean"
+        },
+        "nft_pass": {
+          "type": "boolean"
+        },
+        "hd_resolved": {
+          "type": "boolean"
+        },
+        "blocking_findings": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "required": [
+        "verification"
+      ],
+      "properties": {
+        "session_ledger": {
+          "type": "string"
+        },
+        "verification": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "review": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sidechain_synthesis": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "size": {
+            "enum": [
+              "M",
+              "L"
+            ]
+          }
+        },
+        "required": [
+          "size"
+        ]
+      },
+      "then": {
+        "properties": {
+          "evidence": {
+            "required": [
+              "session_ledger"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "size": {
+            "const": "L"
+          }
+        },
+        "required": [
+          "size"
+        ]
+      },
+      "then": {
+        "properties": {
+          "evidence": {
+            "required": [
+              "session_ledger",
+              "sidechain_synthesis"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "additionalProperties": true
+}

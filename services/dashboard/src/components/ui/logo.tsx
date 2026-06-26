@@ -1,15 +1,16 @@
 "use client";
 
-import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { withBasePath } from "@/lib/base-path";
+import { DEFAULT_DASHBOARD_BRAND, type DashboardBrand } from "@/lib/dashboard-brand";
+import { useRuntimeConfig } from "@/hooks/use-runtime-config";
 
 interface LogoProps {
   className?: string;
   size?: "sm" | "md" | "lg";
   showText?: boolean;
+  brand?: DashboardBrand;
 }
 
 const sizeClasses = {
@@ -24,47 +25,101 @@ const textSizeClasses = {
   lg: "text-2xl",
 };
 
-export function Logo({ className, size = "md", showText = false }: LogoProps) {
-  const { theme, systemTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
+const letterSizeClasses = {
+  sm: "text-sm",
+  md: "text-base",
+  lg: "text-2xl",
+};
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+function isExternalUrl(value: string): boolean {
+  return /^https?:\/\//.test(value);
+}
 
-  // Determine which logo to use based on theme
-  // Use dark logo in light mode, light logo in dark mode (inverse)
-  const currentTheme = theme === "system" ? systemTheme : theme;
-  const logoSrc = currentTheme === "dark"
-    ? withBasePath("/icons/vexalight.svg")
-    : withBasePath("/icons/vexadark.svg");
+function resolveLogoSrc(value: string): string {
+  return isExternalUrl(value) ? value : withBasePath(value);
+}
 
-  if (!mounted) {
-    // Return a placeholder while theme is being determined
-    return (
-      <div className={cn("flex items-center gap-2", className)}>
-        <div className={cn(sizeClasses[size], "bg-muted rounded-lg animate-pulse")} />
-        {showText && (
-          <span className={cn("font-semibold", textSizeClasses[size])}>Vexa</span>
-        )}
-      </div>
-    );
-  }
+export function Logo({ className, size = "md", showText = false, brand: brandProp }: LogoProps) {
+  const { config } = useRuntimeConfig();
+  const brand = brandProp || config?.brand || DEFAULT_DASHBOARD_BRAND;
+
+  // Render the same markup on the server and first client pass. CSS handles
+  // light/dark switching so the logo src cannot drift during hydration.
+  const defaultLightLogoSrc = withBasePath("/icons/vexadark.svg");
+  const defaultDarkLogoSrc = withBasePath("/icons/vexalight.svg");
+  const configuredLightLogo = brand.logoDark || brand.logoLight;
+  const configuredDarkLogo = brand.logoLight || brand.logoDark;
+  const hasConfiguredLogo = Boolean(configuredLightLogo);
+  const shouldUseDefaultLogo = !hasConfiguredLogo && brand.slug === DEFAULT_DASHBOARD_BRAND.slug;
+  const brandInitial = (brand.shortName || brand.name || "V").trim().charAt(0).toUpperCase();
+  const imageSize = size === "sm" ? 24 : size === "md" ? 32 : 48;
 
   return (
     <div className={cn("flex items-center gap-2", className)}>
-      <Image
-        src={logoSrc}
-        alt="Vexa Logo"
-        width={size === "sm" ? 24 : size === "md" ? 32 : 48}
-        height={size === "sm" ? 24 : size === "md" ? 32 : 48}
-        className={cn(sizeClasses[size], "object-contain")}
-        priority
-      />
+      {shouldUseDefaultLogo ? (
+        <>
+          <Image
+            src={defaultLightLogoSrc}
+            alt={`${brand.name} ロゴ`}
+            width={imageSize}
+            height={imageSize}
+            className={cn(sizeClasses[size], "object-contain dark:hidden")}
+            priority
+          />
+          <Image
+            src={defaultDarkLogoSrc}
+            alt={`${brand.name} ロゴ`}
+            width={imageSize}
+            height={imageSize}
+            className={cn(sizeClasses[size], "hidden object-contain dark:block")}
+            priority
+          />
+        </>
+      ) : hasConfiguredLogo ? (
+        configuredLightLogo === configuredDarkLogo ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={resolveLogoSrc(configuredLightLogo!)}
+            alt={`${brand.name} ロゴ`}
+            width={imageSize}
+            height={imageSize}
+            className={cn(sizeClasses[size], "object-contain")}
+          />
+        ) : (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={resolveLogoSrc(configuredLightLogo!)}
+              alt={`${brand.name} ロゴ`}
+              width={imageSize}
+              height={imageSize}
+              className={cn(sizeClasses[size], "object-contain dark:hidden")}
+            />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={resolveLogoSrc(configuredDarkLogo!)}
+              alt={`${brand.name} ロゴ`}
+              width={imageSize}
+              height={imageSize}
+              className={cn(sizeClasses[size], "hidden object-contain dark:block")}
+            />
+          </>
+        )
+      ) : (
+        <span
+          aria-label={`${brand.name} ロゴ`}
+          className={cn(
+            sizeClasses[size],
+            letterSizeClasses[size],
+            "inline-flex items-center justify-center rounded-lg bg-primary text-primary-foreground font-semibold"
+          )}
+        >
+          {brandInitial}
+        </span>
+      )}
       {showText && (
-        <span className={cn("font-semibold", textSizeClasses[size])}>Vexa</span>
+        <span className={cn("font-semibold", textSizeClasses[size])}>{brand.shortName}</span>
       )}
     </div>
   );
 }
-

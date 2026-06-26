@@ -1,0 +1,8 @@
+{
+  "task": "issue-1",
+  "size": "L",
+  "decided_after": "plan_relay",
+  "rationale": "Touches the storage abstraction (new GCSStorageClient), the recording read/write/delete paths (per-file backend dispatch + metadata), the finalizer, bot lifecycle (orphan sweep), and deploy/IaC (lifecycle, compose, helm). Cross-service, migration-sensitive (MinIO->GCS), and playback-correctness sensitive (Range/206). Requires independent review before PR per harness L policy.",
+  "plan": ".pipeline/plans/issue-1/plan.md",
+  "verification_contract": ".pipeline/plans/issue-1/verification-contract.md"
+}

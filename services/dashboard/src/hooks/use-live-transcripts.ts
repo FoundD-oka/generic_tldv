@@ -166,11 +166,15 @@ export function useLiveTranscripts(
     let wsUrl: string;
     try {
       const configResponse = await fetch(withBasePath("/api/config"));
+      if (!configResponse.ok) {
+        throw new Error(`Runtime config request failed: ${configResponse.status}`);
+      }
       const config = await configResponse.json();
       wsUrl = config.wsUrl;
     } catch (error) {
-      // Fallback to default (runtime config should always be available)
-      console.error("[WS] Failed to fetch config for WebSocket URL:", error);
+      // The detail page can still recover via same-origin WS + REST polling.
+      const reason = error instanceof Error ? error.message : String(error);
+      console.warn(`[WS] Runtime config unavailable; using same-origin WebSocket fallback (${reason})`);
       wsUrl = `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws`;
     }
 
@@ -231,13 +235,13 @@ export function useLiveTranscripts(
           switch (message.type) {
             case "transcript": {
               // New format: per-speaker bundle with confirmed + pending
-              const speaker = (message as any).speaker || "";
-              const confirmedSegs = ((message as any).confirmed || [])
-                .filter((s: any) => s.text?.trim())
-                .map((s: any) => convertWebSocketSegment(s));
-              const pendingSegs = ((message as any).pending || [])
-                .filter((s: any) => s.text?.trim())
-                .map((s: any) => convertWebSocketSegment(s));
+              const speaker = message.speaker || "";
+              const confirmedSegs = (message.confirmed || [])
+                .filter((s) => s.text?.trim())
+                .map((s) => convertWebSocketSegment(s));
+              const pendingSegs = (message.pending || [])
+                .filter((s) => s.text?.trim())
+                .map((s) => convertWebSocketSegment(s));
               if (confirmedSegs.length > 0 || pendingSegs.length >= 0) {
                 upsertTranscriptSegments(confirmedSegs, pendingSegs, speaker);
                 console.log(
@@ -311,13 +315,14 @@ export function useLiveTranscripts(
         };
         
         // Check if there's actual error information
-        const hasErrorDetails = (event as any).error || (event as any).message;
+        const errorEvent = event as Event & { error?: unknown; message?: string };
+        const hasErrorDetails = errorEvent.error || errorEvent.message;
         
         if (hasErrorDetails) {
           console.error("[LiveTranscripts] WebSocket error:", {
             ...errorInfo,
-            error: (event as any).error,
-            message: (event as any).message,
+            error: errorEvent.error,
+            message: errorEvent.message,
           });
         } else {
           // Empty error event - just log state, actual error will be in onclose
@@ -397,7 +402,6 @@ export function useLiveTranscripts(
     updateMeetingStatus,
     addChatMessage,
     getReconnectDelay,
-    cleanup,
   ]);
 
   // Main connection effect

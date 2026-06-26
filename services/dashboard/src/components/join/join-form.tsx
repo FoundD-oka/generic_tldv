@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Video, Loader2, Check, AlertCircle, Sparkles, Mic, UserCheck } from "lucide-react";
+import { Video, Loader2, Check, AlertCircle, Sparkles, Mic, UserCheck, Monitor } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { vexaAPI } from "@/lib/api";
 import { useLiveStore } from "@/stores/live-store";
 import { useRuntimeConfig } from "@/hooks/use-runtime-config";
-import type { Platform, CreateBotRequest } from "@/types/vexa";
+import type { Platform } from "@/types/vexa";
 import { PLATFORM_CONFIG } from "@/types/vexa";
 import { LanguagePicker } from "@/components/language-picker";
 import { Switch } from "@/components/ui/switch";
@@ -18,10 +18,16 @@ import { cn } from "@/lib/utils";
 import { DocsLink } from "@/components/docs/docs-link";
 import { useAuthStore } from "@/stores/auth-store";
 import { shouldTriggerZoomOAuth, startZoomOAuth } from "@/lib/zoom-oauth-client";
+import { withPostMeetingAutoStop } from "@/lib/bot-create-defaults";
 
 interface JoinFormProps {
   onSuccess?: (meetingId: string, platform: Platform, nativeId: string) => void;
 }
+
+type CreateBotRequestWithVideo = ReturnType<typeof withPostMeetingAutoStop> & {
+  video?: boolean;
+  video_receive_enabled?: boolean;
+};
 
 export function JoinForm({ onSuccess }: JoinFormProps) {
   const { setActiveMeeting } = useLiveStore();
@@ -37,12 +43,13 @@ export function JoinForm({ onSuccess }: JoinFormProps) {
   const [passcode, setPasscode] = useState("");
   const [botName, setBotName] = useState(() => {
     if (typeof window !== "undefined") {
-      return localStorage.getItem("vexa-join-bot-name") || "Vexa";
+      return localStorage.getItem("vexa-join-bot-name") || "カボス";
     }
-    return "Vexa";
+    return "カボス";
   });
   const [language, setLanguage] = useState("auto");
   const [transcribeEnabled, setTranscribeEnabled] = useState(true);
+  const [videoRecordingEnabled, setVideoRecordingEnabled] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -66,10 +73,10 @@ export function JoinForm({ onSuccess }: JoinFormProps) {
     return {
       valid: isValid,
       message: isValid
-        ? "Valid meeting ID"
+        ? "有効な会議IDです"
         : platform === "google_meet"
-        ? "Format: abc-defg-hij"
-        : "Enter a valid meeting ID",
+        ? "形式: abc-defg-hij"
+        : "有効な会議IDを入力してください",
     };
   }, [meetingId, platform]);
 
@@ -79,32 +86,32 @@ export function JoinForm({ onSuccess }: JoinFormProps) {
     const cleanMeetingId = meetingId.trim().toLowerCase();
 
     if (!validateMeetingId(cleanMeetingId)) {
-      toast.error("Invalid meeting ID", {
-        description: `Please enter a valid ${platformConfig.name} meeting ID`,
+      toast.error("会議IDを確認してください", {
+        description: `${platformConfig.name} の有効な会議IDを入力してください`,
       });
       return;
     }
 
     if (platform === "teams" && !passcode.trim()) {
-      toast.error("Passcode required", {
-        description: "Microsoft Teams meetings require a passcode",
+      toast.error("パスコードが必要です", {
+        description: "Microsoft Teamsの会議にはパスコードが必要です",
       });
       return;
     }
 
     setIsSubmitting(true);
 
-    const request: CreateBotRequest = {
+    const request: CreateBotRequestWithVideo = withPostMeetingAutoStop({
       platform,
       native_meeting_id: cleanMeetingId,
-    };
+    });
 
     if ((platform === "teams" || platform === "zoom") && passcode) {
       request.passcode = passcode.trim();
     }
 
     // Set bot name - use custom name or configured default
-    request.bot_name = botName.trim() || config?.defaultBotName || "Vexa";
+    request.bot_name = botName.trim() || config?.defaultBotName || "カボス";
 
     // Persist to localStorage
     if (typeof window !== "undefined") {
@@ -123,11 +130,18 @@ export function JoinForm({ onSuccess }: JoinFormProps) {
       request.authenticated = true;
     }
 
+    if (videoRecordingEnabled) {
+      request.video = true;
+      request.video_receive_enabled = true;
+    }
+
     try {
       const meeting = await vexaAPI.createBot(request);
 
-      toast.success("Bot joining meeting", {
-        description: "The transcription bot is connecting to the meeting",
+      toast.success("ボットが会議に参加中です", {
+        description: videoRecordingEnabled
+          ? "文字起こしボットが会議に接続し、画面録画も開始します"
+          : "文字起こしボットが会議に接続しています",
       });
 
       setActiveMeeting(meeting);
@@ -142,9 +156,9 @@ export function JoinForm({ onSuccess }: JoinFormProps) {
         user?.email
       ) {
         try {
-          toast.info("Zoom authentication required", {
+          toast.info("Zoom認証が必要です", {
             description:
-              "Redirecting to Zoom. Sign in with the Zoom account that owns or is allowed to use the Vexa app to avoid \"Application not found\".",
+              "Zoomへ移動します。アプリ利用権限のあるZoomアカウントでログインしてください。",
           });
           await startZoomOAuth({
             userEmail: user.email,
@@ -153,13 +167,13 @@ export function JoinForm({ onSuccess }: JoinFormProps) {
           });
           return;
         } catch (oauthError) {
-          toast.error("Failed to start Zoom authentication", {
+          toast.error("Zoom認証の開始に失敗しました", {
             description: (oauthError as Error).message,
           });
         }
       }
 
-      toast.error("Failed to join meeting", {
+      toast.error("会議への参加に失敗しました", {
         description: (error as Error).message,
       });
     } finally {
@@ -167,12 +181,26 @@ export function JoinForm({ onSuccess }: JoinFormProps) {
     }
   };
 
+  const submitLabel = videoRecordingEnabled
+    ? "録画つきで開始"
+    : transcribeEnabled
+    ? "文字起こしを開始"
+    : "録音を開始";
+
+  const helperText = videoRecordingEnabled
+    ? transcribeEnabled
+      ? "ボットが会議に参加し、リアルタイム文字起こしと画面録画を行います"
+      : "ボットが会議に参加し、音声録音と画面録画を行います"
+    : transcribeEnabled
+    ? "ボットが会議に参加し、リアルタイムで文字起こしします"
+    : "ボットが会議に参加し、音声のみ録音します";
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Join a Meeting</CardTitle>
+        <CardTitle>会議に参加</CardTitle>
         <CardDescription>
-          Send a transcription bot to record and transcribe your meeting
+          文字起こしボットを会議に参加させ、記録と文字起こしを行います
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -180,24 +208,24 @@ export function JoinForm({ onSuccess }: JoinFormProps) {
         {isDepleted && (
           <div className="mb-6 rounded-lg bg-amber-950/20 border border-amber-900/30 p-3">
             <p className="text-sm text-amber-300 font-medium">
-              Bot launches disabled — credits depleted
+              ボット起動は無効です。クレジットが不足しています
             </p>
             <p className="text-xs text-amber-400/60 mt-1">
               <a
                 href={`${config?.webappUrl || "https://vexa.ai"}/account`}
                 className="underline hover:text-amber-300"
               >
-                Add funds
+                残高を追加
               </a>{" "}
-              in your account to re-enable bot launches.
+              するとボット起動を再開できます。
             </p>
           </div>
         )}
         <form onSubmit={handleSubmit} className={cn("space-y-6", isDepleted && "opacity-50 pointer-events-none")}>
           {/* Platform Selection */}
           <fieldset className="space-y-3">
-            <legend className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Platform</legend>
-            <div className="grid grid-cols-3 gap-3" role="radiogroup" aria-label="Select meeting platform">
+            <legend className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">会議サービス</legend>
+            <div className="grid grid-cols-3 gap-3" role="radiogroup" aria-label="会議サービスを選択">
               <button
                 type="button"
                 role="radio"
@@ -326,7 +354,7 @@ export function JoinForm({ onSuccess }: JoinFormProps) {
                 </span>
                 {isHosted && (
                   <span className="text-[10px] font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">
-                    Coming soon
+                    近日対応
                   </span>
                 )}
               </button>
@@ -335,7 +363,7 @@ export function JoinForm({ onSuccess }: JoinFormProps) {
 
           {/* Meeting ID */}
           <div className="space-y-2">
-            <Label htmlFor="meetingId">Meeting ID</Label>
+            <Label htmlFor="meetingId">会議ID</Label>
             <div className="relative">
               <Input
                 id="meetingId"
@@ -379,18 +407,18 @@ export function JoinForm({ onSuccess }: JoinFormProps) {
               {touched.meetingId && meetingId && meetingIdValidation.message
                 ? meetingIdValidation.message
                 : platform === "google_meet"
-                ? "Enter the meeting code from the URL (e.g., abc-defg-hij)"
-                : "Enter the numeric meeting ID from your Teams invitation"}
+                ? "URL内の会議コードを入力してください（例: abc-defg-hij）"
+                : "Teams招待に記載された会議IDを入力してください"}
             </p>
           </div>
 
           {/* Passcode (Teams and Zoom) */}
           {(platform === "teams" || platform === "zoom") && (
             <div className="space-y-2">
-              <Label htmlFor="passcode">Passcode</Label>
+              <Label htmlFor="passcode">パスコード</Label>
               <Input
                 id="passcode"
-                placeholder="Enter meeting passcode"
+                placeholder="会議パスコードを入力"
                 value={passcode}
                 onChange={(e) => setPasscode(e.target.value)}
               />
@@ -399,15 +427,15 @@ export function JoinForm({ onSuccess }: JoinFormProps) {
 
           {/* Bot Name (optional) */}
           <div className="space-y-2">
-            <Label htmlFor="botName">Bot Name (optional)</Label>
+            <Label htmlFor="botName">ボット名（任意）</Label>
             <Input
               id="botName"
-              placeholder="Meeting Assistant"
+              placeholder="会議アシスタント"
               value={botName}
               onChange={(e) => setBotName(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              This name will be displayed in the meeting participant list
+              この名前が会議の参加者一覧に表示されます
             </p>
           </div>
 
@@ -416,7 +444,7 @@ export function JoinForm({ onSuccess }: JoinFormProps) {
             <div className="flex items-center justify-between">
               <Label htmlFor="transcribeEnabled" className="flex items-center gap-2 cursor-pointer">
                 <Mic className="h-3.5 w-3.5" />
-                Real-time Transcription
+                リアルタイム文字起こし
               </Label>
               <Switch
                 id="transcribeEnabled"
@@ -426,9 +454,29 @@ export function JoinForm({ onSuccess }: JoinFormProps) {
             </div>
             {!transcribeEnabled && (
               <p className="text-xs text-muted-foreground">
-                Bot will record audio only. You can transcribe later from the meeting page.
+                音声のみ録音します。文字起こしは会議ページから後で実行できます。
               </p>
             )}
+          </div>
+
+          {/* Video Recording Toggle */}
+          <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
+            <div className="flex items-center justify-between gap-4">
+              <Label htmlFor="videoRecordingEnabled" className="flex items-center gap-2 cursor-pointer">
+                <Monitor className="h-3.5 w-3.5" />
+                画面録画
+              </Label>
+              <Switch
+                id="videoRecordingEnabled"
+                checked={videoRecordingEnabled}
+                onCheckedChange={setVideoRecordingEnabled}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {videoRecordingEnabled
+                ? "ボットが見ている会議画面を録画します。負荷と保存容量が増えます。"
+                : "必要な会議だけオンにしてください。デフォルトはオフです。"}
+            </p>
           </div>
 
           {/* Authenticated Toggle — coming soon */}
@@ -436,8 +484,8 @@ export function JoinForm({ onSuccess }: JoinFormProps) {
             <div className="flex items-center justify-between opacity-50">
               <Label htmlFor="authenticated" className="flex items-center gap-2 cursor-not-allowed">
                 <UserCheck className="h-3.5 w-3.5" />
-                Authenticated
-                <span className="text-[10px] font-medium bg-muted px-1.5 py-0.5 rounded">Soon</span>
+                認証済み参加
+                <span className="text-[10px] font-medium bg-muted px-1.5 py-0.5 rounded">近日</span>
               </Label>
               <Switch
                 id="authenticated"
@@ -450,7 +498,7 @@ export function JoinForm({ onSuccess }: JoinFormProps) {
           {/* Language */}
           {transcribeEnabled && (
           <div className="space-y-2">
-            <Label htmlFor="language">Transcription Language</Label>
+            <Label htmlFor="language">文字起こし言語</Label>
             <LanguagePicker
               value={language}
               onValueChange={setLanguage}
@@ -458,7 +506,7 @@ export function JoinForm({ onSuccess }: JoinFormProps) {
             />
             {language === "auto" && (
               <p className="text-xs text-muted-foreground">
-                Auto-detect: the service will detect the language automatically.
+                自動判定: サービスが言語を自動判定します。
               </p>
             )}
           </div>
@@ -478,12 +526,12 @@ export function JoinForm({ onSuccess }: JoinFormProps) {
               {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Connecting to meeting...
+                  会議に接続中...
                 </>
               ) : (
                 <>
                   <Sparkles className="mr-2 h-4 w-4" />
-                  {transcribeEnabled ? "Start Transcription" : "Start Recording"}
+                  {submitLabel}
                 </>
               )}
             </Button>
@@ -492,9 +540,7 @@ export function JoinForm({ onSuccess }: JoinFormProps) {
 
           {/* Helpful tip */}
           <p className="text-xs text-center text-muted-foreground">
-            {transcribeEnabled
-              ? "The bot will join your meeting and transcribe in real-time"
-              : "The bot will join your meeting and record audio only"}
+            {helperText}
           </p>
         </form>
       </CardContent>

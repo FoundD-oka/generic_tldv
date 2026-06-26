@@ -27,17 +27,17 @@ function CopyBlock({ label, text }: { label: string; text: string }) {
           className="text-xs text-primary hover:underline"
           onClick={() => {
             navigator.clipboard.writeText(text);
-            toast.success(`${label} copied`);
+            toast.success(`${label}をコピーしました`);
           }}
         >
-          Copy
+          コピー
         </button>
       </div>
       <pre
         className="p-2 bg-muted rounded text-xs font-mono whitespace-pre-wrap break-all cursor-pointer hover:bg-muted/80"
         onClick={() => {
           navigator.clipboard.writeText(text);
-          toast.success(`${label} copied`);
+          toast.success(`${label}をコピーしました`);
         }}
       >
         {text}
@@ -77,14 +77,14 @@ export function BrowserSessionView({ meeting }: BrowserSessionViewProps) {
     return (
       <div className="flex flex-col items-center justify-center h-[calc(100vh-64px)] gap-4">
         <Monitor className="h-16 w-16 text-muted-foreground" />
-        <h2 className="text-xl font-semibold">Session ended</h2>
+        <h2 className="text-xl font-semibold">セッションは終了しました</h2>
         <p className="text-sm text-muted-foreground">
-          This browser session has been completed.
+          このブラウザセッションは完了しています。
         </p>
         <Button variant="outline" asChild>
           <Link href="/meetings">
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Meetings
+            会議一覧に戻る
           </Link>
         </Button>
       </div>
@@ -104,23 +104,23 @@ export function BrowserSessionView({ meeting }: BrowserSessionViewProps) {
 
   const agentInstructions = cdpUrl
     ? [
-        `You have access to a remote browser session. The user can see everything you do live via VNC.`,
+        `リモートブラウザセッションにアクセスできます。ユーザーはVNC経由で操作内容をリアルタイムに確認できます。`,
         ``,
-        `Browser control (Playwright CDP):`,
+        `ブラウザ操作（Playwright CDP）:`,
         `  const browser = await chromium.connectOverCDP('${cdpUrl}');`,
         `  const page = browser.contexts()[0].pages()[0];`,
-        `  // goto, click, fill, screenshot, evaluate, waitForSelector, etc.`,
+        `  // goto、click、fill、screenshot、evaluate、waitForSelector など`,
         ``,
         ...(sshPort
           ? [
-              `Shell access (SSH into the container):`,
+              `シェルアクセス（コンテナへSSH接続）:`,
               `  ssh root@${sshHost} -p ${sshPort}`,
-              `  Password: ${token}`,
-              `  Workspace: /workspace`,
+              `  パスワード: ${token}`,
+              `  ワークスペース: /workspace`,
               ``,
             ]
           : []),
-        `The browser is a full Chromium instance. The user sees your actions in real time.`,
+        `このブラウザは完全なChromiumインスタンスです。ユーザーは操作をリアルタイムに確認できます。`,
       ].join("\n")
     : "";
 
@@ -128,32 +128,32 @@ export function BrowserSessionView({ meeting }: BrowserSessionViewProps) {
     setIsSaving(true);
     try {
       const saveUrl = browserRoute(`/b/${token}/save`);
-      if (!saveUrl) throw new Error("Runtime config is still loading");
+      if (!saveUrl) throw new Error("実行時設定を読み込み中です");
       const response = await fetch(saveUrl, {
         method: "POST",
       });
       if (!response.ok) throw new Error(await response.text());
-      toast.success("Storage saved");
+      toast.success("ストレージを保存しました");
     } catch (error) {
-      toast.error("Save failed: " + (error as Error).message);
+      toast.error("保存に失敗しました: " + (error as Error).message);
     } finally {
       setIsSaving(false);
     }
   }
 
   async function handleDeleteStorage() {
-    if (!confirm("Delete all stored browser data? You will need to log in again.")) return;
+    if (!confirm("保存済みのブラウザデータをすべて削除しますか？再ログインが必要になります。")) return;
     setIsDeleting(true);
     try {
       const storageUrl = browserRoute(`/b/${token}/storage`);
-      if (!storageUrl) throw new Error("Runtime config is still loading");
+      if (!storageUrl) throw new Error("実行時設定を読み込み中です");
       const response = await fetch(storageUrl, {
         method: "DELETE",
       });
       if (!response.ok) throw new Error(await response.text());
-      toast.success("Storage deleted");
+      toast.success("ストレージを削除しました");
     } catch (error) {
-      toast.error("Delete failed: " + (error as Error).message);
+      toast.error("削除に失敗しました: " + (error as Error).message);
     } finally {
       setIsDeleting(false);
     }
@@ -166,13 +166,13 @@ export function BrowserSessionView({ meeting }: BrowserSessionViewProps) {
         method: "DELETE",
       });
       if (!response.ok) {
-        const err = await response.json().catch(() => ({ detail: "Failed" }));
-        throw new Error(err.detail || `Stop failed (${response.status})`);
+        const err = await response.json().catch(() => ({ detail: "失敗しました" }));
+        throw new Error(err.detail || `停止に失敗しました (${response.status})`);
       }
-      toast.success("Browser session stopped");
+      toast.success("ブラウザセッションを停止しました");
       router.push("/meetings");
     } catch (error) {
-      toast.error("Failed to stop session: " + (error as Error).message);
+      toast.error("セッション停止に失敗しました: " + (error as Error).message);
       setIsStopping(false);
     }
   }
@@ -192,7 +192,7 @@ export function BrowserSessionView({ meeting }: BrowserSessionViewProps) {
           </Link>
         </Button>
         <Monitor className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm font-medium">Session #{meeting.id}</span>
+        <span className="text-sm font-medium">セッション #{meeting.id}</span>
         <div className="flex-1" />
         <Button
           variant="outline"
@@ -205,7 +205,7 @@ export function BrowserSessionView({ meeting }: BrowserSessionViewProps) {
           ) : (
             <Save className="h-4 w-4 mr-1" />
           )}
-          Save
+          保存
         </Button>
         <Button
           variant="outline"
@@ -219,7 +219,7 @@ export function BrowserSessionView({ meeting }: BrowserSessionViewProps) {
           ) : (
             <Trash2 className="h-4 w-4 mr-1" />
           )}
-          Clear Storage
+          ストレージ削除
         </Button>
         <Button
           variant={showPanel ? "default" : "outline"}
@@ -231,7 +231,7 @@ export function BrowserSessionView({ meeting }: BrowserSessionViewProps) {
           ) : (
             <PanelRightOpen className="h-4 w-4 mr-1" />
           )}
-          Connect Agent
+          エージェント接続
         </Button>
         <Button
           variant="outline"
@@ -241,7 +241,7 @@ export function BrowserSessionView({ meeting }: BrowserSessionViewProps) {
           }}
         >
           <ExternalLink className="h-4 w-4 mr-1" />
-          Fullscreen
+          全画面
         </Button>
         <Button
           variant="destructive"
@@ -254,7 +254,7 @@ export function BrowserSessionView({ meeting }: BrowserSessionViewProps) {
           ) : (
             <Trash2 className="h-4 w-4 mr-1" />
           )}
-          Stop
+          停止
         </Button>
       </div>
 
@@ -279,14 +279,13 @@ export function BrowserSessionView({ meeting }: BrowserSessionViewProps) {
         {showPanel && (
           <div className="w-96 border-l bg-card p-4 flex flex-col gap-4 overflow-y-auto">
             <div>
-              <h3 className="font-semibold text-sm mb-1">Connect Agent</h3>
+              <h3 className="font-semibold text-sm mb-1">エージェント接続</h3>
               <p className="text-xs text-muted-foreground">
-                Copy the instructions below into Claude or any AI agent to give
-                it control of this browser.
+                下の手順をClaudeなどのAIエージェントに渡すと、このブラウザを操作できます。
               </p>
             </div>
 
-            <CopyBlock label="Agent Instructions" text={agentInstructions} />
+            <CopyBlock label="エージェント手順" text={agentInstructions} />
 
             <hr />
 
@@ -305,11 +304,11 @@ export function BrowserSessionView({ meeting }: BrowserSessionViewProps) {
             <hr />
 
             <div className="space-y-2">
-              <h4 className="text-xs font-medium">MCP Server</h4>
+              <h4 className="text-xs font-medium">MCPサーバー</h4>
               <p className="text-xs text-muted-foreground">
-                Connect Claude Desktop or any MCP client.
+                Claude DesktopなどのMCPクライアントに接続します。
               </p>
-              <CopyBlock label="MCP Endpoint" text={mcpUrl || ""} />
+              <CopyBlock label="MCPエンドポイント" text={mcpUrl || ""} />
             </div>
           </div>
         )}

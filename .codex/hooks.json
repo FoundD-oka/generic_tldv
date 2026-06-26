@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -lc 'root=\"$(git rev-parse --show-toplevel)\" && \"$root/scripts/harness/validate-runtime-profile.sh\" --quiet'",
+            "timeout": 30,
+            "statusMessage": "Validating managed-agent harness profile"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -4,6 +4,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { AppLayout } from "@/components/layout/app-layout";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { withBasePath } from "@/lib/base-path";
+import { resolveDashboardBrand } from "@/lib/dashboard-brand";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -16,19 +17,25 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const metadataBrand = resolveDashboardBrand(process.env);
+const metadataIcon = metadataBrand.logoDark || metadataBrand.logoLight || withBasePath("/icons/vexadark.svg");
+
 export const metadata: Metadata = {
-  title: "Vexa Dashboard",
-  description: "Open source meeting transcription dashboard for Vexa",
+  title: metadataBrand.locale === "ja" ? `${metadataBrand.name} ダッシュボード` : `${metadataBrand.name} Dashboard`,
+  description:
+    metadataBrand.locale === "ja"
+      ? `${metadataBrand.name}の会議文字起こしダッシュボード`
+      : `Open source meeting transcription dashboard for ${metadataBrand.name}`,
   icons: {
     icon: [
       {
-        url: withBasePath("/icons/vexadark.svg"),
+        url: metadataIcon,
         type: "image/svg+xml",
       },
     ],
     apple: [
       {
-        url: withBasePath("/icons/vexadark.svg"),
+        url: metadataIcon,
         type: "image/svg+xml",
       },
     ],
@@ -41,7 +48,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang={metadataBrand.locale} suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

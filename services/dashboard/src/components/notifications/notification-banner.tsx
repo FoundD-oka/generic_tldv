@@ -53,11 +53,9 @@ const typeConfig = {
 
 export function NotificationBanner() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [dismissed, setDismissed] = useState<string[]>([]);
+  const [dismissed, setDismissed] = useState<string[]>(() => getDismissedIds());
 
   useEffect(() => {
-    setDismissed(getDismissedIds());
-
     async function fetchNotifications() {
       try {
         const resp = await fetch(`${BLOG_URL}/notifications.json`, {
@@ -115,14 +113,14 @@ export function NotificationBanner() {
                     s.link
                   )}
                 >
-                  Read more
+                  詳細を見る
                 </a>
               )}
             </p>
             <button
               onClick={() => dismiss(n.id)}
               className="flex-shrink-0 p-1 rounded-md text-muted-foreground/40 hover:text-foreground transition-opacity"
-              aria-label="Dismiss"
+              aria-label="閉じる"
             >
               <X className="h-3.5 w-3.5" />
             </button>

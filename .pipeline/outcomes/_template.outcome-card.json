@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "task_id": "replace-with-task-id",
+  "runtime_profile": "codex-cli",
+  "size": "M",
+  "result": {
+    "at_pass": false,
+    "fp_pass": false,
+    "nft_pass": false,
+    "hd_resolved": false,
+    "blocking_findings": 0
+  },
+  "evidence": {
+    "session_ledger": ".pipeline/sessions/replace-with-task-id/events.jsonl",
+    "verification": [],
+    "review": []
+  },
+  "notes": []
+}

@@ -284,7 +284,15 @@ logger = logging.getLogger("api_gateway")
 
 
 # --- Helper for Forwarding ---
-async def forward_request(client: httpx.AsyncClient, method: str, url: str, request: Request, *, require_auth: bool = True) -> Response:
+async def forward_request(
+    client: httpx.AsyncClient,
+    method: str,
+    url: str,
+    request: Request,
+    *,
+    require_auth: bool = True,
+    timeout: Optional[float] = None,
+) -> Response:
     # Copy original headers, converting to a standard dict
     # Exclude host, content-length, transfer-encoding as they are handled by httpx/server
     excluded_headers = {"host", "content-length", "transfer-encoding"}
@@ -362,7 +370,14 @@ async def forward_request(client: httpx.AsyncClient, method: str, url: str, requ
     content = await request.body()
 
     try:
-        resp = await client.request(method, url, headers=headers, params=forwarded_params or None, content=content)
+        request_kwargs = {
+            "headers": headers,
+            "params": forwarded_params or None,
+            "content": content,
+        }
+        if timeout is not None:
+            request_kwargs["timeout"] = timeout
+        resp = await client.request(method, url, **request_kwargs)
         # Return downstream response directly (including headers, status code)
         return Response(content=resp.content, status_code=resp.status_code, headers=dict(resp.headers))
     except httpx.RequestError as exc:
@@ -712,6 +727,16 @@ async def get_recording_master_proxy(recording_id: int, request: Request):
     url = f"{MEETING_API_URL}/recordings/{recording_id}/master"
     return await forward_request(app.state.http_client, "GET", url, request)
 
+@app.get("/recordings/{recording_id}/master/mp3",
+         tags=["Recordings"],
+         summary="Download canonical master audio as MP3",
+         description="Generates and streams the finalized master audio as MP3.",
+         dependencies=[Depends(api_key_scheme)])
+async def download_recording_master_mp3_proxy(recording_id: int, request: Request):
+    """Forward request to Bot Manager for MP3 master audio."""
+    url = f"{MEETING_API_URL}/recordings/{recording_id}/master/mp3"
+    return await forward_request(app.state.http_client, "GET", url, request, timeout=180.0)
+
 @app.get("/recordings/{recording_id}/media/{media_file_id}/download",
          tags=["Recordings"],
          summary="Get download URL for a media file",
@@ -731,6 +756,16 @@ async def download_media_raw_proxy(recording_id: int, media_file_id: int, reques
     """Forward request to Bot Manager for raw media streaming."""
     url = f"{MEETING_API_URL}/recordings/{recording_id}/media/{media_file_id}/raw"
     return await forward_request(app.state.http_client, "GET", url, request)
+
+@app.get("/recordings/{recording_id}/media/{media_file_id}/mp3",
+         tags=["Recordings"],
+         summary="Download audio media as MP3",
+         description="Generates and streams an audio media file as MP3.",
+         dependencies=[Depends(api_key_scheme)])
+async def download_media_mp3_proxy(recording_id: int, media_file_id: int, request: Request):
+    """Forward request to Bot Manager for MP3 media streaming."""
+    url = f"{MEETING_API_URL}/recordings/{recording_id}/media/{media_file_id}/mp3"
+    return await forward_request(app.state.http_client, "GET", url, request, timeout=180.0)
 
 @app.delete("/recordings/{recording_id}",
             tags=["Recordings"],

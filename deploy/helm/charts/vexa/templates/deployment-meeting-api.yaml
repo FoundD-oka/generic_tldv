@@ -123,6 +123,17 @@ spec:
             # external IP, OR when an ingress fronts MinIO under an FQDN.
             - name: MINIO_PUBLIC_ENDPOINT
               value: {{ .Values.meetingApi.minioPublicEndpoint | default "" | quote }}
+            {{- if eq (.Values.meetingApi.storageBackend | default "minio") "gcs" }}
+            # GCS backend (issue #1). Auth via Workload Identity — bind the
+            # pod's KSA to a GSA with storage.objectAdmin + signBlob on itself.
+            # See deploy/gcs/README.md.
+            - name: GCS_BUCKET
+              value: {{ .Values.meetingApi.gcsBucket | default "" | quote }}
+            - name: GCS_PROJECT
+              value: {{ .Values.meetingApi.gcsProject | default "" | quote }}
+            - name: GCS_SIGNING_SERVICE_ACCOUNT
+              value: {{ .Values.meetingApi.gcsSigningServiceAccount | default "" | quote }}
+            {{- end }}
             - name: LOG_LEVEL
               value: {{ .Values.meetingApi.logLevel | default "INFO" | quote }}
             {{- with .Values.meetingApi.extraEnv }}

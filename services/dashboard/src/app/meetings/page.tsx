@@ -5,6 +5,7 @@ import { Plus, RefreshCw, CreditCard, Video, Loader2, Search, Monitor } from "lu
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { format, formatDistanceToNow } from "date-fns";
+import { ja } from "date-fns/locale";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,6 +27,9 @@ import { cn, parseUTCTimestamp } from "@/lib/utils";
 import { usePendingMeeting } from "@/hooks/use-pending-meeting";
 import { toast } from "sonner";
 import { withBasePath } from "@/lib/base-path";
+import { DEFAULT_DASHBOARD_BRAND } from "@/lib/dashboard-brand";
+import { getDashboardCopy } from "@/lib/dashboard-copy";
+import { useRuntimeConfig } from "@/hooks/use-runtime-config";
 
 function PlatformIcon({ platform }: { platform: string }) {
   if (platform === "google_meet") {
@@ -62,11 +66,11 @@ function formatDuration(startTime: string | null, endTime: string | null): strin
   const minutes = Math.round(
     (new Date(endTime).getTime() - new Date(startTime).getTime()) / 60000
   );
-  if (minutes < 1) return "<1m";
-  if (minutes < 60) return `${minutes}m`;
+  if (minutes < 1) return "1分未満";
+  if (minutes < 60) return `${minutes}分`;
   const hours = Math.floor(minutes / 60);
   const mins = minutes % 60;
-  return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+  return mins > 0 ? `${hours}時間${mins}分` : `${hours}時間`;
 }
 
 // v0.10.5.3 Pack D-1 (#265): parseUTCTimestamp interprets the unsuffixed-ISO
@@ -75,7 +79,7 @@ function formatDuration(startTime: string | null, endTime: string | null): strin
 // producing a tz-shifted display.
 function formatDate(dateStr: string): string {
   const d = parseUTCTimestamp(dateStr);
-  return format(d, "MMM d, HH:mm");
+  return format(d, "M月d日 HH:mm", { locale: ja });
 }
 
 export default function MeetingsPage() {
@@ -83,6 +87,9 @@ export default function MeetingsPage() {
   const router = useRouter();
   const { meetings, isLoadingMeetings, isLoadingMore, hasMore, fetchMeetings, fetchMoreMeetings, error, subscriptionRequired } = useMeetingsStore();
   const openJoinModal = useJoinModalStore((state) => state.openModal);
+  const { config } = useRuntimeConfig();
+  const brand = config?.brand || DEFAULT_DASHBOARD_BRAND;
+  const copy = getDashboardCopy(brand.locale).meetings;
 
   const [searchQuery, setSearchQuery] = useState("");
   const [platformFilter, setPlatformFilter] = useState<Platform | "all">("all");
@@ -187,14 +194,14 @@ export default function MeetingsPage() {
           <div className="flex items-center gap-3">
             <CreditCard className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
             <div>
-              <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Subscription required</p>
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-200">{copy.subscriptionRequiredTitle}</p>
               <p className="text-xs text-amber-700 dark:text-amber-300">
-                Subscribe to a plan to create new bots and access the API.
+                {copy.subscriptionRequiredMessage}
               </p>
             </div>
           </div>
           <Button onClick={handleSubscribe} size="sm" className="bg-amber-600 hover:bg-amber-700 text-white flex-shrink-0">
-            View Plans
+            {copy.viewPlans}
           </Button>
         </div>
       )}
@@ -205,11 +212,11 @@ export default function MeetingsPage() {
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-semibold tracking-[-0.02em] text-foreground">Meetings</h1>
+              <h1 className="text-2xl font-semibold text-foreground">{copy.title}</h1>
               <DocsLink href="/docs/rest/meetings#list-meetings" />
             </div>
             <p className="text-sm text-muted-foreground">
-              Browse and search your meeting transcriptions
+              {copy.description}
             </p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -220,8 +227,8 @@ export default function MeetingsPage() {
               <div className="flex items-center">
                 <Button onClick={openJoinModal}>
                   <Plus className="mr-2 h-4 w-4" />
-                  <span className="hidden sm:inline">Join Meeting</span>
-                  <span className="sm:hidden">Join</span>
+                  <span className="hidden sm:inline">{copy.joinMeeting}</span>
+                  <span className="sm:hidden">{copy.joinShort}</span>
                 </Button>
                 <DocsLink href="/docs/rest/bots#create-bot" />
               </div>
@@ -233,7 +240,7 @@ export default function MeetingsPage() {
           <div className="relative flex-1 min-w-0 sm:min-w-[180px] sm:max-w-[240px]">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search meetings..."
+              placeholder={copy.searchPlaceholder}
               value={searchQuery}
               onChange={(e) => handleSearchChange(e.target.value)}
               className="w-full pl-8"
@@ -242,26 +249,26 @@ export default function MeetingsPage() {
           <div className="flex gap-2 min-w-0">
             <Select value={platformFilter} onValueChange={(v) => setPlatformFilter(v as Platform | "all")}>
               <SelectTrigger className="flex-1 min-w-0 sm:w-[140px] lg:w-[150px]">
-                <SelectValue placeholder="All Platforms" />
+                <SelectValue placeholder={copy.allPlatforms} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Platforms</SelectItem>
+                <SelectItem value="all">{copy.allPlatforms}</SelectItem>
                 <SelectItem value="google_meet">Google Meet</SelectItem>
                 <SelectItem value="teams">Teams</SelectItem>
                 <SelectItem value="zoom">Zoom</SelectItem>
-                <SelectItem value="browser_session">Browser</SelectItem>
+                <SelectItem value="browser_session">ブラウザ</SelectItem>
               </SelectContent>
             </Select>
             <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as MeetingStatus | "all")}>
               <SelectTrigger className="flex-1 min-w-0 sm:w-[130px] lg:w-[150px]">
-                <SelectValue placeholder="All Status" />
+                <SelectValue placeholder={copy.allStatus} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-                <SelectItem value="failed">Failed</SelectItem>
-                <SelectItem value="joining">Joining</SelectItem>
+                <SelectItem value="all">{copy.allStatus}</SelectItem>
+                <SelectItem value="active">{copy.statuses.active}</SelectItem>
+                <SelectItem value="completed">{copy.statuses.completed}</SelectItem>
+                <SelectItem value="failed">{copy.statuses.failed}</SelectItem>
+                <SelectItem value="joining">{copy.statuses.joining}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -274,9 +281,9 @@ export default function MeetingsPage() {
       ) : subscriptionRequired && meetings.length === 0 ? (
         <ErrorState
           type="subscription"
-          title="Subscribe to continue"
-          message="Your trial has ended. Subscribe to a plan to create bots and access meeting transcriptions."
-          actionLabel="View Plans"
+          title={copy.subscribeTitle}
+          message={copy.subscribeMessage}
+          actionLabel={copy.viewPlans}
           onAction={handleSubscribe}
         />
       ) : (
@@ -285,12 +292,12 @@ export default function MeetingsPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b text-xs text-muted-foreground uppercase tracking-wider">
-                  <th className="hidden sm:table-cell text-left px-5 py-3 font-medium">Platform</th>
-                  <th className="text-left px-5 py-3 font-medium">Meeting</th>
-                  <th className="text-left px-5 py-3 font-medium">Status</th>
-                  <th className="text-left px-5 py-3 font-medium">Duration</th>
-                  <th className="hidden lg:table-cell text-left px-5 py-3 font-medium">Participants</th>
-                  <th className="hidden sm:table-cell text-left px-5 py-3 font-medium">Time</th>
+                  <th className="hidden sm:table-cell text-left px-5 py-3 font-medium">{copy.table.platform}</th>
+                  <th className="text-left px-5 py-3 font-medium">{copy.table.meeting}</th>
+                  <th className="text-left px-5 py-3 font-medium">{copy.table.status}</th>
+                  <th className="text-left px-5 py-3 font-medium">{copy.table.duration}</th>
+                  <th className="hidden lg:table-cell text-left px-5 py-3 font-medium">{copy.table.participants}</th>
+                  <th className="hidden sm:table-cell text-left px-5 py-3 font-medium">{copy.table.time}</th>
                 </tr>
               </thead>
               <tbody className="text-sm">
@@ -307,13 +314,13 @@ export default function MeetingsPage() {
                         <Video className="h-8 w-8 text-muted-foreground/50" />
                         <p className="text-sm text-muted-foreground">
                           {searchQuery.trim() || platformFilter !== "all" || statusFilter !== "all"
-                            ? "No meetings match your filters"
-                            : "No meetings yet"}
+                            ? copy.noMatches
+                            : copy.noMeetings}
                         </p>
                         {!searchQuery.trim() && platformFilter === "all" && statusFilter === "all" && !subscriptionRequired && (
                           <Button onClick={openJoinModal} size="sm" variant="outline" className="mt-2">
                             <Plus className="mr-2 h-3.5 w-3.5" />
-                            Join your first meeting
+                            {copy.joinFirst}
                           </Button>
                         )}
                       </div>
@@ -395,7 +402,7 @@ function MeetingRow({ meeting }: { meeting: Meeting }) {
             <>
               {formatDate(meeting.start_time)}
               <span className="block text-[10px] text-muted-foreground/70">
-                {formatDistanceToNow(parseUTCTimestamp(meeting.start_time), { addSuffix: true })}
+                {formatDistanceToNow(parseUTCTimestamp(meeting.start_time), { addSuffix: true, locale: ja })}
               </span>
             </>
           ) : meeting.created_at ? (

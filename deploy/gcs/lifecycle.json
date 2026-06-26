@@ -1,0 +1,12 @@
+{
+  "rule": [
+    {
+      "action": { "type": "SetStorageClass", "storageClass": "NEARLINE" },
+      "condition": { "age": 14, "matchesStorageClass": ["STANDARD"] }
+    },
+    {
+      "action": { "type": "Delete" },
+      "condition": { "age": 60 }
+    }
+  ]
+}
