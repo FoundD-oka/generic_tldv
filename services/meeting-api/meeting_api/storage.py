@@ -1,9 +1,11 @@
 """
 Storage client abstraction for Vexa recording media files.
 
-Supports MinIO (S3-compatible) and local filesystem backends.
-MinIO is the default for development (Docker Compose) and production.
-Local filesystem is available for testing without object storage.
+Supports MinIO (S3-compatible), native Google Cloud Storage, and local
+filesystem backends. MinIO is the default for development (Docker Compose)
+and production. GCS (issue #1) is the source-of-truth backend for recordings
+with a 14d-Standard / Nearline / 60d-delete lifecycle. Local filesystem is
+available for testing without object storage.
 """
 
 import os
@@ -26,6 +28,14 @@ class StorageClient(ABC):
     def download_file(self, path: str) -> bytes:
         """Download file from storage. Returns file content as bytes."""
         ...
+
+    def get_file_size(self, path: str) -> int:
+        """Return the object size in bytes."""
+        return len(self.download_file(path))
+
+    def download_file_range(self, path: str, start: int, end: int) -> bytes:
+        """Download an inclusive byte range from storage."""
+        return self.download_file(path)[start:end + 1]
 
     def upload_file_path(self, key: str, src_file_path: str, content_type: str = "application/octet-stream") -> str:
         """Stream-upload from a local file path. Default implementation
@@ -115,10 +125,11 @@ class MinIOStorageClient(StorageClient):
         # I/O (put_object/get_object) — fast, no NAT traversal.
         # MINIO_PUBLIC_ENDPOINT is what the BROWSER must use to fetch a
         # presigned URL — typically a NodePort, ingress, or host-mapped port.
-        # When unset, falls back to MINIO_ENDPOINT (correct for compose/lite
-        # where the bridge network DNS resolves the same hostname externally
-        # via published ports). When set on helm with cluster-internal-only
-        # MinIO Service, points at the externally reachable surface.
+        # When unset, falls back to MINIO_ENDPOINT; dashboard deployments that
+        # expose only the dashboard should use the same-origin master proxy
+        # instead of handing this internal hostname to the browser.
+        # When set on helm with cluster-internal-only MinIO Service, points at
+        # the externally reachable surface.
         # Pre-fix: presigned URLs always carried the internal hostname; on
         # helm with ClusterIP-only MinIO, browsers got DNS-unresolvable URLs
         # and audio playback hung at "Preparing audio...".
@@ -191,6 +202,19 @@ class MinIOStorageClient(StorageClient):
         logger.info(f"Downloaded {len(data)} bytes from {self.bucket}/{path}")
         return data
 
+    def get_file_size(self, path: str) -> int:
+        response = self.client.head_object(Bucket=self.bucket, Key=path)
+        return int(response.get("ContentLength") or 0)
+
+    def download_file_range(self, path: str, start: int, end: int) -> bytes:
+        byte_range = f"bytes={start}-{end}"
+        response = self.client.get_object(Bucket=self.bucket, Key=path, Range=byte_range)
+        data = response["Body"].read()
+        logger.info(
+            f"Downloaded range {byte_range} ({len(data)} bytes) from {self.bucket}/{path}"
+        )
+        return data
+
     def download_file_to_path(self, key: str, dest_file_path: str) -> str:
         """Stream-download to a local file path. Bounded memory."""
         self.client.download_file(
@@ -261,6 +285,186 @@ class MinIOStorageClient(StorageClient):
         return keys
 
 
+class GCSStorageClient(StorageClient):
+    """Native Google Cloud Storage client (google-cloud-storage SDK).
+
+    Issue #1: GCS is the source-of-truth backend for recordings. The bucket
+    carries a lifecycle policy applied out-of-band (see deploy/gcs/):
+    14d Standard -> Nearline, delete at 60d.
+
+    Auth is ADC / Workload Identity — no HMAC key lives in the app. Signed URLs
+    are minted on demand via V4 signing backed by the IAM signBlob API, so no
+    service-account key file is required. When signing is unavailable (e.g. the
+    runtime SA lacks serviceAccountTokenCreator on itself) get_presigned_url
+    returns None and the caller falls back to the /raw proxy — the same posture
+    as the local backend, and it is logged rather than failing silently.
+
+    A pre-built client may be injected (tests); otherwise one is created from
+    ADC. The SDK import is lazy so non-GCS deployments don't need the package.
+    """
+
+    def __init__(
+        self,
+        bucket: Optional[str] = None,
+        project: Optional[str] = None,
+        client=None,
+    ):
+        self.bucket_name = (
+            bucket
+            or os.environ.get("GCS_BUCKET")
+            or os.environ.get("MINIO_BUCKET", "vexa-recordings")
+        )
+        self.project = project or os.environ.get("GCS_PROJECT") or None
+        # Optional explicit signing SA email; otherwise we derive it from the
+        # ADC credentials' service_account_email when signing.
+        self.signing_sa = (os.environ.get("GCS_SIGNING_SERVICE_ACCOUNT") or "").strip() or None
+        self._signing_credentials = None  # lazy, cached after first refresh
+
+        if client is None:
+            try:
+                from google.cloud import storage as gcs_storage
+            except ImportError:
+                raise ImportError(
+                    "google-cloud-storage is required for the gcs backend. "
+                    "Install it: pip install google-cloud-storage"
+                )
+            client = gcs_storage.Client(project=self.project) if self.project else gcs_storage.Client()
+        self.client = client
+        self.bucket = self.client.bucket(self.bucket_name)
+        logger.info(
+            f"GCS storage client initialized: bucket={self.bucket_name}, project={self.project}"
+        )
+
+    def _blob(self, path: str):
+        return self.bucket.blob(path)
+
+    def upload_file(self, path: str, data: bytes, content_type: str = "application/octet-stream") -> str:
+        blob = self._blob(path)
+        blob.upload_from_string(data, content_type=content_type)
+        logger.info(f"Uploaded {len(data)} bytes to gs://{self.bucket_name}/{path}")
+        return path
+
+    def upload_file_path(self, key: str, src_file_path: str, content_type: str = "application/octet-stream") -> str:
+        """Stream-upload from a local file path. The SDK chunks the upload so
+        memory stays bounded regardless of file size."""
+        blob = self._blob(key)
+        blob.upload_from_filename(src_file_path, content_type=content_type)
+        size = os.path.getsize(src_file_path)
+        logger.info(f"Uploaded {size} bytes to gs://{self.bucket_name}/{key} (streamed from {src_file_path})")
+        return key
+
+    def download_file(self, path: str) -> bytes:
+        data = self._blob(path).download_as_bytes()
+        logger.info(f"Downloaded {len(data)} bytes from gs://{self.bucket_name}/{path}")
+        return data
+
+    def get_file_size(self, path: str) -> int:
+        # get_blob() fetches object metadata only (no body) — never download the
+        # whole object just to learn its size (the 206 path calls this per
+        # request before download_file_range).
+        blob = self.bucket.get_blob(path)
+        if blob is None:
+            raise FileNotFoundError(path)
+        return int(blob.size or 0)
+
+    def download_file_range(self, path: str, start: int, end: int) -> bytes:
+        # INCLUSIVE end — matches the StorageClient contract and the 206 path,
+        # which builds `Content-Range: bytes {start}-{end}/{total}` (inclusive)
+        # from _parse_range_header. google-cloud-storage download_as_bytes
+        # treats the `end` argument as inclusive, mirroring MinIO's
+        # `Range: bytes=start-end`. An off-by-one here corrupts every ranged
+        # playback, so this is asserted byte-exactly in test_gcs_storage.py.
+        data = self._blob(path).download_as_bytes(start=start, end=end)
+        logger.info(
+            f"Downloaded range bytes={start}-{end} ({len(data)} bytes) from gs://{self.bucket_name}/{path}"
+        )
+        return data
+
+    def download_file_to_path(self, key: str, dest_file_path: str) -> str:
+        """Stream-download to a local file path. Bounded memory."""
+        self._blob(key).download_to_filename(dest_file_path)
+        size = os.path.getsize(dest_file_path)
+        logger.info(f"Downloaded {size} bytes from gs://{self.bucket_name}/{key} (streamed to {dest_file_path})")
+        return dest_file_path
+
+    def _get_signing_credentials(self):
+        if self._signing_credentials is not None:
+            return self._signing_credentials
+        import google.auth
+        from google.auth.transport.requests import Request as GoogleAuthRequest
+        creds, _ = google.auth.default()
+        creds.refresh(GoogleAuthRequest())
+        self._signing_credentials = creds
+        return creds
+
+    def get_presigned_url(self, path: str, expires: int = 3600):
+        # V4 signed URL via IAM signBlob — works under Workload Identity with no
+        # key file. Returns None (logged) on failure so download_media_file
+        # falls back to the /raw proxy instead of 500ing.
+        from datetime import timedelta
+        try:
+            creds = self._get_signing_credentials()
+            sa_email = self.signing_sa or getattr(creds, "service_account_email", None)
+            token = getattr(creds, "token", None)
+            return self._blob(path).generate_signed_url(
+                version="v4",
+                expiration=timedelta(seconds=expires),
+                method="GET",
+                service_account_email=sa_email,
+                access_token=token,
+            )
+        except Exception as e:
+            logger.warning(
+                "GCS signed-URL generation unavailable for %s (%s); "
+                "caller should fall back to /raw proxy",
+                path, e,
+            )
+            return None
+
+    def delete_file(self, path: str) -> None:
+        try:
+            self._blob(path).delete()
+            logger.info(f"Deleted gs://{self.bucket_name}/{path}")
+        except Exception as e:
+            try:
+                from google.api_core import exceptions as gcs_exc
+                not_found = isinstance(e, gcs_exc.NotFound)
+            except Exception:
+                not_found = False
+            if not_found:
+                logger.info(f"Delete no-op (already absent) gs://{self.bucket_name}/{path}")
+                return
+            raise
+
+    def file_exists(self, path: str) -> bool:
+        # blob.exists() returns False on NotFound and raises on other errors
+        # (transient 5xx, permission) — we let those propagate rather than
+        # masking them as a silent 404, mirroring MinIO's head_object posture.
+        return self._blob(path).exists()
+
+    def list_objects(self, prefix: str) -> list:
+        keys = [b.name for b in self.client.list_blobs(self.bucket_name, prefix=prefix)]
+        keys.sort()
+        return keys
+
+    def list_objects_bounded(self, prefix: str, max_keys: int = 10000) -> list:
+        keys = []
+        truncated = False
+        # Fetch one extra to detect truncation without scanning the whole prefix.
+        for b in self.client.list_blobs(self.bucket_name, prefix=prefix, max_results=max_keys + 1):
+            if len(keys) >= max_keys:
+                truncated = True
+                break
+            keys.append(b.name)
+        if truncated:
+            logger.warning(
+                "storage.list_objects_bounded truncated at max_keys=%d prefix=%s",
+                max_keys, prefix,
+            )
+        keys.sort()
+        return keys
+
+
 class LocalStorageClient(StorageClient):
     """Filesystem-based storage client for development/testing."""
 
@@ -298,6 +502,15 @@ class LocalStorageClient(StorageClient):
         full_path = self._full_path(path)
         with open(full_path, "rb") as f:
             return f.read()
+
+    def get_file_size(self, path: str) -> int:
+        return os.path.getsize(self._full_path(path))
+
+    def download_file_range(self, path: str, start: int, end: int) -> bytes:
+        full_path = self._full_path(path)
+        with open(full_path, "rb") as f:
+            f.seek(start)
+            return f.read(end - start + 1)
 
     def get_presigned_url(self, path: str, expires: int = 3600) -> str:
         # Local storage doesn't support presigned URLs — return a file:// URI
@@ -369,7 +582,9 @@ def create_storage_client(backend: Optional[str] = None) -> StorageClient:
             bucket=os.environ.get("S3_BUCKET", os.environ.get("MINIO_BUCKET", "vexa-recordings")),
             secure=os.environ.get("S3_SECURE", "true").lower() == "true",
         )
+    elif backend == "gcs":
+        return GCSStorageClient()
     elif backend == "local":
         return LocalStorageClient()
     else:
-        raise ValueError(f"Unknown storage backend: {backend}. Supported: minio, s3, local")
+        raise ValueError(f"Unknown storage backend: {backend}. Supported: minio, s3, gcs, local")

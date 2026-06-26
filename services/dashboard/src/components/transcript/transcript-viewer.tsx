@@ -35,6 +35,7 @@ import { toast } from "sonner";
 import { LanguagePicker } from "@/components/language-picker";
 import { type SegmentGroup, deduplicateByIdentity, sortByStartTime } from "@vexaai/transcript-rendering";
 import { format } from "date-fns";
+import { ja } from "date-fns/locale";
 
 // Linkify URLs in chat message text — splits text into plain strings and clickable <a> elements
 const URL_REGEX = /(https?:\/\/[^\s<>"')\]]+)/gi;
@@ -130,13 +131,13 @@ export function TranscriptViewer({
   // ChatGPT prompt state
   const [chatgptPrompt, setChatgptPrompt] = useState(() => {
     if (typeof window !== "undefined") {
-      return getCookie("vexa-chatgpt-prompt") || "Read from {url} so I can ask questions about it.";
+      return getCookie("vexa-chatgpt-prompt") || "{url} を読んで、この会議内容について質問できるようにしてください。";
     }
-    return "Read from {url} so I can ask questions about it.";
+    return "{url} を読んで、この会議内容について質問できるようにしてください。";
   });
   const [isChatgptPromptExpanded, setIsChatgptPromptExpanded] = useState(false);
   const [editedChatgptPrompt, setEditedChatgptPrompt] = useState(chatgptPrompt);
-  const chatgptPromptTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const chatgptPromptTextareaRef = useRef<HTMLInputElement>(null);
 
   // Measure scroll container for auto-follow
   const isNearBottom = useCallback((el: HTMLElement) => {
@@ -315,12 +316,12 @@ export function TranscriptViewer({
         meeting.id,
         transcribeLanguage === "auto" ? undefined : transcribeLanguage
       );
-      toast.success(`Transcription complete`, {
-        description: `${result.segment_count} segments transcribed`,
+      toast.success("文字起こしが完了しました", {
+        description: `${result.segment_count}件のセグメントを文字起こししました`,
       });
       onTranscribeComplete?.();
     } catch (error) {
-      toast.error("Transcription failed", {
+      toast.error("文字起こしに失敗しました", {
         description: (error as Error).message,
       });
     } finally {
@@ -480,19 +481,19 @@ export function TranscriptViewer({
 
   // Format transcript for ChatGPT
   const formatTranscriptForChatGPT = useCallback(() => {
-    let output = "Meeting Transcript\n\n";
+    let output = "会議文字起こし\n\n";
     
     if (meeting.data?.name || meeting.data?.title) {
-      output += `Title: ${meeting.data?.name || meeting.data?.title}\n`;
+      output += `タイトル: ${meeting.data?.name || meeting.data?.title}\n`;
     }
     
     if (meeting.start_time) {
       // v0.10.5.3 Pack D-1 (#265): parseUTCTimestamp for unsuffixed-ISO API timestamps.
-      output += `Date: ${format(parseUTCTimestamp(meeting.start_time), "PPPp")}\n`;
+      output += `日時: ${format(parseUTCTimestamp(meeting.start_time), "yyyy年M月d日 HH:mm", { locale: ja })}\n`;
     }
     
     if (meeting.data?.participants?.length) {
-      output += `Participants: ${meeting.data.participants.join(", ")}\n`;
+      output += `参加者: ${meeting.data.participants.join(", ")}\n`;
     }
     
     output += "\n---\n\n";
@@ -574,7 +575,7 @@ export function TranscriptViewer({
     try {
       const transcriptText = formatTranscriptForChatGPT();
       await navigator.clipboard.writeText(transcriptText);
-      const q = "I've copied a meeting transcript to my clipboard. Please wait while I paste it, then I'll ask questions about it.";
+      const q = "会議の文字起こしをクリップボードにコピーしました。これから貼り付けるので、その内容について質問できるようにしてください。";
       let providerUrl: string;
       if (provider === "chatgpt") {
         providerUrl = `https://chatgpt.com/?hints=search&q=${encodeURIComponent(q)}`;
@@ -600,7 +601,7 @@ export function TranscriptViewer({
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Transcript</CardTitle>
+          <CardTitle>文字起こし</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
@@ -636,7 +637,7 @@ export function TranscriptViewer({
             <Search className="absolute left-2 lg:left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 lg:h-4 lg:w-4 text-muted-foreground" />
             <Input
               ref={searchInputRef}
-              placeholder="Search... (Cmd+F)"
+              placeholder="検索... (Cmd+F)"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className={cn(
@@ -669,7 +670,7 @@ export function TranscriptViewer({
                   )}
                 >
                   <Users className="h-3.5 w-3.5 lg:h-4 lg:w-4" />
-                  <span className="hidden sm:inline">Speakers</span>
+                  <span className="hidden sm:inline">話者</span>
                   {selectedSpeakers.length > 0 && (
                     <Badge variant="secondary" className="ml-0.5 lg:ml-1 h-4 lg:h-5 px-1 lg:px-1.5 text-[10px] lg:text-xs">
                       {selectedSpeakers.length}
@@ -688,7 +689,7 @@ export function TranscriptViewer({
                     >
                       <div className="flex items-center gap-2">
                         <div className={cn("w-2 h-2 rounded-full", color.avatar)} />
-                        <span className="truncate">{speaker || "Unknown"}</span>
+                        <span className="truncate">{speaker || "不明"}</span>
                       </div>
                     </DropdownMenuCheckboxItem>
                   );
@@ -697,7 +698,7 @@ export function TranscriptViewer({
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => setSelectedSpeakers([])}>
-                      Clear selection
+                      選択を解除
                     </DropdownMenuItem>
                   </>
                 )}
@@ -714,7 +715,7 @@ export function TranscriptViewer({
               className="text-muted-foreground hover:text-foreground"
             >
               <X className="h-4 w-4 mr-1" />
-              Clear filters
+              フィルター解除
             </Button>
           )}
 
@@ -730,8 +731,8 @@ export function TranscriptViewer({
         {hasActiveFilters && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground animate-fade-in">
             <span>
-              Showing {timelineItems.length} of {groupedSegments.length + chatMessages.length} items
-              {chatMessages.length > 0 && ` (${chatMessages.length} chat)`}
+              {groupedSegments.length + chatMessages.length}件中 {timelineItems.length}件を表示
+              {chatMessages.length > 0 && `（チャット${chatMessages.length}件）`}
             </span>
             {searchQuery && (
               <Badge variant="outline" className="font-normal">
@@ -760,7 +761,7 @@ export function TranscriptViewer({
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium flex items-center gap-2">
                 <Settings className="h-4 w-4" />
-                AI Prompt
+                AIプロンプト
               </span>
               <Button
                 variant="ghost"
@@ -773,7 +774,7 @@ export function TranscriptViewer({
             </div>
             <div className="space-y-2">
               <Input
-                ref={chatgptPromptTextareaRef as any}
+                ref={chatgptPromptTextareaRef}
                 value={editedChatgptPrompt}
                 onChange={(e) => setEditedChatgptPrompt(e.target.value)}
                 onBlur={handleChatgptPromptBlur}
@@ -783,12 +784,12 @@ export function TranscriptViewer({
                     setIsChatgptPromptExpanded(false);
                   }
                 }}
-                placeholder="AI prompt (use {url} for the transcript URL)"
+                placeholder="AIプロンプト（文字起こしURLには {url} を使います）"
                 className="text-sm"
                 autoFocus
               />
               <p className="text-[10px] text-muted-foreground">
-                Use <code className="px-1 py-0.5 bg-muted rounded">{"{url}"}</code> as a placeholder for the transcript link.
+                文字起こしリンクの差し込み位置として <code className="px-1 py-0.5 bg-muted rounded">{"{url}"}</code> を使います。
               </p>
             </div>
           </div>
@@ -808,14 +809,14 @@ export function TranscriptViewer({
                   <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mb-4">
                     <Mic className="h-8 w-8 text-muted-foreground/50" />
                   </div>
-                  <h3 className="font-medium mb-1">Recording available</h3>
+                  <h3 className="font-medium mb-1">録音があります</h3>
                   <p className="text-sm text-muted-foreground mb-6">
-                    This meeting was recorded without real-time transcription.
+                    この会議はリアルタイム文字起こしなしで録音されています。
                   </p>
                   {isTranscribing ? (
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      <span className="text-sm">Transcribing recording...</span>
+                      <span className="text-sm">録音を文字起こし中...</span>
                     </div>
                   ) : (
                     <div className="flex flex-col items-center gap-3">
@@ -823,7 +824,7 @@ export function TranscriptViewer({
                         <LanguagePicker value={transcribeLanguage} onValueChange={setTranscribeLanguage} />
                       </div>
                       <Button onClick={handleTranscribe}>
-                        Transcribe Recording
+                        録音を文字起こし
                       </Button>
                     </div>
                   )}
@@ -833,12 +834,12 @@ export function TranscriptViewer({
                   <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mb-4">
                     <Search className="h-8 w-8 text-muted-foreground/50" />
                   </div>
-                  <h3 className="font-medium mb-1">No results found</h3>
+                  <h3 className="font-medium mb-1">結果が見つかりません</h3>
                   <p className="text-sm text-muted-foreground mb-4">
-                    Try adjusting your search or filters
+                    検索語やフィルターを変更してください
                   </p>
                   <Button variant="outline" size="sm" onClick={clearFilters}>
-                    Clear all filters
+                    すべてのフィルターを解除
                   </Button>
                 </>
               ) : isLive && meeting.data?.transcribe_enabled === false ? (
@@ -847,9 +848,9 @@ export function TranscriptViewer({
                     <Mic className="h-8 w-8 text-red-500" />
                     <span className="absolute top-1 right-1 h-3 w-3 rounded-full bg-red-500 animate-pulse" />
                   </div>
-                  <h3 className="font-medium mb-1">Recording in progress</h3>
+                  <h3 className="font-medium mb-1">録音中</h3>
                   <p className="text-sm text-muted-foreground">
-                    Audio is being captured. Transcription will run after the meeting ends.
+                    音声を録音しています。会議終了後に文字起こしを実行します。
                   </p>
                 </>
               ) : (
@@ -857,11 +858,11 @@ export function TranscriptViewer({
                   <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mb-4">
                     <MessageSquare className="h-8 w-8 text-muted-foreground/50" />
                   </div>
-                  <h3 className="font-medium mb-1">No transcript yet</h3>
+                  <h3 className="font-medium mb-1">文字起こしはまだありません</h3>
                   <p className="text-sm text-muted-foreground">
                     {isLive
-                      ? "Waiting for speech to transcribe..."
-                      : "No transcript available for this meeting"}
+                      ? "発話を待っています..."
+                      : "この会議で利用できる文字起こしはありません"}
                   </p>
                 </>
               )}
@@ -901,7 +902,7 @@ export function TranscriptViewer({
                             {msg.sender}
                           </span>
                           <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-sky-300 dark:border-sky-700 text-sky-600 dark:text-sky-400">
-                            chat
+                            チャット
                           </Badge>
                           <span className="text-xs text-muted-foreground">
                             {displayTime}

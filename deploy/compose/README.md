@@ -58,6 +58,7 @@ You can also [self-host transcription](../../services/transcription-service/READ
 | `make setup-api-key`      | Create default user + VEXA_API_KEY for dashboard                 |
 | `make ps`                 | Show running containers                                          |
 | `make logs`               | Tail all service logs                                            |
+| `make guard-runtime-profiles` | Verify runtime bot profiles and repair empty env-based settings |
 | `make test`               | Health check all services + show URLs + current tag              |
 | `make test-transcription` | Send test audio to transcription service, verify text comes back |
 | `make restore-db`         | Restore a `pg_dump` into local postgres                          |
@@ -116,6 +117,30 @@ Everything else has working defaults for local dev.
 
 
 Full env reference: [deploy/env-example](../env-example)
+
+### Runtime profile guard
+
+`make up` and `make test` run `make guard-runtime-profiles`. The guard checks
+`runtime-api /profiles` and the running service environment to catch deployment
+states where Compose started without the root `.env`.
+
+It fails or repairs these cases:
+
+- `meeting.image` or `browser-session.image` is empty in `/profiles`
+- `runtime-api` has an empty `BROWSER_IMAGE`
+- `meeting-api` has an empty `BOT_IMAGE_NAME`
+- `dashboard` has an empty `VEXA_API_KEY`
+
+Only `meeting` and `browser-session` are required profile image checks by
+default. The `agent` profile belongs to the optional/no-ship agent-api path, so
+`agent.image` may be empty unless `AGENT_IMAGE` is configured. Set
+`PROFILE_GUARD_REQUIRED_PROFILES="meeting browser-session agent"` to make it
+fatal too.
+
+When a problem is found, the guard recreates `admin-api`, `runtime-api`,
+`meeting-api`, `api-gateway`, and `dashboard` with `--env-file .env`, then
+checks again. If the second check still finds empty values, deployment fails
+instead of leaving bots stuck in `requested`.
 
 ### External database
 

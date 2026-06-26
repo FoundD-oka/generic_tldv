@@ -46,9 +46,9 @@ interface APIKeyDisplay {
 type KeyScope = "bot" | "tx" | "browser";
 
 const SCOPE_CONFIG: Record<KeyScope, { label: string; prefix: string; color: string; bgColor: string }> = {
-  bot: { label: "bot", prefix: "vxa_bot_", color: "text-purple-300", bgColor: "bg-purple-900/40" },
-  tx: { label: "tx", prefix: "vxa_tx_", color: "text-cyan-300", bgColor: "bg-cyan-900/40" },
-  browser: { label: "browser", prefix: "vxa_browser_", color: "text-emerald-300", bgColor: "bg-emerald-900/40" },
+  bot: { label: "ボット", prefix: "vxa_bot_", color: "text-purple-300", bgColor: "bg-purple-900/40" },
+  tx: { label: "文字起こし", prefix: "vxa_tx_", color: "text-cyan-300", bgColor: "bg-cyan-900/40" },
+  browser: { label: "ブラウザ", prefix: "vxa_browser_", color: "text-emerald-300", bgColor: "bg-emerald-900/40" },
 };
 
 // ==========================================
@@ -79,18 +79,18 @@ function maskToken(token: string): string {
 function relativeTime(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
   const seconds = Math.floor(diff / 1000);
-  if (seconds < 60) return "just now";
+  if (seconds < 60) return "たった今";
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 60) return `${minutes}分前`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return `${hours}時間前`;
   const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  if (days < 30) return `${days}日前`;
+  return new Date(dateStr).toLocaleDateString("ja-JP", { month: "long", day: "numeric" });
 }
 
 function formatExpiry(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return new Date(dateStr).toLocaleDateString("ja-JP", { month: "long", day: "numeric" });
 }
 
 function scopesFromApi(scopes: string[]): KeyScope[] {
@@ -133,7 +133,7 @@ export default function ProfilePage() {
         setApiKeys(
           (data.keys || []).map((k: { id: string; token: string; scopes?: string[]; name?: string; created_at: string; last_used_at?: string; expires_at?: string }) => ({
             id: k.id,
-            name: k.name || "API Key",
+            name: k.name || "APIキー",
             scopes: k.scopes && k.scopes.length > 0 ? scopesFromApi(k.scopes) : [inferScope(k.token)],
             token: k.token,
             masked_token: maskToken(k.token),
@@ -166,7 +166,7 @@ export default function ProfilePage() {
           ...(newKeyExpiry ? { expires_in: parseInt(newKeyExpiry) * 86400 } : {}),
         }),
       });
-      if (!response.ok) throw new Error("Failed to create key");
+      if (!response.ok) throw new Error("APIキーの作成に失敗しました");
       const data = await response.json();
       setCreatedKeyToken(data.token);
       // Add to list
@@ -174,7 +174,7 @@ export default function ProfilePage() {
         ...prev,
         {
           id: data.id || String(Date.now()),
-          name: newKeyName || "API Key",
+          name: newKeyName || "APIキー",
           scopes: data.scopes ? scopesFromApi(data.scopes) : Array.from(newKeyScopes),
           token: data.token,
           masked_token: maskToken(data.token),
@@ -183,9 +183,9 @@ export default function ProfilePage() {
           expires_at: null,
         },
       ]);
-      toast.success("API key created");
+      toast.success("APIキーを作成しました");
     } catch (error) {
-      toast.error("Failed to create API key", { description: (error as Error).message });
+      toast.error("APIキーの作成に失敗しました", { description: (error as Error).message });
     } finally {
       setIsCreatingKey(false);
     }
@@ -194,11 +194,11 @@ export default function ProfilePage() {
   const handleRevokeKey = async (keyId: string) => {
     try {
       const response = await fetch(withBasePath(`/api/profile/keys/${keyId}`), { method: "DELETE" });
-      if (!response.ok) throw new Error("Failed to revoke key");
+      if (!response.ok) throw new Error("APIキーの取り消しに失敗しました");
       setApiKeys((prev) => prev.filter((k) => k.id !== keyId));
-      toast.success("API key revoked");
+      toast.success("APIキーを取り消しました");
     } catch (error) {
-      toast.error("Failed to revoke key", { description: (error as Error).message });
+      toast.error("APIキーの取り消しに失敗しました", { description: (error as Error).message });
     }
   };
 
@@ -206,7 +206,7 @@ export default function ProfilePage() {
     await navigator.clipboard.writeText(token);
     setCopiedKeyId(keyId);
     setTimeout(() => setCopiedKeyId(null), 2000);
-    toast.success("Copied to clipboard");
+    toast.success("クリップボードにコピーしました");
   };
 
 
@@ -214,9 +214,9 @@ export default function ProfilePage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-semibold tracking-[-0.02em] text-foreground">Profile</h1>
+        <h1 className="text-2xl font-semibold tracking-[-0.02em] text-foreground">プロフィール</h1>
         <p className="text-sm text-muted-foreground">
-          Manage your account and API keys
+          アカウント情報とAPIキーを管理します
         </p>
       </div>
 
@@ -226,21 +226,21 @@ export default function ProfilePage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <User className="h-5 w-5" />
-              Account
+              アカウント
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Email</span>
+              <span className="text-muted-foreground">メールアドレス</span>
               <span>{user?.email || "—"}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Name</span>
+              <span className="text-muted-foreground">名前</span>
               <span>{user?.name || "—"}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Max bots</span>
-              <span>{user?.max_concurrent_bots ?? "—"} concurrent</span>
+              <span className="text-muted-foreground">同時稼働ボット上限</span>
+              <span>{user?.max_concurrent_bots ?? "—"} 件</span>
             </div>
           </CardContent>
         </Card>
@@ -251,7 +251,7 @@ export default function ProfilePage() {
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2">
                 <Key className="h-5 w-5" />
-                API Keys
+                APIキー
               </CardTitle>
               <Button
                 size="sm"
@@ -264,7 +264,7 @@ export default function ProfilePage() {
                 }}
               >
                 <Plus className="h-4 w-4 mr-1" />
-                Create Key
+                キーを作成
               </Button>
             </div>
           </CardHeader>
@@ -275,7 +275,7 @@ export default function ProfilePage() {
               </div>
             ) : apiKeys.length === 0 ? (
               <p className="text-sm text-muted-foreground py-4 text-center">
-                No API keys yet. Create one to get started.
+                APIキーはまだありません。まず1つ作成してください。
               </p>
             ) : (
               <div className="space-y-2">
@@ -305,11 +305,11 @@ export default function ProfilePage() {
                       </p>
                     </div>
                     <div className="flex items-center gap-3 text-xs">
-                      <span className="text-muted-foreground" title="Last used">
-                        {key.last_used_at ? relativeTime(key.last_used_at) : "Never used"}
+                      <span className="text-muted-foreground" title="最終使用">
+                        {key.last_used_at ? relativeTime(key.last_used_at) : "未使用"}
                       </span>
-                      <span className="text-muted-foreground" title="Expires">
-                        {key.expires_at ? `Exp ${formatExpiry(key.expires_at)}` : "No expiry"}
+                      <span className="text-muted-foreground" title="有効期限">
+                        {key.expires_at ? `期限 ${formatExpiry(key.expires_at)}` : "期限なし"}
                       </span>
                       <button
                         onClick={() => handleCopyKey(key.id, key.token)}
@@ -325,7 +325,7 @@ export default function ProfilePage() {
                         onClick={() => handleRevokeKey(key.id)}
                         className="text-red-400 hover:text-red-300 transition-colors"
                       >
-                        Revoke
+                        取り消し
                       </button>
                     </div>
                   </div>
@@ -341,9 +341,9 @@ export default function ProfilePage() {
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Create API Key</DialogTitle>
+            <DialogTitle>APIキーを作成</DialogTitle>
             <DialogDescription>
-              Choose a key type and name for your new API key.
+              新しいAPIキーの用途と名前を設定します。
             </DialogDescription>
           </DialogHeader>
 
@@ -351,10 +351,10 @@ export default function ProfilePage() {
             <div className="space-y-4">
               <div className="rounded-lg bg-emerald-950/30 border border-emerald-800/30 p-4">
                 <p className="text-sm font-medium text-emerald-300 mb-2">
-                  Key created successfully
+                  APIキーを作成しました
                 </p>
                 <p className="text-xs text-muted-foreground mb-3">
-                  Copy this key now. You will not be able to see it again.
+                  このキーは今だけ表示されます。必ず控えてください。
                 </p>
                 <div className="flex items-center gap-2">
                   <code className="flex-1 bg-muted rounded px-3 py-2 text-xs font-mono break-all">
@@ -365,7 +365,7 @@ export default function ProfilePage() {
                     variant="secondary"
                     onClick={() => {
                       navigator.clipboard.writeText(createdKeyToken);
-                      toast.success("Copied to clipboard");
+                      toast.success("クリップボードにコピーしました");
                     }}
                   >
                     <Copy className="h-4 w-4" />
@@ -373,28 +373,28 @@ export default function ProfilePage() {
                 </div>
               </div>
               <DialogFooter>
-                <Button onClick={() => setShowCreateDialog(false)}>Done</Button>
+                <Button onClick={() => setShowCreateDialog(false)}>完了</Button>
               </DialogFooter>
             </div>
           ) : (
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label>Key Name</Label>
+                <Label>キー名</Label>
                 <Input
-                  placeholder="e.g. Production Bot Key"
+                  placeholder="例: 本番用ボットキー"
                   value={newKeyName}
                   onChange={(e) => setNewKeyName(e.target.value)}
                 />
               </div>
 
               <div className="space-y-2">
-                <Label>Scopes</Label>
+                <Label>権限</Label>
                 <div className="space-y-2">
                   {(["bot", "tx", "browser"] as const).map((scope) => {
                     const config = {
-                      bot: { name: "Bot", desc: "Meeting bots, webhooks, voice agent" },
-                      tx: { name: "Transcript", desc: "Read transcripts & meeting data" },
-                      browser: { name: "Browser", desc: "Browser sessions, VNC, CDP, workspace" },
+                      bot: { name: "ボット", desc: "会議ボット、Webhook、音声エージェント" },
+                      tx: { name: "文字起こし", desc: "文字起こしと会議データの読み取り" },
+                      browser: { name: "ブラウザ", desc: "ブラウザセッション、VNC、CDP、ワークスペース" },
                     }[scope];
                     const checked = newKeyScopes.has(scope);
                     return (
@@ -449,13 +449,13 @@ export default function ProfilePage() {
               </div>
 
               <div className="space-y-2">
-                <Label>Expiration</Label>
+                <Label>有効期限</Label>
                 <div className="grid grid-cols-4 gap-2">
                   {[
-                    { label: "Never", value: "" },
-                    { label: "30 days", value: "30" },
-                    { label: "90 days", value: "90" },
-                    { label: "1 year", value: "365" },
+                    { label: "なし", value: "" },
+                    { label: "30日", value: "30" },
+                    { label: "90日", value: "90" },
+                    { label: "1年", value: "365" },
                   ].map((opt) => (
                     <button
                       key={opt.value}
@@ -479,7 +479,7 @@ export default function ProfilePage() {
                   variant="outline"
                   onClick={() => setShowCreateDialog(false)}
                 >
-                  Cancel
+                  キャンセル
                 </Button>
                 <Button
                   onClick={handleCreateKey}
@@ -488,10 +488,10 @@ export default function ProfilePage() {
                   {isCreatingKey ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Creating...
+                      作成中...
                     </>
                   ) : (
-                    "Create Key"
+                    "キーを作成"
                   )}
                 </Button>
               </DialogFooter>
@@ -543,9 +543,9 @@ function GitWorkspaceCard() {
       // Also save to localStorage for the join modal to read
       localStorage.setItem("vexa-browser-git", JSON.stringify({ repo, token, branch }));
       setSaved(true);
-      toast.success("Git workspace saved");
+      toast.success("Gitワークスペースを保存しました");
     } catch (error) {
-      toast.error("Save failed: " + (error as Error).message);
+      toast.error("保存に失敗しました: " + (error as Error).message);
     } finally {
       setIsSaving(false);
     }
@@ -559,9 +559,9 @@ function GitWorkspaceCard() {
       setToken("");
       setBranch("main");
       setSaved(false);
-      toast.success("Git workspace removed");
+      toast.success("Gitワークスペースを削除しました");
     } catch {
-      toast.error("Failed to remove");
+      toast.error("削除に失敗しました");
     }
   }
 
@@ -573,14 +573,14 @@ function GitWorkspaceCard() {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (response.ok) {
-        toast.success("Connected — repo accessible");
+        toast.success("接続できました。リポジトリにアクセスできます");
       } else if (response.status === 404) {
-        toast.error("Repo not found — check URL and token permissions");
+        toast.error("リポジトリが見つかりません。URLとトークン権限を確認してください");
       } else {
-        toast.error(`GitHub API error: ${response.status}`);
+        toast.error(`GitHub APIエラー: ${response.status}`);
       }
     } catch (error) {
-      toast.error("Connection failed: " + (error as Error).message);
+      toast.error("接続に失敗しました: " + (error as Error).message);
     } finally {
       setIsTesting(false);
     }
@@ -591,17 +591,17 @@ function GitWorkspaceCard() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <GitBranch className="h-5 w-5" />
-          Git Workspace
+          Gitワークスペース
           {saved && repo && <Check className="h-4 w-4 text-green-500" />}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          Connect a GitHub repo to sync browser session workspace files. Use a fine-grained PAT scoped to the repo only.
+          ブラウザセッションのワークスペースファイルを同期するGitHubリポジトリを設定します。対象リポジトリだけに権限を絞ったPATを使ってください。
         </p>
         <div className="space-y-3">
           <div className="space-y-1">
-            <Label className="text-xs">Repository URL</Label>
+            <Label className="text-xs">リポジトリURL</Label>
             <Input
               placeholder="https://github.com/you/workspace.git"
               value={repo}
@@ -611,7 +611,7 @@ function GitWorkspaceCard() {
           {repo && (
             <>
               <div className="space-y-1">
-                <Label className="text-xs">Personal Access Token</Label>
+                <Label className="text-xs">個人アクセストークン</Label>
                 <Input
                   placeholder="github_pat_..."
                   type="password"
@@ -620,7 +620,7 @@ function GitWorkspaceCard() {
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Branch</Label>
+                <Label className="text-xs">ブランチ</Label>
                 <Input
                   placeholder="main"
                   value={branch}
@@ -633,17 +633,17 @@ function GitWorkspaceCard() {
         <div className="flex gap-2">
           <Button size="sm" onClick={handleSave} disabled={!repo || isSaving}>
             {isSaving ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-            Save
+            保存
           </Button>
           {repo && token && (
             <Button size="sm" variant="outline" onClick={handleTest} disabled={isTesting}>
               {isTesting ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <RefreshCw className="h-3 w-3 mr-1" />}
-              Test
+              接続確認
             </Button>
           )}
           {saved && repo && (
             <Button size="sm" variant="ghost" onClick={handleClear}>
-              Remove
+              削除
             </Button>
           )}
         </div>

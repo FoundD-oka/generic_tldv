@@ -35,7 +35,7 @@ export function LanguagePicker({
   onValueChange,
   disabled,
   triggerClassName,
-  placeholder = "Select language",
+  placeholder = "言語を選択",
   compact = false,
 }: LanguagePickerProps) {
   const [open, setOpen] = React.useState(false);
@@ -97,7 +97,7 @@ export function LanguagePicker({
           <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
           <Input
             ref={inputRef}
-            placeholder="Search languages..."
+            placeholder="言語を検索..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 h-9"
@@ -116,11 +116,11 @@ export function LanguagePicker({
               <span className="flex h-4 w-4 items-center justify-center">
                 {value === "auto" ? <Check className="h-4 w-4" /> : null}
               </span>
-              Auto-detect
+              自動判定
             </button>
             {!searchLower && recentCodes.length > 0 && (
               <>
-                <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">Recent</div>
+                <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">最近使った言語</div>
                 {recentCodes.map((code) => (
                   <button
                     key={code}
@@ -137,11 +137,11 @@ export function LanguagePicker({
                     {WHISPER_LANGUAGE_NAMES[code]} ({code})
                   </button>
                 ))}
-                <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">All languages</div>
+                <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">すべての言語</div>
               </>
             )}
             {filteredCodes.length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">No language found.</p>
+              <p className="py-6 text-center text-sm text-muted-foreground">該当する言語がありません。</p>
             ) : (
               filteredCodes.map((code) => (
                 <button

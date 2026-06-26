@@ -51,15 +51,15 @@ function buildTranscriptContext(transcripts: TranscriptSegment[], meeting?: Meet
   let context = "";
 
   if (meeting) {
-    context += `Meeting: ${meeting.data?.name || meeting.data?.title || meeting.platform_specific_id}\n`;
-    context += `Platform: ${meeting.platform}\n`;
+    context += `会議: ${meeting.data?.name || meeting.data?.title || meeting.platform_specific_id}\n`;
+    context += `プラットフォーム: ${meeting.platform}\n`;
     if (meeting.data?.participants?.length) {
-      context += `Participants: ${meeting.data.participants.join(", ")}\n`;
+      context += `参加者: ${meeting.data.participants.join(", ")}\n`;
     }
     context += "\n---\n\n";
   }
 
-  context += "TRANSCRIPT:\n\n";
+  context += "文字起こし:\n\n";
 
   // Group by speaker for cleaner context
   let lastSpeaker = "";
@@ -182,12 +182,12 @@ export function AIChatPanel({ meeting, transcripts = [], trigger }: AIChatPanelP
   }, [doSendMessage]);
 
   const suggestedPrompts = [
-    "Summarize this meeting in key points",
-    "What were the main decisions made?",
-    "List all action items and who is responsible",
-    "What topics were discussed?",
-    "Are there any unresolved questions?",
-    "What are the next steps?",
+    "この会議の要点を箇条書きでまとめて",
+    "主な決定事項を整理して",
+    "担当者つきでアクション項目を出して",
+    "話し合われたトピックを一覧にして",
+    "未解決の質問や論点を教えて",
+    "次にやるべきことをまとめて",
   ];
 
   // Get text content from message parts
@@ -206,19 +206,19 @@ export function AIChatPanel({ meeting, transcripts = [], trigger }: AIChatPanelP
   const getErrorMessage = (err: Error): string => {
     const msg = err.message.toLowerCase();
     if (msg.includes("not configured") || msg.includes("503")) {
-      return "AI is not configured on this server. Contact your administrator.";
+      return "このサーバーではAIが設定されていません。管理者に確認してください。";
     }
     if (msg.includes("invalid api key") || msg.includes("incorrect api key") || msg.includes("401")) {
-      return "Invalid API key configured. Contact your administrator.";
+      return "設定されているAPIキーが無効です。管理者に確認してください。";
     }
     if (msg.includes("rate limit") || msg.includes("429")) {
-      return "Rate limit exceeded. Please wait a moment and try again.";
+      return "利用上限に達しました。少し待ってからもう一度お試しください。";
     }
     if (msg.includes("insufficient") || msg.includes("quota")) {
-      return "API quota exceeded. Contact your administrator.";
+      return "APIの利用枠を超えています。管理者に確認してください。";
     }
     if (msg.includes("network") || msg.includes("fetch")) {
-      return "Network error. Please check your connection.";
+      return "ネットワークエラーです。接続状況を確認してください。";
     }
     return err.message;
   };
@@ -234,7 +234,7 @@ export function AIChatPanel({ meeting, transcripts = [], trigger }: AIChatPanelP
         {trigger || (
           <Button variant="outline" size="sm" className="gap-2">
             <MessageSquare className="h-4 w-4" />
-            Ask AI
+            AIに質問
           </Button>
         )}
       </DialogTrigger>
@@ -247,7 +247,7 @@ export function AIChatPanel({ meeting, transcripts = [], trigger }: AIChatPanelP
                 <Bot className="h-5 w-5 text-foreground" />
               </div>
               <div>
-                <DialogTitle className="text-base font-medium">AI Assistant</DialogTitle>
+                <DialogTitle className="text-base font-medium">AIアシスタント</DialogTitle>
                 {meeting && (
                   <p className="text-sm text-muted-foreground">
                     {meeting.data?.name || meeting.data?.title || meeting.platform_specific_id}
@@ -264,7 +264,7 @@ export function AIChatPanel({ meeting, transcripts = [], trigger }: AIChatPanelP
                   className="gap-2 text-muted-foreground hover:text-foreground"
                 >
                   <Trash2 className="h-4 w-4" />
-                  Clear
+                  クリア
                 </Button>
               )}
             </div>
@@ -277,7 +277,7 @@ export function AIChatPanel({ meeting, transcripts = [], trigger }: AIChatPanelP
             <div className="flex items-start gap-3">
               <XCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
-                <p className="font-medium text-destructive">Something went wrong</p>
+                <p className="font-medium text-destructive">問題が発生しました</p>
                 <p className="text-sm text-destructive/80 mt-1">{getErrorMessage(error)}</p>
               </div>
               <Button
@@ -298,16 +298,16 @@ export function AIChatPanel({ meeting, transcripts = [], trigger }: AIChatPanelP
             {isLoadingConfig ? (
               <div className="h-full flex flex-col items-center justify-center text-center py-16">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mb-4" />
-                <p className="text-muted-foreground">Checking AI availability...</p>
+                <p className="text-muted-foreground">AIの利用可否を確認中...</p>
               </div>
             ) : !isConfigured ? (
               <div className="h-full flex flex-col items-center justify-center text-center py-16">
                 <div className="h-20 w-20 rounded-2xl bg-muted flex items-center justify-center mb-6">
                   <AlertCircle className="h-10 w-10 text-muted-foreground" />
                 </div>
-                <h3 className="text-xl font-semibold mb-2">AI Not Configured</h3>
+                <h3 className="text-xl font-semibold mb-2">AIが未設定です</h3>
                 <p className="text-muted-foreground mb-6 max-w-md">
-                  The AI assistant is not configured on this server. Contact your administrator to enable it.
+                  このサーバーではAIアシスタントが設定されていません。利用するには管理者に確認してください。
                 </p>
               </div>
             ) : messages.length === 0 && !error ? (
@@ -315,11 +315,11 @@ export function AIChatPanel({ meeting, transcripts = [], trigger }: AIChatPanelP
                 <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center mb-6">
                   <MessageSquare className="h-8 w-8 text-muted-foreground" />
                 </div>
-                <h3 className="text-lg font-medium mb-2">Ask anything about your meeting</h3>
+                <h3 className="text-lg font-medium mb-2">会議について何でも質問できます</h3>
                 <p className="text-sm text-muted-foreground mb-8 max-w-md">
                   {transcripts.length > 0
-                    ? `${transcripts.length} transcript segments loaded`
-                    : "No transcript loaded yet"}
+                    ? `${transcripts.length}件の文字起こしセグメントを読み込み済み`
+                    : "文字起こしはまだ読み込まれていません"}
                 </p>
                 {transcripts.length > 0 && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 w-full max-w-3xl">
@@ -357,7 +357,7 @@ export function AIChatPanel({ meeting, transcripts = [], trigger }: AIChatPanelP
                     {/* Message Content */}
                     <div className="flex-1 min-w-0 pt-0.5">
                       <p className="text-xs font-medium mb-1.5 text-muted-foreground">
-                        {message.role === "user" ? "You" : "Assistant"}
+                        {message.role === "user" ? "あなた" : "アシスタント"}
                       </p>
                       {message.role === "user" ? (
                         <p className="text-sm text-foreground whitespace-pre-wrap">
@@ -381,10 +381,10 @@ export function AIChatPanel({ meeting, transcripts = [], trigger }: AIChatPanelP
                       <Bot className="h-4 w-4 text-foreground" />
                     </div>
                     <div className="flex-1 pt-0.5">
-                      <p className="text-xs font-medium mb-1.5 text-muted-foreground">Assistant</p>
+                      <p className="text-xs font-medium mb-1.5 text-muted-foreground">アシスタント</p>
                       <div className="flex items-center gap-2 text-muted-foreground">
                         <Loader2 className="h-3 w-3 animate-spin" />
-                        <span className="text-sm">Thinking...</span>
+                        <span className="text-sm">考え中...</span>
                       </div>
                     </div>
                   </div>
@@ -404,7 +404,7 @@ export function AIChatPanel({ meeting, transcripts = [], trigger }: AIChatPanelP
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="Ask a question about your meeting..."
+                  placeholder="会議について質問..."
                   className="min-h-[44px] max-h-32 resize-none"
                   rows={1}
                   disabled={isLoading}
@@ -431,7 +431,7 @@ export function AIChatPanel({ meeting, transcripts = [], trigger }: AIChatPanelP
                 )}
               </div>
               <p className="text-xs text-muted-foreground mt-2 text-center">
-                Press Enter to send, Shift+Enter for new line
+                Enterで送信、Shift+Enterで改行
               </p>
             </form>
           </div>

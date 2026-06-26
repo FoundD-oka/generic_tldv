@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "harness": {
+    "name": "Vexa",
+    "created": "2026-06-24",
+    "mode": "managed-agent-harness"
+  },
+  "default_runtime_profile": "codex-cli",
+  "runtime_profiles": [
+    "claude-code",
+    "codex-cli",
+    "codex-app",
+    "codex-github-action"
+  ],
+  "core_flow": [
+    "task",
+    "plan_relay",
+    "sml_sizing",
+    "agent_profile",
+    "environment_profile",
+    "session_ledger",
+    "adapter_contract",
+    "deterministic_gates",
+    "outcome_judgment",
+    "approval"
+  ],
+  "core": {
+    "plan_relay": true,
+    "sml_after_plan": true,
+    "preflight": true,
+    "residency_check": true,
+    "adapter_contract": true,
+    "evidence_pack": true,
+    "hash_bound_approval": true,
+    "pr_ready_gate": true,
+    "feedback_governance": true
+  },
+  "quality": {
+    "hd_gate": true,
+    "tribunal": "required_for_l",
+    "sidechain_review": "accepted_for_l",
+    "doc_staleness": true
+  },
+  "support": {
+    "gitnexus": "optional",
+    "doc_update": true
+  },
+  "legacy_disabled": [
+    "br",
+    "cm",
+    "dcg",
+    "ubs"
+  ],
+  "paths": {
+    "plans": ".pipeline/plans",
+    "evidence": ".pipeline/evidence",
+    "gates": ".pipeline/gates",
+    "approvals": ".pipeline/approvals",
+    "context": ".pipeline/context",
+    "reports": ".pipeline/reports",
+    "rules": ".pipeline/rules",
+    "adapters": ".pipeline/adapters",
+    "feedback": ".pipeline/feedback",
+    "agents": ".pipeline/agents",
+    "environments": ".pipeline/environments",
+    "sessions": ".pipeline/sessions",
+    "outcomes": ".pipeline/outcomes"
+  },
+  "gates": {
+    "runtime_profile_validation": "scripts/harness/validate-runtime-profile.sh",
+    "codex_session_ledger": "scripts/harness/codex-session-ledger.sh",
+    "outcome_judge": "scripts/harness/outcome-judge.sh"
+  }
+}

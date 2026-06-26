@@ -2,12 +2,18 @@
 
 import { useState, useEffect } from "react";
 import { withBasePath } from "@/lib/base-path";
+import type { DashboardBrand } from "@/lib/dashboard-brand";
 
 interface RuntimeConfig {
   wsUrl: string;
   apiUrl: string;
   decisionListenerUrl: string;
   defaultBotName: string | null;
+  brand?: DashboardBrand;
+  sharedAuth?: {
+    enabled: boolean;
+    email: string;
+  };
   authToken?: string | null;
   hostedMode?: boolean;
   webappUrl?: string;

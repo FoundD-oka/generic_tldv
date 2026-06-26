@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { formatDistanceToNow, format } from "date-fns";
+import { ja } from "date-fns/locale";
 import { ChevronDown, Clock, User, Bot, Zap, CheckCircle2, XCircle, Radio, DoorOpen } from "lucide-react";
 import { cn, parseUTCTimestamp } from "@/lib/utils";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -71,12 +72,12 @@ const getStatusConfig = (status: string) => {
 // Get label for status
 const getStatusLabel = (status: string): string => {
   const labels: Record<string, string> = {
-    requested: "Requested",
-    joining: "Joining",
-    awaiting_admission: "Waiting",
-    active: "Active",
-    completed: "Completed",
-    failed: "Failed",
+    requested: "起動要求",
+    joining: "参加中",
+    awaiting_admission: "承認待ち",
+    active: "進行中",
+    completed: "完了",
+    failed: "失敗",
   };
   return labels[status] || status;
 };
@@ -90,6 +91,17 @@ const getSourceIcon = (source?: string) => {
       return <Bot className="h-3 w-3" />;
     default:
       return null;
+  }
+};
+
+const getSourceLabel = (source?: string): string => {
+  switch (source) {
+    case "user":
+      return "ユーザー操作";
+    case "bot_callback":
+      return "ボット通知";
+    default:
+      return source?.replace("_", " ") || "";
   }
 };
 
@@ -111,7 +123,7 @@ export function StatusHistory({ transitions, className }: StatusHistoryProps) {
         <div className="flex items-center justify-between py-2 px-3 -mx-3 rounded-lg hover:bg-muted/50 transition-colors group cursor-pointer">
           <div className="flex items-center gap-2 text-sm font-medium">
             <Clock className="h-4 w-4 text-muted-foreground" />
-            <span>Status History</span>
+            <span>状態履歴</span>
             <span className="text-xs text-muted-foreground font-normal px-1.5 py-0.5 rounded-full bg-muted">
               {transitions.length}
             </span>
@@ -170,7 +182,7 @@ export function StatusHistory({ transitions, className }: StatusHistoryProps) {
                         {transition.source && (
                           <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                             {getSourceIcon(transition.source)}
-                            <span className="capitalize">{transition.source.replace("_", " ")}</span>
+                            <span>{getSourceLabel(transition.source)}</span>
                           </span>
                         )}
                       </div>
@@ -181,7 +193,7 @@ export function StatusHistory({ transitions, className }: StatusHistoryProps) {
                           {format(timestamp, "HH:mm:ss")}
                         </span>
                         <span className="text-xs text-muted-foreground/60">
-                          {formatDistanceToNow(timestamp, { addSuffix: true })}
+                          {formatDistanceToNow(timestamp, { addSuffix: true, locale: ja })}
                         </span>
                       </div>
 

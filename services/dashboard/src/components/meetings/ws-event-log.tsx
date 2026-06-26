@@ -255,7 +255,7 @@ function CopyButton({ text, className }: { text: string; className?: string }) {
     <button
       onClick={handleCopy}
       className={`p-1 rounded hover:bg-gray-700/50 transition-colors ${className || ""}`}
-      title="Copy to clipboard"
+      title="クリップボードにコピー"
     >
       {copied ? (
         <Check className="h-3.5 w-3.5 text-emerald-400" />
@@ -321,7 +321,7 @@ export function WsEventLog({
       >
         {events.length === 0 && (
           <div className="text-gray-600">
-            # Waiting for connection...
+            # 接続待機中...
           </div>
         )}
 
@@ -366,7 +366,7 @@ export function WsEventLog({
           <div className="flex gap-2 mt-1">
             <span className="text-gray-600">←</span>
             <span className="text-gray-600">
-              {wsConnecting ? "connecting..." : "listening..."}
+              {wsConnecting ? "接続中..." : "待機中..."}
             </span>
             <span className="text-gray-400 animate-pulse">▌</span>
           </div>
@@ -378,11 +378,11 @@ export function WsEventLog({
         <div className="flex items-center gap-1.5">
           <span className={`w-[6px] h-[6px] rounded-full ${wsConnected ? "bg-emerald-400" : wsConnecting ? "bg-yellow-400 animate-pulse" : "bg-gray-600"}`} />
           <span className="text-[10px] text-gray-600">
-            {wsConnected ? "Connected" : wsConnecting ? "Connecting" : "Disconnected"}
+            {wsConnected ? "接続済み" : wsConnecting ? "接続中" : "未接続"}
           </span>
         </div>
         <span className="text-[10px] text-gray-700">
-          {events.length} events
+          イベント {events.length}件
         </span>
       </div>
     </div>
@@ -423,7 +423,7 @@ export function RestTranscriptsPreview({
       {/* Content */}
       <div className="p-4 font-mono text-[11px] leading-[1.8]">
         <div className="text-gray-500 mb-2">
-          # Get transcripts for this meeting
+          # この会議の文字起こしを取得
         </div>
         <div>
           <span className="text-gray-300">curl </span>
@@ -487,7 +487,7 @@ export function RestRecordingsPreview({
       {/* Content */}
       <div className="p-4 font-mono text-[11px] leading-[1.8]">
         <div className="text-gray-500 mb-2">
-          # Get meeting recordings
+          # 会議録音を取得
         </div>
         <div>
           <span className="text-gray-300">curl </span>
@@ -503,7 +503,7 @@ export function RestRecordingsPreview({
 
         <div className="border-t border-gray-800/50 mt-3 pt-3">
           <div className="text-gray-500 mb-2">
-            # Download audio file
+            # 音声ファイルをダウンロード
           </div>
           <div>
             <span className="text-gray-300">curl -L </span>

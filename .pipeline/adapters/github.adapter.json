@@ -1,0 +1,52 @@
+{
+  "schema_version": "1.0",
+  "id": "github",
+  "name": "GitHub",
+  "kind": "domain-tool",
+  "source": {
+    "upstream": "GitHub",
+    "docs": "https://docs.github.com",
+    "license": "GitHub terms"
+  },
+  "entrypoints": {
+    "run": "gh",
+    "cli": "gh",
+    "status": "gh pr status",
+    "checks": "gh run list"
+  },
+  "contracts": {
+    "inputs": [
+      "issue number",
+      "branch name",
+      "PR number"
+    ],
+    "outputs": [
+      "issue labels",
+      "PR URL",
+      "check conclusions"
+    ],
+    "evidence": [
+      "PR state",
+      "CI check result",
+      "merge state"
+    ]
+  },
+  "safety": {
+    "boundaries": [
+      "separate generated patch job from PR write job in CI",
+      "do not rely on GitHub auto-close semantics without branch/base evidence"
+    ],
+    "forbidden_claims": [
+      "issue closed without live issue state",
+      "CI green without check evidence"
+    ]
+  },
+  "validation": {
+    "checks": [
+      "gh auth status when GitHub operations are requested"
+    ],
+    "minimum_artifacts": [
+      "PR URL or explicit no-PR reason"
+    ]
+  }
+}

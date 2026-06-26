@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { format } from "date-fns";
+import { ja } from "date-fns/locale";
 import {
   ArrowLeft,
   Calendar,
@@ -20,12 +21,9 @@ import {
   FileText,
   StopCircle,
   FileJson,
-  FileVideo,
   ChevronDown,
-  Settings,
   ExternalLink,
   Trash2,
-  Code,
   Download,
   ClipboardCopy,
   Share,
@@ -160,9 +158,9 @@ export default function MeetingDetailPage() {
   // ChatGPT prompt editing state
   const [chatgptPrompt, setChatgptPrompt] = useState(() => {
     if (typeof window !== "undefined") {
-      return getCookie("vexa-chatgpt-prompt") || "Read from {url} so I can ask questions about it.";
+      return getCookie("vexa-chatgpt-prompt") || "{url} を読んで、この会議内容について質問できるようにしてください。";
     }
-    return "Read from {url} so I can ask questions about it.";
+    return "{url} を読んで、この会議内容について質問できるようにしてください。";
   });
   const [isChatgptPromptExpanded, setIsChatgptPromptExpanded] = useState(false);
   const [editedChatgptPrompt, setEditedChatgptPrompt] = useState(chatgptPrompt);
@@ -187,6 +185,7 @@ export default function MeetingDetailPage() {
   const [isPlaybackActive, setIsPlaybackActive] = useState(false);
   const [pendingSeekTime, setPendingSeekTime] = useState<number | null>(null);
   const [activeFragmentIndex, setActiveFragmentIndex] = useState(0);
+  const [isDownloadingRecording, setIsDownloadingRecording] = useState(false);
 
   // Build ordered recording fragments for multi-fragment playback.
   // Each recording has a session_uid, created_at, and media_files with duration.
@@ -194,9 +193,8 @@ export default function MeetingDetailPage() {
   //
   // Pack U.8 (v0.10.6, re-applies reverted Pack D-3 — commit a62d658 — on
   // top of the new master-recording contract from Pack U.5+U.6): resolve the
-  // canonical master route, then prefer the dashboard same-origin raw route
-  // for browser playback. This keeps proxied/local deployments working when
-  // the browser cannot directly reach the object-store public endpoint.
+  // canonical master route, then use the dashboard same-origin master proxy.
+  // This keeps playback/download usable when the object-store URL is internal.
   //
   // The async fetch happens once per recordings change. While in flight,
   // recordingFragments is the previous (or empty) array — the AudioPlayer
@@ -211,8 +209,8 @@ export default function MeetingDetailPage() {
 
   // v0.10.6.1 — ADR-2 canonical playback path. Dashboard reads
   // `recording.playback_url.audio` (a stable backend route) and calls
-  // vexaAPI.getRecordingMasterStreamUrl() to resolve it to a presigned
-  // URL. No client-side picking from media_files[]. Null playback_url
+  // vexaAPI.getRecordingMasterStreamUrl() to resolve it to a same-origin
+  // streaming URL. No client-side picking from media_files[]. Null playback_url
   // → render "finalizing" UI state (no silent fallback to chunk 0).
   //
   // The signature pattern from pre-fix avoided URL refetch storms when
@@ -226,10 +224,15 @@ export default function MeetingDetailPage() {
       .map(r => `${r.id}:${r.playback_url?.audio ?? ""}`)
       .join("|");
   }, [recordings]);
+  const [recordingDownloadTarget, setRecordingDownloadTarget] = useState<{
+    recordingId: number;
+    webmUrl: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!audioMediaSignature) {
       setRecordingFragments([]);
+      setRecordingDownloadTarget(null);
       setPlaybackConnectionError(null);
       return;
     }
@@ -246,20 +249,30 @@ export default function MeetingDetailPage() {
             return null;
           }
           return {
-            src: result.url,
-            duration: result.duration_seconds ?? 0,
-            sessionUid: rec.session_uid,
-            createdAt: rec.created_at,
-          } as AudioFragment;
+            recordingId: rec.id,
+            fragment: {
+              src: result.url,
+              duration: result.duration_seconds ?? 0,
+              sessionUid: rec.session_uid,
+              createdAt: rec.created_at,
+            } as AudioFragment,
+          };
         }));
         if (!cancelled) {
-          setRecordingFragments(results.filter((f): f is AudioFragment => f !== null));
+          const resolved = results.filter((f): f is { recordingId: number; fragment: AudioFragment } => f !== null);
+          setRecordingFragments(resolved.map((entry) => entry.fragment));
+          setRecordingDownloadTarget(
+            resolved[0]
+              ? { recordingId: resolved[0].recordingId, webmUrl: resolved[0].fragment.src }
+              : null
+          );
           setPlaybackConnectionError(null);
         }
       } catch (err) {
         if (!cancelled) {
           setPlaybackConnectionError(err instanceof Error ? err.message : String(err));
           setRecordingFragments([]);
+          setRecordingDownloadTarget(null);
         }
       }
     })();
@@ -430,19 +443,39 @@ export default function MeetingDetailPage() {
       // Optimistic transition to post-meeting UI immediately after stop is accepted.
       setForcePostMeetingMode(true);
       updateMeetingStatus(String(currentMeeting.id), "stopping");
-      fetchTranscripts(currentMeeting.platform, currentMeeting.platform_specific_id, String(currentMeeting.id));
-      toast.success("Bot stopped", {
-        description: "The transcription has been stopped.",
+      void fetchTranscripts(currentMeeting.platform, currentMeeting.platform_specific_id, String(currentMeeting.id), { silent: true });
+      toast.success("ボットを停止しました", {
+        description: "文字起こしを停止しました。",
       });
-      fetchMeeting(meetingId);
+      void refreshMeeting(meetingId);
     } catch (error) {
-      toast.error("Failed to stop bot", {
+      await refreshMeeting(meetingId);
+      const latestMeeting = useMeetingsStore.getState().currentMeeting;
+      const latestStatus =
+        latestMeeting && String(latestMeeting.id) === String(currentMeeting.id)
+          ? latestMeeting.status
+          : null;
+
+      if (latestStatus === "stopping" || latestStatus === "completed" || latestStatus === "failed") {
+        setForcePostMeetingMode(latestStatus !== "failed");
+        if (latestStatus === "stopping") {
+          updateMeetingStatus(String(currentMeeting.id), "stopping");
+        }
+        void fetchTranscripts(currentMeeting.platform, currentMeeting.platform_specific_id, String(currentMeeting.id), { silent: true });
+        void fetchChatMessages(currentMeeting.platform, currentMeeting.platform_specific_id);
+        toast.success(latestStatus === "stopping" ? "停止処理を確認しました" : "会議は終了済みです", {
+          description: latestStatus === "failed" ? "最新の状態に更新しました。" : "記録画面に切り替えました。",
+        });
+        return;
+      }
+
+      toast.error("ボットの停止に失敗しました", {
         description: (error as Error).message,
       });
     } finally {
       setIsStoppingBot(false);
     }
-  }, [currentMeeting, fetchMeeting, fetchTranscripts, meetingId, updateMeetingStatus]);
+  }, [currentMeeting, fetchChatMessages, fetchTranscripts, meetingId, refreshMeeting, updateMeetingStatus]);
 
   // Handle language change
   const handleLanguageChange = useCallback(async (newLanguage: string) => {
@@ -457,9 +490,9 @@ export default function MeetingDetailPage() {
       updateMeetingData(currentMeeting.platform, currentMeeting.platform_specific_id, {
         languages: [newLanguage],
       });
-      toast.success("Language updated successfully");
+      toast.success("言語設定を更新しました");
     } catch (error) {
-      toast.error("Failed to update language", {
+      toast.error("言語設定の更新に失敗しました", {
         description: (error as Error).message,
       });
     } finally {
@@ -477,10 +510,10 @@ export default function MeetingDetailPage() {
         currentMeeting.platform_specific_id,
         currentMeeting.id
       );
-      toast.success("Meeting deleted");
+      toast.success("会議を削除しました");
       router.push("/meetings");
     } catch (error) {
-      toast.error("Failed to delete meeting", {
+      toast.error("会議の削除に失敗しました", {
         description: (error as Error).message,
       });
     } finally {
@@ -491,12 +524,12 @@ export default function MeetingDetailPage() {
   // Handle export
   const handleExport = useCallback((format: "txt" | "json" | "srt" | "vtt") => {
     if (!currentMeeting) {
-      toast.error("No meeting selected");
+      toast.error("会議が選択されていません");
       return;
     }
     if (transcripts.length === 0) {
-      toast.info("No transcript available yet", {
-        description: "The transcript will be available once the meeting starts and transcription begins.",
+      toast.info("文字起こしはまだありません", {
+        description: "会議が始まり、文字起こしが開始されると表示されます。",
       });
       return;
     }
@@ -527,20 +560,100 @@ export default function MeetingDetailPage() {
     downloadFile(content, filename, mimeType);
   }, [currentMeeting, transcripts]);
 
+  const handleDownloadRecordingAudio = useCallback(async (format: "webm" | "mp3" = "webm") => {
+    if (!recordingDownloadTarget) {
+      toast.error("音声ファイルがまだ準備できていません");
+      return;
+    }
+    if (isDownloadingRecording) return;
+
+    const label = format === "mp3" ? "MP3" : "WebM";
+    const sourceUrl =
+      format === "mp3"
+        ? withBasePath(`/api/vexa/recordings/${recordingDownloadTarget.recordingId}/master/mp3?type=audio`)
+        : recordingDownloadTarget.webmUrl;
+    const recordingBaseName =
+      currentMeeting?.data?.name ||
+      currentMeeting?.data?.title ||
+      currentMeeting?.platform_specific_id ||
+      "recording";
+    const safeRecordingBaseName = String(recordingBaseName)
+      .trim()
+      .replace(/[\\/:*?"<>|]+/g, "-")
+      .replace(/\s+/g, "_") || "recording";
+    const filename = `${safeRecordingBaseName}_audio.${format}`;
+    const fallbackContentType = format === "mp3" ? "audio/mpeg" : "audio/webm";
+    const chunkSize = 8 * 1024 * 1024;
+    const toastId = toast.loading(`${label}ファイルを準備しています`);
+
+    setIsDownloadingRecording(true);
+    try {
+      const probe = await fetch(sourceUrl, {
+        headers: { Range: "bytes=0-0" },
+        cache: "no-store",
+      });
+      if (probe.status !== 206) {
+        throw new Error(`Unexpected audio probe response: ${probe.status}`);
+      }
+
+      const contentRange = probe.headers.get("content-range") || "";
+      const totalMatch = contentRange.match(/\/(\d+)$/);
+      const totalBytes = totalMatch ? Number(totalMatch[1]) : 0;
+      const contentType = probe.headers.get("content-type") || fallbackContentType;
+      await probe.arrayBuffer();
+
+      if (!Number.isFinite(totalBytes) || totalBytes <= 0) {
+        throw new Error("Audio size is unavailable");
+      }
+
+      const chunks: BlobPart[] = [];
+      for (let start = 0; start < totalBytes; start += chunkSize) {
+        const end = Math.min(start + chunkSize - 1, totalBytes - 1);
+        const response = await fetch(sourceUrl, {
+          headers: { Range: `bytes=${start}-${end}` },
+          cache: "no-store",
+        });
+        if (response.status !== 206) {
+          throw new Error(`Audio chunk request failed: ${response.status}`);
+        }
+        chunks.push(await response.blob());
+
+        const progress = Math.round(((end + 1) / totalBytes) * 100);
+        toast.loading(`${label}をダウンロード中... ${progress}%`, { id: toastId });
+      }
+
+      const objectUrl = URL.createObjectURL(new Blob(chunks, { type: contentType }));
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = filename;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+      toast.success(`${label}をダウンロードしました`, { id: toastId });
+    } catch (error) {
+      console.error("Failed to download recording audio:", error);
+      toast.error(`${label}のダウンロードに失敗しました`, {
+        id: toastId,
+        description: "通信が不安定な場合は、少し時間をおいてもう一度試してください。",
+      });
+    } finally {
+      setIsDownloadingRecording(false);
+    }
+  }, [currentMeeting, isDownloadingRecording, recordingDownloadTarget]);
+
   // Format transcript for ChatGPT
   const formatTranscriptForChatGPT = useCallback((meeting: Meeting, segments: typeof transcripts): string => {
-    let output = "Meeting Transcript\n\n";
+    let output = "会議文字起こし\n\n";
     
     if (meeting.data?.name || meeting.data?.title) {
-      output += `Title: ${meeting.data?.name || meeting.data?.title}\n`;
+      output += `タイトル: ${meeting.data?.name || meeting.data?.title}\n`;
     }
     
     if (meeting.start_time) {
-      output += `Date: ${format(parseUTCTimestamp(meeting.start_time), "PPPp")}\n`;
+      output += `日時: ${format(parseUTCTimestamp(meeting.start_time), "yyyy年M月d日 HH:mm", { locale: ja })}\n`;
     }
     
     if (meeting.data?.participants?.length) {
-      output += `Participants: ${meeting.data.participants.join(", ")}\n`;
+      output += `参加者: ${meeting.data.participants.join(", ")}\n`;
     }
     
     output += "\n---\n\n";
@@ -584,12 +697,12 @@ export default function MeetingDetailPage() {
   // Handle opening transcript in AI provider
   const handleOpenInProvider = useCallback(async (provider: "chatgpt" | "perplexity") => {
     if (!currentMeeting) {
-      toast.error("No meeting selected");
+      toast.error("会議が選択されていません");
       return;
     }
     if (transcripts.length === 0) {
-      toast.info("No transcript available yet", {
-        description: "The transcript will be available once the meeting starts and transcription begins.",
+      toast.info("文字起こしはまだありません", {
+        description: "会議が始まり、文字起こしが開始されると表示されます。",
       });
       return;
     }
@@ -631,10 +744,10 @@ export default function MeetingDetailPage() {
     try {
       const transcriptText = formatTranscriptForChatGPT(currentMeeting, transcripts);
       await navigator.clipboard.writeText(transcriptText);
-      toast.success("Transcript copied to clipboard", {
-        description: `Opening ${provider === "chatgpt" ? "ChatGPT" : "Perplexity"}. Please paste the transcript when prompted.`,
+      toast.success("文字起こしをクリップボードにコピーしました", {
+        description: `${provider === "chatgpt" ? "ChatGPT" : "Perplexity"}を開きます。必要に応じて文字起こしを貼り付けてください。`,
       });
-      const q = "I've copied a meeting transcript to my clipboard. Please wait while I paste it, then I'll ask questions about it.";
+      const q = "会議の文字起こしをクリップボードにコピーしました。これから貼り付けるので、その内容について質問できるようにしてください。";
       let providerUrl: string;
       if (provider === "chatgpt") {
         providerUrl = `https://chatgpt.com/?hints=search&q=${encodeURIComponent(q)}`;
@@ -643,8 +756,8 @@ export default function MeetingDetailPage() {
       }
       setTimeout(() => window.open(providerUrl, "_blank", "noopener,noreferrer"), 100);
     } catch (error) {
-      toast.error("Failed to copy transcript", {
-        description: "Please try again or copy the transcript manually.",
+      toast.error("文字起こしのコピーに失敗しました", {
+        description: "もう一度試すか、手動でコピーしてください。",
       });
     }
   }, [currentMeeting, transcripts, formatTranscriptForChatGPT, meetingId, chatgptPrompt]);
@@ -733,11 +846,35 @@ export default function MeetingDetailPage() {
   const meetingStatus = currentMeeting?.status;
   const isPostMeetingStatus =
     forcePostMeetingMode || meetingStatus === "stopping" || meetingStatus === "completed";
+  const shouldPollMeetingStatus =
+    meetingStatus === "requested" ||
+    meetingStatus === "joining" ||
+    meetingStatus === "awaiting_admission" ||
+    meetingStatus === "active" ||
+    meetingStatus === "needs_human_help" ||
+    meetingStatus === "stopping";
   const shouldPollPostMeetingArtifacts =
     isPostMeetingStatus &&
     currentMeeting?.data?.recording_enabled !== false &&
     !hasRecordingAudio &&
     !playbackConnectionError;
+
+  useEffect(() => {
+    if (!meetingId || !shouldPollMeetingStatus) return;
+
+    let cancelled = false;
+    const reconcileMeetingStatus = () => {
+      if (cancelled) return;
+      void refreshMeeting(meetingId);
+    };
+
+    reconcileMeetingStatus();
+    const interval = window.setInterval(reconcileMeetingStatus, 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [meetingId, shouldPollMeetingStatus, refreshMeeting]);
 
   useEffect(() => {
     // Active browser sessions use VNC — no transcript fetch needed.
@@ -822,7 +959,7 @@ export default function MeetingDetailPage() {
       });
       setIsEditingNotes(false);
     } catch (err) {
-      toast.error("Failed to save notes");
+      toast.error("メモの保存に失敗しました");
       // Keep in edit mode on error so user can retry
     } finally {
       setIsSavingNotes(false);
@@ -896,7 +1033,7 @@ export default function MeetingDetailPage() {
       <div className="space-y-6">
         <Button variant="ghost" onClick={() => router.back()}>
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Back
+          戻る
         </Button>
         <ErrorState
           error={error}
@@ -952,11 +1089,11 @@ export default function MeetingDetailPage() {
     hasActiveRecording && !isPostMeetingFlow ? (
       <div className="flex items-center gap-2 px-4 py-2 bg-muted/50 rounded-lg border text-sm text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" />
-        Recording in progress...
+        録画中...
       </div>
     ) : playbackConnectionError ? (
       <div className="flex items-center gap-2 px-4 py-2 bg-destructive/10 rounded-lg border border-destructive/30 text-sm text-destructive">
-        Connection error loading recording: {playbackConnectionError}
+        録画の読み込みで接続エラーが発生しました: {playbackConnectionError}
       </div>
     ) : hasRecordingAudio ? (
       <div className="flex flex-col gap-2">
@@ -973,26 +1110,27 @@ export default function MeetingDetailPage() {
       </div>
     ) : noAudioRecordingForMeeting ? (
       <div className="flex items-center gap-2 px-4 py-2 bg-muted/50 rounded-lg border text-sm text-muted-foreground">
-        No audio recording for this meeting.
+        この会議には音声録音がありません。
       </div>
     ) : missingRequestedRecording ? (
       <div className="flex items-center gap-2 px-4 py-2 bg-muted/50 rounded-lg border text-sm text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" />
-        Recording is finalizing...
+        録画を最終処理中...
       </div>
     ) : (
       <div className="flex items-center gap-2 px-4 py-2 bg-muted/50 rounded-lg border text-sm text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" />
-        Recording is processing...
+        録画を処理中...
       </div>
     )
   ) : null;
 
   const formatDuration = (minutes: number) => {
-    if (minutes < 60) return `${minutes} min`;
+    if (minutes < 1) return "1分未満";
+    if (minutes < 60) return `${minutes}分`;
     const hours = Math.floor(minutes / 60);
     const mins = minutes % 60;
-    return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+    return mins > 0 ? `${hours}時間${mins}分` : `${hours}時間`;
   };
 
   // Browser view available for any active meeting bot (VNC runs in all bot containers)
@@ -1043,16 +1181,16 @@ export default function MeetingDetailPage() {
           <div className="flex items-center border rounded-md overflow-hidden bg-background shadow-sm h-8">
             <Button variant="ghost" size="sm" className={cn("rounded-r-none h-full gap-1.5 text-xs", viewMode === 'transcript' && "bg-muted")} onClick={() => setViewMode('transcript')}>
               <FileText className="h-3.5 w-3.5" />
-              Transcript
+              文字起こし
             </Button>
             <Button variant="ghost" size="sm" className={cn("rounded-l-none h-full gap-1.5 text-xs", viewMode === 'browser' && "bg-muted")} onClick={() => setViewMode('browser')}>
               <Monitor className="h-3.5 w-3.5" />
-              Browser
+              ブラウザ
             </Button>
           </div>
           <Button variant="outline" size="sm" className="h-8" disabled={!browserVncUrl} onClick={() => { if (browserVncUrl) window.open(browserVncUrl, "_blank"); }}>
             <ExternalLink className="h-3.5 w-3.5 mr-1" />
-            Fullscreen
+            全画面
           </Button>
         </div>
         {browserViewIframe}
@@ -1078,7 +1216,7 @@ export default function MeetingDetailPage() {
                   value={editedTitle}
                   onChange={(e) => setEditedTitle(e.target.value)}
                   className="text-xl font-bold h-9"
-                  placeholder="Meeting title..."
+                  placeholder="会議タイトル..."
                   autoFocus
                   disabled={isSavingTitle}
                 onKeyDown={async (e) => {
@@ -1089,9 +1227,9 @@ export default function MeetingDetailPage() {
                         name: editedTitle.trim(),
                       });
                       setIsEditingTitle(false);
-                      toast.success("Title updated");
+                      toast.success("タイトルを更新しました");
                     } catch (err) {
-                      toast.error("Failed to update title");
+                      toast.error("タイトルの更新に失敗しました");
                     } finally {
                       setIsSavingTitle(false);
                     }
@@ -1114,9 +1252,9 @@ export default function MeetingDetailPage() {
                         name: editedTitle.trim(),
                       });
                       setIsEditingTitle(false);
-                      toast.success("Title updated");
+                      toast.success("タイトルを更新しました");
                     } catch (err) {
-                      toast.error("Failed to update title");
+                      toast.error("タイトルの更新に失敗しました");
                     } finally {
                       setIsSavingTitle(false);
                     }
@@ -1172,7 +1310,7 @@ export default function MeetingDetailPage() {
                 onClick={() => setViewMode('transcript')}
               >
                 <FileText className="h-4 w-4" />
-                Transcript
+                文字起こし
               </Button>
               <Button
                 variant="ghost"
@@ -1181,7 +1319,7 @@ export default function MeetingDetailPage() {
                 onClick={() => setViewMode('browser')}
               >
                 <Monitor className="h-4 w-4" />
-                Browser
+                ブラウザ
               </Button>
             </div>
           )}
@@ -1193,115 +1331,76 @@ export default function MeetingDetailPage() {
                 trigger={
                   <Button className="gap-2 h-9">
                     <Sparkles className="h-4 w-4" />
-                    Ask AI
+                    AIに質問
                   </Button>
                 }
               />
               
               <div className="flex items-center gap-2">
                 <DropdownMenu>
-                  <div className="flex items-center border rounded-md overflow-hidden bg-background shadow-sm h-9">
+                  <DropdownMenuTrigger asChild>
                     <Button
-                      variant="ghost"
-                      className="gap-2 rounded-r-none border-r-0 hover:bg-muted h-full"
-                      onClick={() => handleExport("txt")}
-                      title="Export"
+                      variant="outline"
+                      className="gap-2 h-9"
+                      title="エクスポート"
                     >
                       <Share className="h-4 w-4" />
-                      <span>Export</span>
+                      <span>エクスポート</span>
+                      <ChevronDown className="h-4 w-4" />
                     </Button>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="w-9 rounded-l-none border-l hover:bg-muted h-full"
-                      >
-                        <ChevronDown className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                  </div>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => handleOpenInProvider("chatgpt")}>
-                    <Image src="/icons/icons8-chatgpt-100.png" alt="ChatGPT" width={16} height={16} className="object-contain mr-2 invert dark:invert-0" />
-                    Open in ChatGPT
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleOpenInProvider("perplexity")}>
-                    <Image src="/icons/icons8-perplexity-ai-100.png" alt="Perplexity" width={16} height={16} className="object-contain mr-2" />
-                    Open in Perplexity
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem asChild>
-                    <Link href="/docs/cookbook/share-transcript-url" target="_blank" rel="noopener noreferrer" className="flex items-center">
-                      <ExternalLink className="h-4 w-4 mr-2" />
-                      API Docs: Share URL
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() => {
-                      if (!isChatgptPromptExpanded) {
-                        setEditedChatgptPrompt(chatgptPrompt);
-                        setIsChatgptPromptExpanded(true);
-                      } else {
-                        setIsChatgptPromptExpanded(false);
-                      }
-                    }}
-                  >
-                    <Settings className="h-4 w-4 mr-2" />
-                    Configure Prompt
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => handleExport("txt")}>
-                    <FileText className="h-4 w-4 mr-2" />
-                    Download .txt
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleExport("json")}>
-                    <FileJson className="h-4 w-4 mr-2" />
-                    Download .json
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      if (!currentMeeting) return;
-                      const content = JSON.stringify(currentMeeting, null, 2);
-                      const filename = `metadata-${currentMeeting.platform_specific_id}.json`;
-                      downloadFile(content, filename, "application/json");
-                    }}
-                  >
-                    <Code className="h-4 w-4 mr-2" />
-                    Download metadata
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() => {
-                      if (!currentMeeting || transcripts.length === 0) return;
-                      const text = exportToTxt(currentMeeting, transcripts);
-                      navigator.clipboard.writeText(text).then(() => {
-                        toast.success("Transcript copied to clipboard");
-                      });
-                    }}
-                    disabled={transcripts.length === 0}
-                  >
-                    <ClipboardCopy className="h-4 w-4 mr-2" />
-                    Copy to clipboard
-                  </DropdownMenuItem>
-                  {hasRecordingAudio && (
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => handleOpenInProvider("chatgpt")}>
+                      <Image src="/icons/icons8-chatgpt-100.png" alt="ChatGPT" width={16} height={16} className="object-contain mr-2 invert dark:invert-0" />
+                      ChatGPTで開く
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleOpenInProvider("perplexity")}>
+                      <Image src="/icons/icons8-perplexity-ai-100.png" alt="Perplexity" width={16} height={16} className="object-contain mr-2" />
+                      Perplexityで開く
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => handleExport("txt")}>
+                      <FileText className="h-4 w-4 mr-2" />
+                      .txtをダウンロード
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleExport("json")}>
+                      <FileJson className="h-4 w-4 mr-2" />
+                      .jsonをダウンロード
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
                     <DropdownMenuItem
                       onClick={() => {
-                        if (recordingFragments.length > 0) {
-                          const link = document.createElement("a");
-                          link.href = recordingFragments[0].src;
-                          link.download = `${currentMeeting?.data?.name || currentMeeting?.data?.title || "recording"}.webm`;
-                          link.click();
-                        }
+                        if (!currentMeeting || transcripts.length === 0) return;
+                        const text = exportToTxt(currentMeeting, transcripts);
+                        navigator.clipboard.writeText(text).then(() => {
+                          toast.success("文字起こしをクリップボードにコピーしました");
+                        });
                       }}
+                      disabled={transcripts.length === 0}
                     >
-                      <Download className="h-4 w-4 mr-2" />
-                      Download audio
+                      <ClipboardCopy className="h-4 w-4 mr-2" />
+                      クリップボードにコピー
                     </DropdownMenuItem>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <DocsLink href="/docs/cookbook/share-transcript-url" />
+		                    {hasRecordingAudio && (
+		                      <>
+		                        <DropdownMenuItem
+		                          onClick={() => handleDownloadRecordingAudio("webm")}
+		                          disabled={isDownloadingRecording || !recordingDownloadTarget}
+		                        >
+		                          <Download className="h-4 w-4 mr-2" />
+		                          {isDownloadingRecording ? "音声を準備中" : "WebMをダウンロード"}
+		                        </DropdownMenuItem>
+		                        <DropdownMenuItem
+		                          onClick={() => handleDownloadRecordingAudio("mp3")}
+		                          disabled={isDownloadingRecording || !recordingDownloadTarget}
+		                        >
+		                          <Download className="h-4 w-4 mr-2" />
+		                          MP3をダウンロード
+		                        </DropdownMenuItem>
+		                      </>
+		                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
           )}
@@ -1319,14 +1418,14 @@ export default function MeetingDetailPage() {
                     ) : (
                       <StopCircle className="h-4 w-4" />
                     )}
-                    Stop
+                    停止
                   </Button>
                 </AlertDialogTrigger>
               <AlertDialogContent className={apiViewOpen ? "sm:max-w-lg" : undefined}>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Stop Transcription?</AlertDialogTitle>
+                  <AlertDialogTitle>文字起こしを停止しますか？</AlertDialogTitle>
                   <AlertDialogDescription>
-                    This will disconnect the bot from the meeting and stop the live transcription. You can still access the transcript after stopping.
+                    ボットを会議から退出させ、ライブ文字起こしを停止します。停止後も文字起こしは確認できます。
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 {apiViewOpen && currentMeeting && (
@@ -1340,7 +1439,7 @@ export default function MeetingDetailPage() {
                       <span className="text-[10px] text-gray-500">DELETE /bots</span>
                     </div>
                     <div className="p-3 leading-relaxed">
-                      <div className="text-gray-500 mb-2"># Stop the bot</div>
+                      <div className="text-gray-500 mb-2"># ボットを停止</div>
                       <div>
                         <span className="text-gray-300">curl -X </span>
                         <span className="text-[#fca5a5]">DELETE</span>
@@ -1358,12 +1457,12 @@ export default function MeetingDetailPage() {
                   </div>
                 )}
                 <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogCancel>キャンセル</AlertDialogCancel>
                   <AlertDialogAction
                     onClick={handleStopBot}
                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   >
-                    Stop Transcription
+                    文字起こしを停止
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
@@ -1383,10 +1482,10 @@ export default function MeetingDetailPage() {
           <div className="flex items-center gap-3">
             <span className="w-[7px] h-[7px] rounded-full bg-emerald-400 animate-pulse shrink-0" />
             <span className="text-[13px] font-medium text-white dark:text-gray-950">
-              API Tutorial Mode
+              APIチュートリアルモード
             </span>
             <span className="text-[13px] text-gray-400 dark:text-gray-500">
-              Showing live API calls & WebSocket events
+              ライブAPI呼び出しとWebSocketイベントを表示中
             </span>
           </div>
           <button
@@ -1406,8 +1505,8 @@ export default function MeetingDetailPage() {
       {currentMeeting.data?.participants && currentMeeting.data.participants.length > 0 && (
         <div className="hidden lg:block mb-6">
           <p className="text-sm text-muted-foreground">
-            With {currentMeeting.data.participants.slice(0, 4).join(", ")}
-            {currentMeeting.data.participants.length > 4 && ` +${currentMeeting.data.participants.length - 4} more`}
+            参加者: {currentMeeting.data.participants.slice(0, 4).join(", ")}
+            {currentMeeting.data.participants.length > 4 && ` ほか${currentMeeting.data.participants.length - 4}名`}
           </p>
         </div>
       )}
@@ -1436,7 +1535,7 @@ export default function MeetingDetailPage() {
                     value={editedTitle}
                     onChange={(e) => setEditedTitle(e.target.value)}
                     className="text-[11px] font-medium h-6 flex-1 min-w-0 py-0 px-1.5"
-                    placeholder="Title..."
+                    placeholder="タイトル..."
                     autoFocus
                     disabled={isSavingTitle}
                     onBlur={() => {
@@ -1450,9 +1549,9 @@ export default function MeetingDetailPage() {
                             name: editedTitle.trim(),
                           });
                           setIsEditingTitle(false);
-                          toast.success("Title updated");
+                          toast.success("タイトルを更新しました");
                         } catch (err) {
-                          toast.error("Failed to update title");
+                          toast.error("タイトルの更新に失敗しました");
                         } finally {
                           setIsSavingTitle(false);
                         }
@@ -1474,9 +1573,9 @@ export default function MeetingDetailPage() {
                           name: editedTitle.trim(),
                         });
                         setIsEditingTitle(false);
-                        toast.success("Title updated");
+                        toast.success("タイトルを更新しました");
                       } catch (err) {
-                        toast.error("Failed to update title");
+                        toast.error("タイトルの更新に失敗しました");
                       } finally {
                         setIsSavingTitle(false);
                       }
@@ -1515,7 +1614,7 @@ export default function MeetingDetailPage() {
                   size="icon"
                   className={cn("h-7 w-7", viewMode === 'browser' && "bg-muted")}
                   onClick={() => setViewMode(viewMode === 'browser' ? 'transcript' : 'browser')}
-                  title={viewMode === 'browser' ? 'Show transcript' : 'Show browser view'}
+                  title={viewMode === 'browser' ? '文字起こしを表示' : 'ブラウザ画面を表示'}
                 >
                   <Monitor className="h-3.5 w-3.5" />
                 </Button>
@@ -1546,66 +1645,34 @@ export default function MeetingDetailPage() {
                     setIsEditingNotes(true);
                     setIsNotesExpanded(true);
                   }}
-                  title="Notes"
+                  title="メモ"
                 >
                   <FileText className="h-3.5 w-3.5" />
                 </Button>
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="icon" className="h-7 w-7 ml-0.5" title="Export">
+                    <Button variant="outline" size="icon" className="h-7 w-7 ml-0.5" title="エクスポート">
                       <Share className="h-3.5 w-3.5" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem onClick={() => handleOpenInProvider("chatgpt")} disabled={transcripts.length === 0}>
                       <Image src="/icons/icons8-chatgpt-100.png" alt="ChatGPT" width={16} height={16} className="object-contain mr-2 invert dark:invert-0" />
-                      Open in ChatGPT
+                      ChatGPTで開く
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => handleOpenInProvider("perplexity")} disabled={transcripts.length === 0}>
                       <Image src="/icons/icons8-perplexity-ai-100.png" alt="Perplexity" width={16} height={16} className="object-contain mr-2" />
-                      Open in Perplexity
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={() => {
-                        if (!isChatgptPromptExpanded) {
-                          setEditedChatgptPrompt(chatgptPrompt);
-                          setIsChatgptPromptExpanded(true);
-                        } else {
-                          setIsChatgptPromptExpanded(false);
-                        }
-                      }}
-                    >
-                      <Settings className="h-4 w-4 mr-2" />
-                      Configure Prompt
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild>
-                      <Link href="/docs/cookbook/share-transcript-url" target="_blank" rel="noopener noreferrer" className="flex items-center">
-                        <ExternalLink className="h-4 w-4 mr-2" />
-                        API Docs: Share URL
-                      </Link>
+                      Perplexityで開く
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => handleExport("txt")} disabled={transcripts.length === 0}>
                       <FileText className="h-4 w-4 mr-2" />
-                      Download .txt
+                      .txtをダウンロード
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => handleExport("json")} disabled={transcripts.length === 0}>
                       <FileJson className="h-4 w-4 mr-2" />
-                      Download .json
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => {
-                        if (!currentMeeting) return;
-                        const content = JSON.stringify(currentMeeting, null, 2);
-                        const filename = `metadata-${currentMeeting.platform_specific_id}.json`;
-                        downloadFile(content, filename, "application/json");
-                      }}
-                    >
-                      <Code className="h-4 w-4 mr-2" />
-                      Download metadata
+                      .jsonをダウンロード
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
@@ -1613,32 +1680,34 @@ export default function MeetingDetailPage() {
                         if (!currentMeeting || transcripts.length === 0) return;
                         const text = exportToTxt(currentMeeting, transcripts);
                         navigator.clipboard.writeText(text).then(() => {
-                          toast.success("Transcript copied to clipboard");
+                          toast.success("文字起こしをクリップボードにコピーしました");
                         });
                       }}
                       disabled={transcripts.length === 0}
                     >
                       <ClipboardCopy className="h-4 w-4 mr-2" />
-                      Copy to clipboard
+                      クリップボードにコピー
                     </DropdownMenuItem>
-                    {hasRecordingAudio && (
-                      <DropdownMenuItem
-                        onClick={() => {
-                          if (recordingFragments.length > 0) {
-                            const link = document.createElement("a");
-                            link.href = recordingFragments[0].src;
-                            link.download = `${currentMeeting?.data?.name || currentMeeting?.data?.title || "recording"}.webm`;
-                            link.click();
-                          }
-                        }}
-                      >
-                        <Download className="h-4 w-4 mr-2" />
-                        Download audio
-                      </DropdownMenuItem>
-                    )}
+		                    {hasRecordingAudio && (
+		                      <>
+		                        <DropdownMenuItem
+		                          onClick={() => handleDownloadRecordingAudio("webm")}
+		                          disabled={isDownloadingRecording || !recordingDownloadTarget}
+		                        >
+		                          <Download className="h-4 w-4 mr-2" />
+		                          {isDownloadingRecording ? "音声を準備中" : "WebMをダウンロード"}
+		                        </DropdownMenuItem>
+		                        <DropdownMenuItem
+		                          onClick={() => handleDownloadRecordingAudio("mp3")}
+		                          disabled={isDownloadingRecording || !recordingDownloadTarget}
+		                        >
+		                          <Download className="h-4 w-4 mr-2" />
+		                          MP3をダウンロード
+		                        </DropdownMenuItem>
+		                      </>
+		                    )}
                 </DropdownMenuContent>
               </DropdownMenu>
-              <DocsLink href="/docs/cookbook/share-transcript-url" />
 
                 {currentMeeting.status === "active" && (
                   <AlertDialog>
@@ -1648,7 +1717,7 @@ export default function MeetingDetailPage() {
                         size="icon"
                         className="h-7 w-7 text-destructive ml-0.5"
                         disabled={isStoppingBot}
-                        title="Stop"
+                        title="停止"
                       >
                         {isStoppingBot ? (
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1659,18 +1728,18 @@ export default function MeetingDetailPage() {
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
-                        <AlertDialogTitle>Stop Transcription?</AlertDialogTitle>
+                        <AlertDialogTitle>文字起こしを停止しますか？</AlertDialogTitle>
                         <AlertDialogDescription>
-                          This will disconnect the bot and stop transcribing.
+                          ボットを退出させ、文字起こしを停止します。
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogCancel>キャンセル</AlertDialogCancel>
                         <AlertDialogAction
                           onClick={handleStopBot}
                           className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                         >
-                          Stop
+                          停止
                         </AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
@@ -1688,12 +1757,12 @@ export default function MeetingDetailPage() {
         <div className="lg:hidden sticky top-0 z-50 bg-card text-card-foreground rounded-lg border shadow-sm overflow-hidden animate-in slide-in-from-top-2 duration-200">
           <div className="p-3 space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">Notes</span>
+              <span className="text-sm font-medium">メモ</span>
               <div className="flex items-center gap-2">
                 {isSavingNotes && (
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Loader2 className="h-3 w-3 animate-spin" />
-                    Saving...
+                    保存中...
                   </div>
                 )}
                 <Button
@@ -1715,7 +1784,7 @@ export default function MeetingDetailPage() {
               onChange={(e) => setEditedNotes(e.target.value)}
               onFocus={handleNotesFocus}
               onBlur={handleNotesBlur}
-              placeholder="Add notes about this meeting..."
+              placeholder="この会議のメモを追加..."
               className="min-h-[120px] resize-none text-sm"
               disabled={isSavingNotes}
               autoFocus
@@ -1729,7 +1798,7 @@ export default function MeetingDetailPage() {
         <div className="lg:hidden sticky top-0 z-50 bg-card text-card-foreground rounded-lg border shadow-sm overflow-hidden animate-in slide-in-from-top-2 duration-200">
           <div className="p-3 space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">AI Prompt</span>
+              <span className="text-sm font-medium">AIプロンプト</span>
               <Button
                 variant="ghost"
                 size="sm"
@@ -1753,12 +1822,12 @@ export default function MeetingDetailPage() {
                     setIsChatgptPromptExpanded(false);
                   }
                 }}
-                placeholder="AI prompt (use {url} for the transcript URL)"
+                placeholder="AIプロンプト（文字起こしURLには {url} を使います）"
                 className="min-h-[120px] resize-none text-sm"
                 autoFocus
               />
               <p className="text-xs text-muted-foreground">
-                Use <code className="px-1 py-0.5 bg-muted rounded">{"{url}"}</code> as a placeholder for the transcript URL.
+                文字起こしURLの差し込み位置として <code className="px-1 py-0.5 bg-muted rounded">{"{url}"}</code> を使います。
               </p>
             </div>
           </div>
@@ -1796,12 +1865,12 @@ export default function MeetingDetailPage() {
                     <AlertTriangle className="h-8 w-8 text-orange-500 animate-pulse" />
                   </div>
                   <h2 className="text-xl font-semibold mb-2 text-orange-600 dark:text-orange-400">
-                    Bot needs help
+                    ボットの確認が必要です
                   </h2>
                   <p className="text-sm text-muted-foreground max-w-sm mb-4">
                     {(currentMeeting.data?.escalation as Record<string, unknown>)?.reason as string
                       || currentMeeting.data?.escalation_reason as string
-                      || "The bot is blocked and needs human intervention to continue."}
+                      || "ボットが停止しているため、人の確認が必要です。"}
                   </p>
                   <div className="flex gap-2 flex-wrap justify-center">
                     {(() => {
@@ -1821,7 +1890,7 @@ export default function MeetingDetailPage() {
                           }}
                         >
                           <Monitor className="h-4 w-4" />
-                          Open Remote Browser
+                          リモートブラウザを開く
                         </Button>
                       );
                     })()}
@@ -1838,19 +1907,19 @@ export default function MeetingDetailPage() {
                           onClick={async () => {
                             try {
                               const saveUrl = browserRouteUrl(`/b/${sessionToken}/save`);
-                              if (!saveUrl) throw new Error("Runtime config is still loading");
+                              if (!saveUrl) throw new Error("実行時設定を読み込み中です");
                               const response = await fetch(saveUrl, {
                                 method: "POST",
                               });
                               if (!response.ok) throw new Error(await response.text());
-                              toast.success("Browser state saved");
+                              toast.success("ブラウザ状態を保存しました");
                             } catch (error) {
-                              toast.error("Save failed: " + (error as Error).message);
+                              toast.error("保存に失敗しました: " + (error as Error).message);
                             }
                           }}
                         >
                           <Save className="h-4 w-4" />
-                          Save Browser State
+                          ブラウザ状態を保存
                         </Button>
                       );
                     })()}
@@ -1866,7 +1935,7 @@ export default function MeetingDetailPage() {
                       ) : (
                         <StopCircle className="h-4 w-4" />
                       )}
-                      Stop Bot
+                      ボットを停止
                     </Button>
                   </div>
                 </div>
@@ -1979,7 +2048,7 @@ export default function MeetingDetailPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Video className="h-4 w-4" />
-                Meeting Info
+                会議情報
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -2011,13 +2080,13 @@ export default function MeetingDetailPage() {
                 <div className="flex items-center gap-3">
                   <Calendar className="h-4 w-4 text-muted-foreground" />
                   <div>
-                    <p className="text-sm font-medium">Date</p>
+                    <p className="text-sm font-medium">日時</p>
                     {/* v0.10.5.3 Pack D-1 (#265): parseUTCTimestamp interprets the
                         unsuffixed-ISO API timestamp as UTC; date-fns format()
                         renders in browser-local tz. Pre-fix: new Date() treated
                         unsuffixed ISO as LOCAL-tz, producing tz-shifted display. */}
                     <p className="text-sm text-muted-foreground" title={`UTC: ${currentMeeting.start_time}`}>
-                      {format(parseUTCTimestamp(currentMeeting.start_time), "PPPp")}
+                      {format(parseUTCTimestamp(currentMeeting.start_time), "yyyy年M月d日 HH:mm", { locale: ja })}
                     </p>
                   </div>
                 </div>
@@ -2028,7 +2097,7 @@ export default function MeetingDetailPage() {
                 <div className="flex items-center gap-3">
                   <Clock className="h-4 w-4 text-muted-foreground" />
                   <div>
-                    <p className="text-sm font-medium">Duration</p>
+                    <p className="text-sm font-medium">時間</p>
                     <p className="text-sm text-muted-foreground">
                       {formatDuration(duration)}
                     </p>
@@ -2045,7 +2114,7 @@ export default function MeetingDetailPage() {
                   <div className="flex items-center gap-3">
                     <Globe className="h-4 w-4 text-muted-foreground" />
                     <div>
-                      <p className="text-sm font-medium">Languages</p>
+                      <p className="text-sm font-medium">言語</p>
                       <p className="text-sm text-muted-foreground">
                         {currentMeeting.data.languages.map(getLanguageDisplayName).join(", ")}
                       </p>
@@ -2062,7 +2131,7 @@ export default function MeetingDetailPage() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Users className="h-4 w-4" />
-                    Participants ({currentMeeting.data.participants.length})
+                    参加者 ({currentMeeting.data.participants.length})
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -2084,12 +2153,12 @@ export default function MeetingDetailPage() {
           {/* Details */}
           <Card>
             <CardHeader>
-              <CardTitle>Details</CardTitle>
+              <CardTitle>詳細</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               {/* Status with description */}
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Status</span>
+                <span className="text-muted-foreground">状態</span>
                 <div className="text-right">
                   <span className={cn("font-medium", statusConfig.color)}>
                     {statusConfig.label}
@@ -2103,14 +2172,14 @@ export default function MeetingDetailPage() {
               </div>
               <Separator />
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Speakers</span>
+                <span className="text-muted-foreground">話者</span>
                 <span className="font-medium">
                   {new Set(transcripts.map((t) => t.speaker)).size}
                 </span>
               </div>
               <Separator />
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Words</span>
+                <span className="text-muted-foreground">単語数</span>
                 <span className="font-medium">
                   {transcripts.reduce(
                     (acc, t) => acc + t.text.split(/\s+/).length,
@@ -2136,14 +2205,14 @@ export default function MeetingDetailPage() {
                 <div className="flex items-center gap-2">
                   <CardTitle className="flex items-center gap-2">
                     <FileText className="h-4 w-4" />
-                    Notes
+                    メモ
                   </CardTitle>
                   <DocsLink href="/docs/rest/meetings#update-meeting-data" />
                 </div>
                 {isSavingNotes && (
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Loader2 className="h-3 w-3 animate-spin" />
-                    Saving...
+                    保存中...
                   </div>
                 )}
               </div>
@@ -2156,7 +2225,7 @@ export default function MeetingDetailPage() {
                   onChange={(e) => setEditedNotes(e.target.value)}
                   onFocus={handleNotesFocus}
                   onBlur={handleNotesBlur}
-                  placeholder="Add notes about this meeting..."
+                  placeholder="この会議のメモを追加..."
                   className="min-h-[120px] resize-none"
                   disabled={isSavingNotes}
                   autoFocus
@@ -2181,7 +2250,7 @@ export default function MeetingDetailPage() {
                     setIsEditingNotes(true);
                   }}
                 >
-                  Click here to add notes...
+                  ここをクリックしてメモを追加...
                 </div>
               )}
             </CardContent>
@@ -2208,32 +2277,32 @@ export default function MeetingDetailPage() {
                       ) : (
                         <Trash2 className="h-4 w-4" />
                       )}
-                      Delete meeting
+                      会議を削除
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>
-                      <AlertDialogTitle>Delete meeting?</AlertDialogTitle>
+                      <AlertDialogTitle>会議を削除しますか？</AlertDialogTitle>
                       <AlertDialogDescription>
-                        This removes transcript data and anonymizes meeting data. Type <strong>delete</strong> to confirm.
+                        文字起こしデータを削除し、会議データを匿名化します。確認のため <strong>削除</strong> と入力してください。
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <div className="py-2">
                       <Input
-                        placeholder='Type "delete" to confirm'
+                        placeholder="確認のため「削除」と入力"
                         value={deleteConfirmText}
                         onChange={(e) => setDeleteConfirmText(e.target.value)}
                         autoFocus
                       />
                     </div>
                     <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogCancel>キャンセル</AlertDialogCancel>
                       <AlertDialogAction
                         onClick={handleDeleteMeeting}
-                        disabled={deleteConfirmText.trim().toLowerCase() !== "delete" || isDeletingMeeting}
+                        disabled={deleteConfirmText.trim() !== "削除" || isDeletingMeeting}
                         className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                       >
-                        Delete meeting
+                        会議を削除
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
@@ -2303,7 +2372,7 @@ function TtsSpeakCard({ platform, nativeId }: { platform: string; nativeId: stri
       if (!response.ok) throw new Error(await response.text());
       setText("");
     } catch (error) {
-      toast.error("Speak failed: " + (error as Error).message);
+      toast.error("読み上げに失敗しました: " + (error as Error).message);
       setIsSpeaking(false);
       if (speakTimeoutRef.current) clearTimeout(speakTimeoutRef.current);
     }
@@ -2322,7 +2391,7 @@ function TtsSpeakCard({ platform, nativeId }: { platform: string; nativeId: stri
       <CardHeader className="pb-3">
         <CardTitle className="text-sm flex items-center gap-2">
           <Volume2 className="h-4 w-4" />
-          Speak
+          会議で読み上げ
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -2330,7 +2399,7 @@ function TtsSpeakCard({ platform, nativeId }: { platform: string; nativeId: stri
           <Input
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="Type something to say..."
+            placeholder="読み上げる内容を入力..."
             className="text-sm"
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSpeak(); } }}
             disabled={isSpeaking}

@@ -29,7 +29,7 @@ export default function MCPPage() {
         setConfig(data);
       } catch (error) {
         console.error("Failed to fetch config:", error);
-        toast.error("Failed to load configuration");
+        toast.error("設定の読み込みに失敗しました");
       } finally {
         setLoading(false);
       }
@@ -81,16 +81,16 @@ export default function MCPPage() {
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
-      toast.success("Copied to clipboard");
+      toast.success("クリップボードにコピーしました");
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      toast.error("Failed to copy to clipboard");
+      toast.error("コピーに失敗しました");
     }
   };
 
   const handleCursorInstall = () => {
     if (!config?.authToken) {
-      toast.error("No API token available. Create an API key in Profile first.");
+      toast.error("APIトークンがありません。先にプロフィールでAPIキーを作成してください。");
       return;
     }
 
@@ -119,13 +119,13 @@ export default function MCPPage() {
       link.click();
       document.body.removeChild(link);
 
-      toast.success("Opening Cursor to install MCP server...", {
-        description: "If Cursor doesn't open automatically, the config has been copied to your clipboard.",
+      toast.success("CursorでMCPサーバーのインストールを開いています...", {
+        description: "Cursorが自動で開かない場合は、設定をクリップボードにコピー済みです。",
         duration: 8000,
       });
     } catch {
-      toast.info("Config copied to clipboard!", {
-        description: "Please paste it into ~/.cursor/mcp.json and merge into existing mcpServers object if needed.",
+      toast.info("設定をクリップボードにコピーしました", {
+        description: "~/.cursor/mcp.json に貼り付け、必要に応じて既存の mcpServers に統合してください。",
         duration: 8000,
       });
     }
@@ -133,7 +133,7 @@ export default function MCPPage() {
 
   const handleVSCodeInstall = () => {
     if (!config?.authToken) {
-      toast.error("No API token available. Create an API key in Profile first.");
+      toast.error("APIトークンがありません。先にプロフィールでAPIキーを作成してください。");
       return;
     }
 
@@ -150,8 +150,8 @@ export default function MCPPage() {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 
-    toast.success("Config downloaded and copied!", {
-      description: "Save the downloaded mcp.json to ~/.vscode/mcp.json (or merge into existing file).",
+    toast.success("設定をダウンロードし、クリップボードにもコピーしました", {
+      description: "ダウンロードした mcp.json を ~/.vscode/mcp.json に保存するか、既存ファイルへ統合してください。",
       duration: 10000,
     });
   };
@@ -179,10 +179,10 @@ export default function MCPPage() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-semibold tracking-[-0.02em] text-foreground">
-          MCP Setup
+          MCP設定
         </h1>
         <p className="text-sm text-muted-foreground">
-          Connect your AI coding assistant to Vexa via the Model Context Protocol
+          AIコーディングアシスタントをModel Context Protocol経由でカボスに接続します
         </p>
       </div>
 
@@ -194,8 +194,8 @@ export default function MCPPage() {
               <Image src="/icons/cursor.svg" alt="Cursor" width={24} height={24} className="dark:invert" />
             </div>
             <div>
-              <p className="font-medium">Connect to Cursor</p>
-              <p className="text-xs text-muted-foreground">One-click install via deep link</p>
+              <p className="font-medium">Cursorに接続</p>
+              <p className="text-xs text-muted-foreground">ディープリンクでワンクリック設定</p>
             </div>
           </CardContent>
         </Card>
@@ -205,8 +205,8 @@ export default function MCPPage() {
               <Image src="/icons/vscode.svg" alt="VS Code" width={24} height={24} />
             </div>
             <div>
-              <p className="font-medium">Connect to VS Code</p>
-              <p className="text-xs text-muted-foreground">Download mcp.json config file</p>
+              <p className="font-medium">VS Codeに接続</p>
+              <p className="text-xs text-muted-foreground">mcp.json設定ファイルをダウンロード</p>
             </div>
           </CardContent>
         </Card>
@@ -217,16 +217,16 @@ export default function MCPPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Settings className="h-5 w-5" />
-            Configuration
+            設定
           </CardTitle>
           <CardDescription>
-            Copy this JSON and add it to your editor&apos;s mcp.json file
+            このJSONをコピーして、エディタの mcp.json に追加してください
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="relative">
             <Textarea
-              value={loading ? "Loading..." : displayConfig()}
+              value={loading ? "読み込み中..." : displayConfig()}
               readOnly
               className="font-mono text-sm min-h-[220px]"
             />
@@ -258,8 +258,9 @@ export default function MCPPage() {
               <code className="bg-background px-1.5 py-0.5 rounded text-xs">~/.claude/mcp.json</code>
             </p>
             <p className="text-xs pt-2">
-              If you already have an mcp.json file, merge the Vexa entry into the existing{" "}
-              <code className="bg-background px-1.5 py-0.5 rounded text-xs">mcpServers</code> object.
+              すでに mcp.json がある場合は、Vexa の項目を既存の{" "}
+              <code className="bg-background px-1.5 py-0.5 rounded text-xs">mcpServers</code>
+              に統合してください。
             </p>
           </div>
         </CardContent>

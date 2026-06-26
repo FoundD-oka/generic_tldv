@@ -25,6 +25,20 @@ function recordingsFromMeeting(meeting: Meeting | null): RecordingData[] {
   return Array.isArray(recordings) ? (recordings as RecordingData[]) : [];
 }
 
+function isTransientRefreshError(error: unknown): boolean {
+  if (error instanceof VexaAPIError) {
+    return (
+      [502, 503, 504].includes(error.status) ||
+      /server disconnected|request timeout|failed to connect/i.test(error.message)
+    );
+  }
+
+  return (
+    error instanceof TypeError &&
+    /failed to fetch|load failed|networkerror/i.test(error.message)
+  );
+}
+
 export function recordingsStateSignature(meeting: Meeting | null): string {
   return recordingsFromMeeting(meeting)
     .map((recording) => {
@@ -275,7 +289,9 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
       }
     } catch (error) {
       // Silent refresh - don't show errors for polling failures
-      console.error("Failed to refresh meeting:", error);
+      if (!isTransientRefreshError(error)) {
+        console.debug("Failed to refresh meeting:", error);
+      }
     }
   },
 

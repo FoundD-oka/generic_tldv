@@ -1,0 +1,66 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://local/harness-environment.schema.json",
+  "title": "Harness Environment Profile",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "id",
+    "kind",
+    "runtime_profile",
+    "sandbox",
+    "secret_policy",
+    "expected_tools",
+    "validation"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "kind": {
+      "type": "string"
+    },
+    "runtime_profile": {
+      "type": "string"
+    },
+    "sandbox": {
+      "type": "object",
+      "required": [
+        "mode",
+        "writable_paths",
+        "network"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string"
+        },
+        "writable_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "network": {
+          "type": "string"
+        }
+      }
+    },
+    "secret_policy": {
+      "type": "object"
+    },
+    "expected_tools": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "validation": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": true
+}

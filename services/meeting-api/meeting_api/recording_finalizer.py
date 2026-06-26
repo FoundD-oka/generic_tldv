@@ -418,6 +418,7 @@ def _finalize_one_media_file_sync(
     storage_path: str,
     declared_format: str,
     media_type: str,
+    duration_seconds: Optional[float] = None,
 ) -> Optional[str]:
     """Build and upload the master for one MediaFile. Returns the new
     storage_path (the master path) or None if no chunks were found.
@@ -482,6 +483,12 @@ def _finalize_one_media_file_sync(
         concat_path = _build_webm_master_streaming_file(storage, chunk_keys)
         try:
             final_path = _inject_webm_duration_file(concat_path)
+            # Capture the master size from disk before upload so the cost-
+            # estimate log line below covers the webm path too (issue #1).
+            try:
+                master_size = os.path.getsize(final_path)
+            except OSError:
+                master_size = None
             try:
                 storage.upload_file_path(
                     master_key,
@@ -499,7 +506,6 @@ def _finalize_one_media_file_sync(
                 os.remove(concat_path)
             except OSError:
                 pass
-        master_size = None  # logged via storage.upload_file_path itself
     else:  # wav
         # WAV path: in-memory concat. WAV streams aren't long-meeting
         # (typically post-meeting transcribe use only). Convert to
@@ -511,17 +517,23 @@ def _finalize_one_media_file_sync(
         storage.upload_file(master_key, master_bytes, content_type="audio/wav")
         master_size = len(master_bytes)
 
-    if master_size is not None:
-        logger.info(
-            "[FINALIZER] master uploaded: media_file_id=%s key=%s size=%d chunks=%d",
-            media_file_id, master_key, master_size, len(chunk_keys),
-        )
-    else:
-        # webm path — size already logged by storage.upload_file_path.
-        logger.info(
-            "[FINALIZER] master uploaded: media_file_id=%s key=%s chunks=%d (size streamed)",
-            media_file_id, master_key, len(chunk_keys),
-        )
+    # Cost-estimate line (issue #1): emit measured master size + duration +
+    # bytes/hour for BOTH paths so operators can update the GCS storage cost
+    # model (e.g. 1h ≈ ? GB) from real data. bytes_per_hour is None when the
+    # duration is unknown or zero.
+    bytes_per_hour = None
+    if master_size is not None and duration_seconds:
+        try:
+            if float(duration_seconds) > 0:
+                bytes_per_hour = int(master_size * 3600.0 / float(duration_seconds))
+        except (TypeError, ValueError):
+            bytes_per_hour = None
+    logger.info(
+        "[FINALIZER] master uploaded (cost): media_file_id=%s key=%s media_type=%s "
+        "size_bytes=%s duration_seconds=%s bytes_per_hour=%s chunks=%d",
+        media_file_id, master_key, media_type,
+        master_size, duration_seconds, bytes_per_hour, len(chunk_keys),
+    )
     return master_key
 
 
@@ -631,6 +643,7 @@ async def finalize_recording_master(meeting_id: int, db: AsyncSession) -> None:
                     mf_path,
                     mf_format,
                     mf_type,
+                    mf.get("duration_seconds"),
                 )
             except Exception as fin_err:
                 logger.error(

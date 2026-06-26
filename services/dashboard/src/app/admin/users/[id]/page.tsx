@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { format, formatDistanceToNow } from "date-fns";
+import { ja } from "date-fns/locale";
 import {
   ArrowLeft,
   User,
@@ -121,7 +122,7 @@ export default function UserDetailPage() {
       max_concurrent_bots: editedMaxBots,
     });
     setIsEditing(false);
-    toast.success("User updated successfully");
+    toast.success("ユーザーを更新しました");
   };
 
   const handleStartEditName = () => {
@@ -139,9 +140,9 @@ export default function UserDetailPage() {
       await fetchUser(userId);
       setEditedName(tempName.trim());
       setIsEditingName(false);
-      toast.success("Name updated successfully");
+      toast.success("名前を更新しました");
     } catch (error) {
-      toast.error("Failed to update name");
+      toast.error("名前の更新に失敗しました");
     } finally {
       setIsSavingName(false);
     }
@@ -159,7 +160,7 @@ export default function UserDetailPage() {
 
   const handleSaveMaxBots = async () => {
     if (tempMaxBots < 1 || tempMaxBots > 100) {
-      toast.error("Max bots must be between 1 and 100");
+      toast.error("ボット上限は1から100の間で指定してください");
       return;
     }
     setIsSavingMaxBots(true);
@@ -171,9 +172,9 @@ export default function UserDetailPage() {
       await fetchUser(userId);
       setEditedMaxBots(tempMaxBots);
       setIsEditingMaxBots(false);
-      toast.success("Max bots limit updated successfully");
+      toast.success("ボット上限を更新しました");
     } catch (error) {
-      toast.error("Failed to update max bots limit");
+      toast.error("ボット上限の更新に失敗しました");
     } finally {
       setIsSavingMaxBots(false);
     }
@@ -190,7 +191,7 @@ export default function UserDetailPage() {
 
   const handleRevokeToken = async (tokenId: string) => {
     await revokeToken(tokenId);
-    toast.success("Token revoked successfully");
+    toast.success("トークンを取り消しました");
   };
 
   const copyToClipboard = async (text: string, tokenId?: string) => {
@@ -199,7 +200,7 @@ export default function UserDetailPage() {
       setCopiedTokenId(tokenId);
       setTimeout(() => setCopiedTokenId(null), 2000);
     }
-    toast.success("Copied to clipboard");
+    toast.success("クリップボードにコピーしました");
   };
 
   if (error) {
@@ -207,7 +208,7 @@ export default function UserDetailPage() {
       <div className="space-y-6">
         <Button variant="ghost" onClick={() => router.back()}>
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Back
+          戻る
         </Button>
         <ErrorState error={error} onRetry={() => fetchUser(userId)} />
       </div>
@@ -224,7 +225,7 @@ export default function UserDetailPage() {
       <Button variant="ghost" asChild>
         <Link href="/admin/users">
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Users
+          ユーザー一覧に戻る
         </Link>
       </Button>
 
@@ -248,7 +249,7 @@ export default function UserDetailPage() {
                 value={tempName}
                 onChange={(e) => setTempName(e.target.value)}
                 className="text-2xl font-bold h-10 max-w-md"
-                placeholder="Name..."
+                placeholder="名前..."
                 autoFocus
                 disabled={isSavingName}
                 onKeyDown={(e) => {
@@ -281,7 +282,7 @@ export default function UserDetailPage() {
           ) : (
             <div className="flex items-center gap-2 group/name">
               <h1 className="text-2xl font-bold">
-                {selectedUser.name || "Unnamed User"}
+                {selectedUser.name || "名前未設定のユーザー"}
               </h1>
               {!isEditing && (
                 <Button
@@ -300,9 +301,9 @@ export default function UserDetailPage() {
         {isEditing && (
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setIsEditing(false)}>
-              Cancel
+              キャンセル
             </Button>
-            <Button onClick={handleSaveEdit}>Save</Button>
+            <Button onClick={handleSaveEdit}>保存</Button>
           </div>
         )}
       </div>
@@ -314,14 +315,14 @@ export default function UserDetailPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <User className="h-4 w-4" />
-                User Info
+                ユーザー情報
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center gap-3">
                 <Mail className="h-4 w-4 text-muted-foreground" />
                 <div>
-                  <p className="text-sm font-medium">Email</p>
+                  <p className="text-sm font-medium">メールアドレス</p>
                   <p className="text-sm text-muted-foreground">{selectedUser.email}</p>
                 </div>
               </div>
@@ -329,9 +330,9 @@ export default function UserDetailPage() {
               <div className="flex items-center gap-3">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
                 <div>
-                  <p className="text-sm font-medium">Created</p>
+                  <p className="text-sm font-medium">作成日</p>
                   <p className="text-sm text-muted-foreground">
-                    {format(new Date(selectedUser.created_at), "PPP")}
+                    {format(new Date(selectedUser.created_at), "PPP", { locale: ja })}
                   </p>
                 </div>
               </div>
@@ -340,7 +341,7 @@ export default function UserDetailPage() {
                 <Bot className="h-4 w-4 text-muted-foreground" />
                 <div className="flex-1">
                   <div className="flex items-center gap-2 group/maxbots">
-                    <p className="text-sm font-medium">Max Concurrent Bots</p>
+                    <p className="text-sm font-medium">同時実行ボット上限</p>
                     {!isEditing && !isEditingMaxBots && (
                       <Button
                         size="icon"
@@ -412,9 +413,9 @@ export default function UserDetailPage() {
               <div className="flex items-center gap-3">
                 <Key className="h-4 w-4 text-muted-foreground" />
                 <div>
-                  <p className="text-sm font-medium">API Tokens</p>
+                  <p className="text-sm font-medium">APIトークン</p>
                   <p className="text-sm text-muted-foreground">
-                    {selectedUser.api_tokens?.length || 0} active
+                    有効: {selectedUser.api_tokens?.length || 0}件
                   </p>
                 </div>
               </div>
@@ -429,24 +430,24 @@ export default function UserDetailPage() {
               <div>
                 <CardTitle className="flex items-center gap-2">
                   <Key className="h-4 w-4" />
-                  API Tokens
+                  APIトークン
                 </CardTitle>
                 <CardDescription>
-                  Tokens allow this user to access the Vexa API
+                  このユーザーがAPIへアクセスするためのトークンです
                 </CardDescription>
               </div>
               <Button onClick={handleCreateToken} disabled={isCreatingToken}>
                 <Plus className="mr-2 h-4 w-4" />
-                {isCreatingToken ? "Creating..." : "New Token"}
+                {isCreatingToken ? "作成中..." : "新規トークン"}
               </Button>
             </CardHeader>
             <CardContent>
               {selectedUser.api_tokens?.length === 0 ? (
                 <div className="text-center py-8">
                   <Key className="h-10 w-10 mx-auto text-muted-foreground/50 mb-3" />
-                  <p className="text-muted-foreground mb-2">No API tokens yet</p>
+                  <p className="text-muted-foreground mb-2">APIトークンはまだありません</p>
                   <p className="text-sm text-muted-foreground">
-                    Create a token to allow this user to access the API
+                    このユーザーがAPIへアクセスできるようにトークンを作成してください
                   </p>
                 </div>
               ) : (
@@ -464,7 +465,7 @@ export default function UserDetailPage() {
                           {token.token.slice(0, 8)}...{token.token.slice(-8)}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          Created {formatDistanceToNow(new Date(token.created_at), { addSuffix: true })}
+                          作成: {formatDistanceToNow(new Date(token.created_at), { addSuffix: true, locale: ja })}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
@@ -492,19 +493,18 @@ export default function UserDetailPage() {
                           </AlertDialogTrigger>
                           <AlertDialogContent>
                             <AlertDialogHeader>
-                              <AlertDialogTitle>Revoke Token?</AlertDialogTitle>
+                              <AlertDialogTitle>トークンを取り消しますか？</AlertDialogTitle>
                               <AlertDialogDescription>
-                                This will immediately revoke access for any application using this token.
-                                This action cannot be undone.
+                                このトークンを使っているアプリケーションのアクセスはすぐに無効になります。この操作は元に戻せません。
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogCancel>キャンセル</AlertDialogCancel>
                               <AlertDialogAction
                                 className="bg-destructive hover:bg-destructive/90"
                                 onClick={() => handleRevokeToken(token.id)}
                               >
-                                Revoke Token
+                                トークンを取り消す
                               </AlertDialogAction>
                             </AlertDialogFooter>
                           </AlertDialogContent>
@@ -530,10 +530,10 @@ export default function UserDetailPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Check className="h-5 w-5 text-green-500" />
-              Token Created
+              トークンを作成しました
             </DialogTitle>
             <DialogDescription>
-              Copy this token now. You won&apos;t be able to see it again!
+              このトークンは今コピーしてください。後から再表示できません。
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
@@ -554,7 +554,7 @@ export default function UserDetailPage() {
             <div className="flex items-start gap-2 mt-4 p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
               <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
               <p className="text-sm text-amber-700 dark:text-amber-400">
-                Make sure to copy this token now. For security reasons, it cannot be displayed again.
+                セキュリティ上の理由により、このトークンは再表示できません。必ず今コピーしてください。
               </p>
             </div>
           </div>
@@ -563,7 +563,7 @@ export default function UserDetailPage() {
               clearLastCreatedToken();
               setShowNewTokenDialog(false);
             }}>
-              Done
+              完了
             </Button>
           </DialogFooter>
         </DialogContent>

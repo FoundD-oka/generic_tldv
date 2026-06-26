@@ -1,0 +1,58 @@
+{
+  "schema_version": "1.0",
+  "id": "codex-cli",
+  "name": "Codex CLI",
+  "kind": "worker",
+  "source": {
+    "upstream": "OpenAI Codex CLI",
+    "docs": "https://developers.openai.com/codex",
+    "license": "OpenAI terms"
+  },
+  "entrypoints": {
+    "run": "codex exec --json",
+    "run_with_ledger": "scripts/harness/codex-session-ledger.sh <task-id> -- <codex exec args>",
+    "exec": "codex exec --json",
+    "resume": "codex exec resume"
+  },
+  "contracts": {
+    "inputs": [
+      "task brief",
+      "AGENTS.md",
+      "optional plan_how",
+      "optional task contract"
+    ],
+    "outputs": [
+      ".pipeline/sessions/<task-id>/events.jsonl",
+      ".pipeline/outcomes/<task-id>/outcome-card.json",
+      "git diff"
+    ],
+    "evidence": [
+      "command_execution items",
+      "file change items",
+      "final agent message",
+      "verification command output"
+    ]
+  },
+  "safety": {
+    "boundaries": [
+      "follow environment profile sandbox",
+      "do not expose credentials to generated code",
+      "do not mark outcome pass without deterministic verification"
+    ],
+    "forbidden_claims": [
+      "verified without command evidence",
+      "merged without PR state evidence"
+    ]
+  },
+  "validation": {
+    "checks": [
+      "codex command is available",
+      "events.jsonl is valid JSONL",
+      "outcome-card.json passes outcome judge"
+    ],
+    "minimum_artifacts": [
+      ".pipeline/sessions/<task-id>/events.jsonl",
+      ".pipeline/outcomes/<task-id>/outcome-card.json"
+    ]
+  }
+}

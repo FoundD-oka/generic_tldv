@@ -55,6 +55,26 @@ async function handleResponse<T>(response: Response): Promise<T> {
   return response.json();
 }
 
+const MEETING_FETCH_RETRY_DELAYS_MS = [300, 900];
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isTransientMeetingFetchError(error: unknown): boolean {
+  if (error instanceof VexaAPIError) {
+    return (
+      [502, 503, 504].includes(error.status) ||
+      /server disconnected|request timeout|failed to connect/i.test(error.message)
+    );
+  }
+
+  return (
+    error instanceof TypeError &&
+    /failed to fetch|load failed|networkerror/i.test(error.message)
+  );
+}
+
 // Map raw API meeting to our Meeting type
 interface RawMeeting {
   id: number;
@@ -111,9 +131,24 @@ export const vexaAPI = {
   },
 
   async getMeeting(id: string): Promise<Meeting> {
-    const response = await fetch(withBasePath(`/api/vexa/meetings/${id}`));
-    const raw = await handleResponse<RawMeeting>(response);
-    return mapMeeting(raw);
+    let lastError: unknown;
+    for (let attempt = 0; attempt <= MEETING_FETCH_RETRY_DELAYS_MS.length; attempt += 1) {
+      try {
+        const response = await fetch(withBasePath(`/api/vexa/meetings/${id}`), {
+          cache: "no-store",
+        });
+        const raw = await handleResponse<RawMeeting>(response);
+        return mapMeeting(raw);
+      } catch (error) {
+        lastError = error;
+        if (!isTransientMeetingFetchError(error) || attempt === MEETING_FETCH_RETRY_DELAYS_MS.length) {
+          throw error;
+        }
+        await wait(MEETING_FETCH_RETRY_DELAYS_MS[attempt]);
+      }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error("Failed to fetch meeting");
   },
 
   // Transcripts
@@ -390,11 +425,9 @@ export const vexaAPI = {
     return this.getRecordingAudioStreamUrl(recordingId, mediaFileId);
   },
 
-  // v0.10.6.1 canonical playback path. Dashboard reads
-  // recording.playback_url.{audio,video} and asks the backend to resolve the
-  // stable master route to a stream URL. A 404 means the master is not ready
-  // yet; callers render an explicit finalizing state instead of falling back
-  // to the first chunk.
+  // v0.10.6.1 canonical playback path. Dashboard verifies the backend master
+  // route exists, then returns a same-origin proxy URL so browsers don't need
+  // direct access to MinIO/S3 hostnames. A 404 means the master is not ready.
   async getRecordingMasterStreamUrl(
     recordingId: number,
     type: "audio" | "video"
@@ -421,9 +454,8 @@ export const vexaAPI = {
         `getRecordingMasterStreamUrl(${recordingId}, ${type}) response had no url`
       );
     }
-    const mediaUrl = data.raw_url || data.url || data.download_url || "";
     return {
-      url: /^https?:\/\//.test(mediaUrl) ? mediaUrl : withBasePath(`/api/vexa${mediaUrl}`),
+      url: withBasePath(`/api/vexa/recordings/${recordingId}/master?type=${type}&proxy=1`),
       duration_seconds: data.duration_seconds ?? null,
     };
   },

@@ -115,6 +115,11 @@ meetingApi:
     port: 8080
   recordingEnabled: "true"
   storageBackend: minio
+  # GCS backend (issue #1) — only consumed when storageBackend == "gcs".
+  # Auth via Workload Identity (no key file). See deploy/gcs/README.md.
+  gcsBucket: ""
+  gcsProject: ""
+  gcsSigningServiceAccount: ""
   botImageName: "vexaai/vexa-bot:latest"
   transcriptionServiceUrl: ""
   transcriptionServiceToken: ""

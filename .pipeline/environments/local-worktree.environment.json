@@ -1,0 +1,40 @@
+{
+  "schema_version": "1.0",
+  "id": "local-worktree",
+  "kind": "local-repository",
+  "runtime_profile": "codex-cli",
+  "sandbox": {
+    "mode": "workspace-write",
+    "writable_paths": [
+      "."
+    ],
+    "network": "repo-policy"
+  },
+  "approval_policy": "profile-default",
+  "secret_policy": {
+    "credentials_in_sandbox": false,
+    "allowed_sources": [
+      "Codex auth",
+      "approved MCP connectors",
+      "explicit one-command environment variables"
+    ],
+    "forbidden_sources": [
+      "committed secrets",
+      "long-lived API keys in repository files"
+    ]
+  },
+  "expected_tools": [
+    "git",
+    "bash",
+    "python3",
+    "codex"
+  ],
+  "validation": {
+    "preflight": "scripts/harness/validate-runtime-profile.sh",
+    "required_paths": [
+      "AGENTS.md",
+      ".codex/config.toml",
+      ".pipeline/config.json"
+    ]
+  }
+}

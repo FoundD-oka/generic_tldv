@@ -100,7 +100,7 @@ async def _purge_recordings_for_meeting(
         clients: Dict[str, object] = {}
 
         for backend in list(targets_by_backend.keys()):
-            if backend not in ("minio", "s3", "local"):
+            if backend not in ("minio", "s3", "gcs", "local"):
                 logger.warning(f"[API] Unknown storage backend '{backend}', defaulting to 'minio'")
                 targets_by_backend.setdefault("minio", set()).update(targets_by_backend.pop(backend))
 

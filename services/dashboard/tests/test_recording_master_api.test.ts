@@ -19,7 +19,7 @@ describe("vexaAPI.getRecordingMasterStreamUrl", () => {
     expect(fetch).toHaveBeenCalledWith("/api/vexa/recordings/42/master?type=audio");
   });
 
-  it("returns the dashboard media proxy URL for a resolved local master", async () => {
+  it("returns the dashboard master proxy URL for a resolved local master", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -33,12 +33,12 @@ describe("vexaAPI.getRecordingMasterStreamUrl", () => {
     );
 
     await expect(vexaAPI.getRecordingMasterStreamUrl(42, "audio")).resolves.toEqual({
-      url: "/api/vexa/recordings/42/media/7/raw",
+      url: "/api/vexa/recordings/42/master?type=audio&proxy=1",
       duration_seconds: 12.5,
     });
   });
 
-  it("prefers the dashboard media proxy when the master response includes a raw route", async () => {
+  it("keeps playback on the master proxy when the response includes a raw route", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -53,12 +53,12 @@ describe("vexaAPI.getRecordingMasterStreamUrl", () => {
     );
 
     await expect(vexaAPI.getRecordingMasterStreamUrl(42, "audio")).resolves.toEqual({
-      url: "/api/vexa/recordings/42/media/7/raw",
+      url: "/api/vexa/recordings/42/master?type=audio&proxy=1",
       duration_seconds: 12.5,
     });
   });
 
-  it("falls back to the presigned media URL when no raw route is returned", async () => {
+  it("keeps playback on the master proxy when only a presigned URL is returned", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -72,7 +72,7 @@ describe("vexaAPI.getRecordingMasterStreamUrl", () => {
     );
 
     await expect(vexaAPI.getRecordingMasterStreamUrl(42, "audio")).resolves.toEqual({
-      url: "http://localhost:42268/vexa-recordings/master.wav?X-Amz-Signature=abc",
+      url: "/api/vexa/recordings/42/master?type=audio&proxy=1",
       duration_seconds: 12.5,
     });
   });

@@ -12,6 +12,7 @@ import { browserArgs, getBrowserArgs, getAuthenticatedBrowserArgs, userAgent } f
 import { BotConfig } from "./types";
 import { RecordingService } from "./services/recording";
 import { VideoRecordingService } from "./services/video-recording";
+import { sweepOrphanRecordings } from "./services/recording-sweep";
 import { TTSPlaybackService } from "./services/tts-playback";
 import { MicrophoneService } from "./services/microphone";
 import { MeetingChatService, ChatTranscriptConfig } from "./services/chat";
@@ -2217,6 +2218,12 @@ export async function runBot(botConfig: BotConfig): Promise<void> {// Store botC
     connection_id: botConfig.connectionId,
     bot_name: botConfig.botName,
   });
+
+  // Issue #1 — SIGKILL safety net: reclaim recording temp files orphaned by a
+  // prior bot run that was hard-killed before its finally-block cleanup ran.
+  // Best-effort and non-blocking; excludes this session's (not-yet-created)
+  // files. Normal cleanup still happens in the graceful-leave finally blocks.
+  sweepOrphanRecordings({ excludeSessionUid: botConfig.connectionId }).catch(() => {});
 
   // v0.10.5.3 Pack T — bot resource telemetry (cgroup-based mem + CPU sampler).
   // Reads /sys/fs/cgroup/memory.current + /sys/fs/cgroup/cpu.stat every 30s
