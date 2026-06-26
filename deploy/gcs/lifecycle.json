@@ -1,5 +1,4 @@
 {
-  "_comment": "Issue #1 — recording-bucket lifecycle. Source of truth for the GCS recordings bucket. 0-14d Standard, 15-60d Nearline, delete at 60d. Apply with apply-lifecycle.sh. Nearline has a 30-day minimum storage duration; moving to Nearline at age 14 and deleting at age 60 leaves a 46-day Nearline window, so there is no early-deletion fee.",
   "rule": [
     {
       "action": { "type": "SetStorageClass", "storageClass": "NEARLINE" },
