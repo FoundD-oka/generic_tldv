@@ -209,6 +209,27 @@ class TestCreateMeeting:
         assert bot_config["internalSecret"] == "test-internal-secret"
 
 
+class TestDeferredTranscription:
+
+    @pytest.mark.asyncio
+    async def test_transcribe_meeting_default_mode_rejects_existing_transcript(self, client, mock_db):
+        meeting = make_meeting(
+            id=TEST_MEETING_ID,
+            status=MeetingStatus.COMPLETED.value,
+            data={"transcribe_enabled": True, "recording_enabled": True},
+        )
+        mock_db.execute = AsyncMock(side_effect=[
+            MockResult([meeting]),
+            MockResult([meeting]),
+            MockResult(scalar_value=1),
+        ])
+
+        resp = await client.post(f"/meetings/{TEST_MEETING_ID}/transcribe", json={})
+
+        assert resp.status_code == 409
+        assert "already transcribed" in resp.json()["detail"]
+
+
 # ===================================================================
 # GET /bots/status — list running bots
 # ===================================================================

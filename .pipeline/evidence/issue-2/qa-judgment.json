@@ -1,0 +1,12 @@
+{
+  "task_id": "issue-2",
+  "status": "pass",
+  "blocking_findings": 0,
+  "judgment": "Implementation satisfies the issue #2 base flow: finalized audio master is required, existing realtime rows are replaced only after deferred transcription succeeds, speaker_events are preserved and remapped, Redis live transcript cache is cleared on replace, post-meeting completion only queues work, and sweeps process queued/retryable jobs. Existing-file E2E additionally confirmed real DB/MinIO/transcription-service replacement, including compatibility with text-only STT responses.",
+  "residual_risks": [
+    "Long recordings still use whole-file download, conversion, and transcription.",
+    "Codex CLI final polishing worker from the issue comment is not implemented in this base flow.",
+    "Speaker attribution still depends on meeting.data.speaker_events quality and timing alignment.",
+    "When the STT service returns only text and no timestamped segments, the fallback stores one full-duration segment, so timing granularity is lower than verbose segment output."
+  ]
+}

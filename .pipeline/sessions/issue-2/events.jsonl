@@ -1,0 +1,2 @@
+{"type":"thread.started","timestamp":"2026-06-27T13:00:00+00:00","task_id":"issue-2","runtime_profile":"codex-app","summary":"Started harness-init implementation for GitHub issue #2 final transcript replacement."}
+{"type":"turn.completed","timestamp":"2026-06-27T13:25:10+00:00","task_id":"issue-2","runtime_profile":"codex-app","summary":"Implemented durable final transcription queue, sweep, replace mode, tests, and harness evidence."}

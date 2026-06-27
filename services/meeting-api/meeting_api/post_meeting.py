@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import Meeting
 from .database import async_session_local
+from .final_transcription import queue_final_transcription
 from .outbound_events import claim_outbound_event, event_key, mark_outbound_event
 from .webhook_delivery import deliver_with_result, build_envelope
 
@@ -376,7 +377,19 @@ async def run_all_tasks(meeting_id: int):
     except Exception as e:
         logger.error(f"Recording finalization failed for meeting {meeting_id}: {e}", exc_info=True)
 
-    # Task 1: Aggregate transcription data (makes HTTP call to collector)
+    # Task 1: Queue final transcription. Heavy transcription is handled by
+    # the sweep so webhooks and completion callbacks do not wait on Whisper.
+    try:
+        async with async_session_local() as db:
+            meeting = await db.get(Meeting, meeting_id)
+            if meeting:
+                changed = queue_final_transcription(meeting, triggered_by="post_meeting")
+                if changed:
+                    await db.commit()
+    except Exception as e:
+        logger.error(f"Final transcription queueing failed for meeting {meeting_id}: {e}", exc_info=True)
+
+    # Task 2: Aggregate transcription data (makes HTTP call to collector)
     try:
         async with async_session_local() as db:
             meeting = await db.get(Meeting, meeting_id)
@@ -388,7 +401,7 @@ async def run_all_tasks(meeting_id: int):
     except Exception as e:
         logger.error(f"Transcription aggregation failed for meeting {meeting_id}: {e}", exc_info=True)
 
-    # Task 2: Send completion webhook to user (makes HTTP call to user's endpoint)
+    # Task 3: Send completion webhook to user (makes HTTP call to user's endpoint)
     try:
         async with async_session_local() as db:
             meeting = await db.get(Meeting, meeting_id)
@@ -398,7 +411,7 @@ async def run_all_tasks(meeting_id: int):
     except Exception as e:
         logger.error(f"Completion webhook failed for meeting {meeting_id}: {e}", exc_info=True)
 
-    # Task 3: Fire internal post-meeting hooks (makes HTTP calls to hook URLs)
+    # Task 4: Fire internal post-meeting hooks (makes HTTP calls to hook URLs)
     try:
         async with async_session_local() as db:
             meeting = await db.get(Meeting, meeting_id)

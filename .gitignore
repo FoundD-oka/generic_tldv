@@ -188,4 +188,13 @@ tests3/.state-*
 .pipeline/runs/
 .pipeline/cache/
 .pipeline/feedback/tmp/
+.pipeline/feedback/prune-report.json
+.pipeline/gates/manual/*.json
+!.pipeline/gates/manual/residency.json
 .ci/tuning-log.tsv
+
+# Local harness symlinks point at the operator's dotfiles checkout.
+.claude/agents
+.claude/hooks
+.claude/rules
+.claude/skills
