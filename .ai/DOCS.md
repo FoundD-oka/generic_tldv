@@ -1,6 +1,6 @@
 ---
 owner: Documentation Owner
-updated: 2026-06-24
+updated: 2026-06-27
 watch_paths:
   - docs/
   - .ai/
@@ -22,6 +22,9 @@ This project uses doc-update only as a support layer. It keeps harness-facing do
 - Update `.ai/BUILD.md` when build/test/lint commands change.
 - Update `AGENTS.md` when Codex-facing execution rules change.
 - Update `CLAUDE.md` when Claude routing rules change.
+- GitNexus index-count refreshes in `AGENTS.md` / `CLAUDE.md` do not change
+  execution policy; record the refresh date here when doc-staleness watches
+  those files.
 
 ## Non Goals
 

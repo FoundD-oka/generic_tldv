@@ -1,0 +1,19 @@
+{
+  "task_id": "issue-2",
+  "status": "pass",
+  "gates": {
+    "harness_residency": "pass",
+    "preflight": "pass",
+    "adapter_validate": "pass",
+    "hd_gate": "pass",
+    "doc_staleness": "pass",
+    "feedback_prune": "pass",
+    "runtime_profile": "pass"
+  },
+  "preflight_diff_hash": "sha256:e66c4fe7838e9a905893b965166580d1d0b94e34cc507f0d5d11b867b6fe24bb",
+  "gitnexus_detect_changes": {
+    "risk": "high",
+    "affected_processes": 10,
+    "note": "Expected post-meeting blast radius; mitigated by existing-file E2E and full meeting-api unit suite."
+  }
+}

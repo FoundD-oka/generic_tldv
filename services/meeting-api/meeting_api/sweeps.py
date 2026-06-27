@@ -628,6 +628,129 @@ async def _sweep_unfinalized_recordings(
     return swept
 
 
+async def _sweep_final_transcription_jobs(
+    db_session_factory: Callable[[], AsyncSession],
+) -> int:
+    """Process queued final transcription jobs.
+
+    Post-meeting completion only writes `meeting.data.final_transcription`.
+    This sweep does the heavy work after recording master finalization has had
+    a chance to complete.
+    """
+    from fastapi import HTTPException
+    from sqlalchemy import text
+    from .final_transcription import (
+        FINAL_TRANSCRIPTION_MAX_ATTEMPTS,
+        FINAL_TRANSCRIPTION_SWEEP_LIMIT,
+        _set_final_transcription_state,
+        final_transcription_retry_eligible,
+        run_deferred_transcription,
+    )
+
+    swept = 0
+    async with db_session_factory() as db:
+        rows = (await db.execute(text("""
+            SELECT id FROM meetings
+            WHERE status IN (:completed, :failed)
+              AND COALESCE(data->>'transcribe_enabled', 'true') <> 'false'
+              AND COALESCE(data->>'recording_enabled', 'true') <> 'false'
+              AND (
+                data #>> '{final_transcription,status}' = 'queued'
+                OR (
+                  data #>> '{final_transcription,status}' = 'failed'
+                  AND COALESCE(data #>> '{final_transcription,retryable}', 'false') = 'true'
+                )
+              )
+            ORDER BY id DESC
+            LIMIT :limit
+        """), {
+            "completed": MeetingStatus.COMPLETED.value,
+            "failed": MeetingStatus.FAILED.value,
+            "limit": FINAL_TRANSCRIPTION_SWEEP_LIMIT,
+        })).fetchall()
+
+        for row in rows:
+            meeting_id = row[0]
+            meeting = (await db.execute(
+                select(Meeting)
+                .where(Meeting.id == meeting_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )).scalars().first()
+            if meeting is None:
+                continue
+
+            data = dict(meeting.data or {}) if isinstance(meeting.data, dict) else {}
+            job = dict(data.get("final_transcription") or {})
+            status = job.get("status")
+            if status == "succeeded" or status == "running":
+                continue
+            if status == "failed" and not job.get("retryable"):
+                continue
+            if not final_transcription_retry_eligible(job):
+                continue
+            attempts = int(job.get("attempts") or 0)
+            if attempts >= FINAL_TRANSCRIPTION_MAX_ATTEMPTS:
+                _set_final_transcription_state(
+                    meeting,
+                    status="failed",
+                    retryable=False,
+                    last_error="final transcription retry budget exhausted",
+                    failed_at=datetime.utcnow().isoformat(),
+                    updated_at=datetime.utcnow().isoformat(),
+                )
+                await db.commit()
+                logger.error(
+                    "[sweep] final-transcription meeting_id=%s exhausted retry budget attempts=%s",
+                    meeting_id,
+                    attempts,
+                )
+                continue
+
+            try:
+                await run_deferred_transcription(
+                    meeting_id,
+                    db,
+                    mode="replace",
+                    triggered_by="final_transcription_sweep",
+                )
+                swept += 1
+                logger.info(
+                    "[sweep] final-transcription succeeded meeting_id=%s",
+                    meeting_id,
+                )
+            except HTTPException as exc:
+                if exc.status_code == 404:
+                    logger.debug(
+                        "[sweep] final-transcription waiting for master meeting_id=%s detail=%s",
+                        meeting_id,
+                        exc.detail,
+                    )
+                elif exc.status_code in {500, 502, 503, 504}:
+                    logger.warning(
+                        "[sweep] final-transcription retryable failure meeting_id=%s status=%s detail=%s",
+                        meeting_id,
+                        exc.status_code,
+                        exc.detail,
+                    )
+                else:
+                    logger.error(
+                        "[sweep] final-transcription terminal failure meeting_id=%s status=%s detail=%s",
+                        meeting_id,
+                        exc.status_code,
+                        exc.detail,
+                    )
+            except Exception as exc:
+                logger.error(
+                    "[sweep] final-transcription unexpected failure meeting_id=%s: %s",
+                    meeting_id,
+                    str(exc)[:200],
+                    exc_info=True,
+                )
+
+    return swept
+
+
 async def start_sweeps(
     db_session_factory: Callable[[], AsyncSession],
 ) -> None:
@@ -638,6 +761,7 @@ async def start_sweeps(
       - Pack H.4: aggregation_failure_class='transient_infra' retry
       - Pack D.2: container-stop outbox consumer (durable retry + DLQ)
       - Pack E.1-sibling: unfinalized recordings repair/finalize
+      - Issue #2: final transcription replacement
 
     Pattern mirrors webhook_retry_worker.start_retry_worker — same
     shape, different responsibility.
@@ -681,6 +805,16 @@ async def start_sweeps(
                 )
         except Exception as e:
             logger.error(f"[sweeps] iteration {sweep_iterations} unfinalized-recordings error: {e}", exc_info=True)
+
+        try:
+            final_transcribed = await _sweep_final_transcription_jobs(db_session_factory)
+            if final_transcribed > 0:
+                logger.info(
+                    f"[sweeps] iteration {sweep_iterations}: "
+                    f"generated {final_transcribed} final transcript(s)"
+                )
+        except Exception as e:
+            logger.error(f"[sweeps] iteration {sweep_iterations} final-transcription error: {e}", exc_info=True)
 
         try:
             stop_summary = await _sweep_container_stops()

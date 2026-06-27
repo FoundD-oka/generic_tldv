@@ -1,0 +1,20 @@
+{
+  "timestamp": "2026-06-27T15:33:22.390065+00:00",
+  "status": "pass",
+  "diff_hash": "sha256:e66c4fe7838e9a905893b965166580d1d0b94e34cc507f0d5d11b867b6fe24bb",
+  "changed_files": [
+    ".ai/DOCS.md",
+    ".ai/META.md",
+    ".gitignore",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "services/meeting-api/meeting_api/final_transcription.py",
+    "services/meeting-api/meeting_api/meetings.py",
+    "services/meeting-api/meeting_api/post_meeting.py",
+    "services/meeting-api/meeting_api/sweeps.py",
+    "services/meeting-api/tests/test_final_transcription.py",
+    "services/meeting-api/tests/test_meetings.py"
+  ],
+  "flags": [],
+  "blocks": []
+}

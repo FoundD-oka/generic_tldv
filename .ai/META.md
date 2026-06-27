@@ -1,6 +1,6 @@
 ---
 owner: Harness Owner
-updated: 2026-06-24
+updated: 2026-06-27
 watch_paths:
   - .ai/
   - .pipeline/config.json

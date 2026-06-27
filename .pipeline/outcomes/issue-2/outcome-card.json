@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0",
+  "task_id": "issue-2",
+  "runtime_profile": "codex-app",
+  "size": "M",
+  "result": {
+    "at_pass": true,
+    "fp_pass": true,
+    "nft_pass": true,
+    "hd_resolved": true,
+    "blocking_findings": 0
+  },
+  "evidence": {
+    "session_ledger": ".pipeline/sessions/issue-2/events.jsonl",
+    "verification": [
+      ".pipeline/evidence/issue-2/test-results.md",
+      ".pipeline/gates/issue-2/gates-summary.json"
+    ],
+    "review": [
+      ".pipeline/evidence/issue-2/qa-judgment.json"
+    ]
+  },
+  "notes": [
+    "GitNexus detect-changes reports HIGH due to post-meeting flow blast radius; tests and gate evidence pass.",
+    "Existing-file E2E passed against real local Postgres, MinIO, and transcription service: two realtime rows were replaced by one deferred final row.",
+    "Codex polish worker is intentionally out of scope for this base final-transcript replacement implementation."
+  ]
+}
