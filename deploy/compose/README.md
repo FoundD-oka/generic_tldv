@@ -14,6 +14,7 @@ Runs all Vexa services via Docker Compose:
 - Admin API, Meeting API, Runtime API, MCP
 - Dashboard
 - TTS Service
+- Wake Orchestrator (optional profile: `wake`)
 - PostgreSQL + Redis + MinIO
 - Bots spawn as Docker containers (needs Docker socket)
 - **Experimental (commented out):** Agent API, Calendar Service — uncomment in `docker-compose.yml` to enable
@@ -66,6 +67,55 @@ You can also [self-host transcription](../../services/transcription-service/READ
 | `make promote-staging`    | Set `:staging` to TAG= (or last built)                           |
 | `make promote-latest`     | Set `:latest` to TAG= (or last built)                            |
 | `make help-tags`          | Show tagging workflow help                                       |
+
+
+### Kabosu Wake Orchestrator
+
+The optional wake assistant answers only when participants call Kabosu. It uses
+Groq `openai/gpt-oss-20b`, Aivis Cloud TTS, and Vexa `/speak` with
+`audio_base64`. By default it listens to Vexa live transcript events. For
+conversation-speed wake detection, set `WAKE_STT_URL=http://wake-stt:8058` so
+meeting bots mirror speaker PCM into the low-latency wake STT lane.
+
+Set these in `.env`:
+
+```bash
+WAKE_AUTO_DISCOVER_BOTS=true
+WAKE_DISCOVERY_INTERVAL_SECONDS=5
+WAKE_STT_URL=http://wake-stt:8058
+WAKE_STT_API_TOKEN=
+WAKE_STT_LANGUAGE=ja
+# Optional fixed-mode override:
+VEXA_NATIVE_MEETING_ID=
+GROQ_API_KEY=...
+GROQ_MAX_COMPLETION_TOKENS=768
+GROQ_RETRY_MAX_COMPLETION_TOKENS=1536
+AIVIS_API_KEY=...
+AIVIS_MODEL_UUID=18972473-ca36-4e06-a33a-5cc14adba0c4
+AIVIS_OUTPUT_FORMAT=wav
+AIVIS_TRAILING_SILENCE_SECONDS=0.7
+WAKE_MAX_COLLECTION_MS=30000
+WAKE_SAME_SPEAKER_DEDUPE_MS=3000
+WAKE_ACK_ENABLED=true
+WAKE_ACK_TEXT=うん！
+WAKE_ACK_LEADING_PAD_SECONDS=0.35
+WAKE_ACK_TRAILING_PAD_SECONDS=0.35
+WAKE_ACK_VOLUME_GAIN=1.8
+WAKE_PROCESSING_CHIME_ENABLED=true
+WAKE_PROCESSING_CHIME_FORMAT=mp3
+WAKE_PROCESSING_CHIME_SAMPLE_RATE=44100
+WAKE_PROCESSING_CHIME_INTERVAL_MS=4500
+WAKE_WORDS=カボス,ねえカボス,カボスさん,かぼす,カボちゃん
+```
+
+Start it alongside dashboard-created meetings:
+
+```bash
+docker compose --env-file ../../.env -f docker-compose.yml --profile wake up -d wake-stt wake-orchestrator
+```
+
+The dashboard defaults new meeting bots to `voice_agent_enabled=true` so the
+wake assistant can speak back through the bot.
 
 
 ### Image tagging

@@ -1,0 +1,3 @@
+{"type":"thread.started","runtime_profile":"codex-app","task_id":"wake-assistant"}
+{"type":"turn.completed","runtime_profile":"codex-app","task_id":"wake-assistant","status":"verified"}
+{"type":"turn.completed","runtime_profile":"codex-app","task_id":"wake-assistant","status":"verified","note":"dashboard-linked auto discovery and voice-agent bot defaults added"}

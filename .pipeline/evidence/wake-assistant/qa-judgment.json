@@ -1,0 +1,8 @@
+{
+  "verdict": "pass",
+  "summary": "Wake Orchestrator can now auto-discover dashboard-created running bots, keep wake state per meeting, and rely on dashboard bot creation defaults that enable voice-agent playback.",
+  "residual_risk": [
+    "Live meeting E2E still requires real Groq and Aivis credentials plus an active meeting.",
+    "GitNexus detects the shared dashboard bot-default change as medium risk because it affects Zoom callback creation too."
+  ]
+}

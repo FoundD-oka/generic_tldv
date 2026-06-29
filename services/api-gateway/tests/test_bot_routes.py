@@ -135,6 +135,22 @@ class TestSpeakRoute:
 
 
 @pytest.mark.asyncio
+class TestVoiceEventsRoute:
+    async def test_get_events_proxies(self, mock_http_client, mock_response):
+        mock_http_client.request = AsyncMock(return_value=mock_response(200, {"events": []}))
+        app.state.http_client = mock_http_client
+
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            resp = await ac.get("/bots/google_meet/abc-defg-hij/events",
+                                params={"limit": 10},
+                                headers={"x-api-key": "k"})
+
+        assert resp.status_code == 200
+        assert "/events" in mock_http_client.request.call_args[0][1]
+        assert mock_http_client.request.call_args[1]["params"] == {"limit": "10"}
+
+
+@pytest.mark.asyncio
 class TestChatRoute:
     async def test_post_chat_proxies(self, mock_http_client, mock_response):
         mock_http_client.request = AsyncMock(return_value=mock_response(200, {}))

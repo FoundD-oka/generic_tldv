@@ -81,6 +81,9 @@ class TestVoiceAgentRoutes:
     def test_speak_delete_exists(self):
         assert ("DELETE", "/bots/{platform}/{native_meeting_id}/speak") in ROUTES
 
+    def test_events_get_exists(self):
+        assert ("GET", "/bots/{platform}/{native_meeting_id}/events") in ROUTES
+
     def test_chat_post_exists(self):
         assert ("POST", "/bots/{platform}/{native_meeting_id}/chat") in ROUTES
 

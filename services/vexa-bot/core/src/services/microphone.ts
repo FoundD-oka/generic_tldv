@@ -5,8 +5,9 @@ import { log } from '../utils';
  * MicrophoneService
  *
  * Unified microphone toggle across meeting platforms.
- * The bot's mic is muted by default on join. This service unmutes it
- * when the voice agent needs to speak and re-mutes when done.
+ * The bot's mic may start muted by default on join. This service can open the
+ * meeting mic when the voice agent needs to speak. Duplicate response control
+ * lives in the wake/session layer, not in microphone mute timing.
  */
 export class MicrophoneService {
   private page: Page;
@@ -24,9 +25,9 @@ export class MicrophoneService {
    * Returns true if mic is now unmuted, false if toggle failed.
    */
   async unmute(): Promise<boolean> {
-    if (!this._isMuted) return true;
-
     this.clearMuteTimer();
+
+    if (!this._isMuted) return true;
 
     try {
       let success = false;
@@ -84,7 +85,7 @@ export class MicrophoneService {
   }
 
   /**
-   * Schedule auto-mute after a delay (for post-speech silence).
+   * Schedule auto-mute after a delay for callers that explicitly need it.
    * Cancel with clearMuteTimer() or a new unmute() call.
    */
   scheduleAutoMute(delayMs: number = 2000): void {

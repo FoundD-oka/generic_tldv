@@ -1,0 +1,15 @@
+{
+  "task_id": "wake-assistant",
+  "status": "pass",
+  "checks": [
+    "unit tests pass",
+    "compileall pass",
+    "config check pass without fixed meeting id",
+    "compose profile config pass",
+    "dashboard bot defaults test pass",
+    "dashboard build pass",
+    "docker build pass",
+    "docker image config check pass without fixed meeting id",
+    "gitnexus detect-changes medium and expected"
+  ]
+}

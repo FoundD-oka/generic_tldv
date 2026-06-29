@@ -34,6 +34,7 @@ import { SileroVAD } from './services/vad';
 import { isHallucination } from './services/hallucination-filter';
 import { SpeakerStreamHandle } from './services/audio';
 import { RawCaptureService } from './services/raw-capture';
+import { WakeSttClient } from './services/wake-stt-client';
 
 // Module-level variables to store current configuration
 let currentLanguage: string | null | undefined = null;
@@ -88,6 +89,7 @@ export async function feedZoomAudio(speakerName: string, audioData: Float32Array
     });
   }
 
+  mirrorWakeSttAudio(speakerId, speakerName, audioData);
   speakerManager.feedAudio(speakerId, audioData);
 }
 
@@ -147,6 +149,7 @@ let chatService: MeetingChatService | null = null;
 let screenContentService: ScreenContentService | null = null;
 let screenShareService: ScreenShareService | null = null;
 let redisPublisher: RedisClientType | null = null;
+let voicePlaybackQueue: Promise<void> = Promise.resolve();
 // -------------------------------------------------
 
 // --- Per-speaker transcription pipeline ---
@@ -154,6 +157,7 @@ let transcriptionClient: TranscriptionClient | null = null;
 let segmentPublisher: SegmentPublisher | null = null;
 export function getSegmentPublisher(): SegmentPublisher | null { return segmentPublisher; }
 let speakerManager: SpeakerStreamManager | null = null;
+let wakeSttClient: WakeSttClient | null = null;
 let vadModel: SileroVAD | null = null;
 /** Per-speaker VAD states for streaming mode (GMeet only) */
 import type { VadSpeakerState } from './services/vad';
@@ -176,6 +180,25 @@ export function getRawCaptureService(): RawCaptureService | null { return rawCap
 /** Per-speaker confirmed segment batches — drained on each draft tick, flushed on cleanup */
 let confirmedBatches = new Map<string, import('./services/segment-publisher').TranscriptionSegment[]>();
 // ------------------------------------------
+
+function parseOptionalIntEnv(name: string, fallback: number): number {
+  const value = process.env[name];
+  if (!value || value.trim() === '') return fallback;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function parseOptionalNumberEnv(name: string, fallback: number): number {
+  const value = process.env[name];
+  if (!value || value.trim() === '') return fallback;
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function mirrorWakeSttAudio(speakerId: string, speakerName: string, audioData: Float32Array): void {
+  if (!wakeSttClient) return;
+  wakeSttClient.feedAudio(speakerId, speakerName || speakerId, audioData);
+}
 
 // --- ADDED: Stop signal tracking ---
 let stopSignalReceived = false;
@@ -577,7 +600,7 @@ const handleRedisMessage = async (message: string, channel: string, page: Page |
         log('Processing speak_stop command');
         if (ttsPlaybackService) {
           ttsPlaybackService.interrupt();
-          await publishVoiceEvent('speak.interrupted');
+          await publishVoiceEvent('speak.interrupted', { request_id: command.request_id });
         }
 
       } else if (command.action === 'chat_send') {
@@ -1000,80 +1023,108 @@ async function publishVoiceEvent(event: string, data: any = {}): Promise<void> {
   }
 }
 
+function enqueueVoicePlayback(label: string, work: () => Promise<void>): Promise<void> {
+  const run = voicePlaybackQueue
+    .catch((err: any) => {
+      log(`[VoiceAgent] Previous voice playback task failed: ${err?.message || err}`);
+    })
+    .then(work);
+
+  voicePlaybackQueue = run.catch((err: any) => {
+    log(`[VoiceAgent] Voice playback queue task failed (${label}): ${err?.message || err}`);
+  });
+
+  return run;
+}
+
+function beginVoicePlayback(): void {
+  if (microphoneService) {
+    microphoneService.clearMuteTimer();
+  }
+}
+
 /**
  * Handle "speak" command — synthesize text to speech and play into meeting.
  */
 async function handleSpeakCommand(command: any, page: Page | null): Promise<void> {
-  if (!ttsPlaybackService) {
-    log('[Speak] TTS playback service not initialized');
-    return;
-  }
+  return enqueueVoicePlayback('speak', async () => {
+    if (!ttsPlaybackService) {
+      log('[Speak] TTS playback service not initialized');
+      return;
+    }
+    const requestId = command.request_id;
+    beginVoicePlayback();
 
-  // Unmute mic before speaking
-  if (microphoneService) {
-    await microphoneService.unmute();
-    await new Promise((r) => setTimeout(r, 500)); // Let Meet register unmute before audio
-  }
+    // Keep duplicate suppression in the wake/session layer. The meeting mic is
+    // only opened so the rendered TTS can reach the call.
+    if (microphoneService) {
+      await microphoneService.unmute();
+      await new Promise((r) => setTimeout(r, 500)); // Let Meet register unmute before audio
+      microphoneService.clearMuteTimer();
+    }
 
-  await publishVoiceEvent('speak.started', { text: command.text });
+    await publishVoiceEvent('speak.started', { text: command.text, request_id: requestId });
 
-  try {
-    const provider = command.provider || process.env.DEFAULT_TTS_PROVIDER || 'piper';
-    const voice = command.voice || process.env.DEFAULT_TTS_VOICE || 'auto';
-    await ttsPlaybackService.synthesizeAndPlay(command.text, provider, voice);
-    await publishVoiceEvent('speak.completed');
-  } catch (err: any) {
-    log(`[Speak] TTS failed: ${err.message}`);
-    await publishVoiceEvent('speak.error', { message: err.message });
-  }
+    try {
+      const provider = command.provider || process.env.DEFAULT_TTS_PROVIDER || 'piper';
+      const voice = command.voice || process.env.DEFAULT_TTS_VOICE || 'auto';
+      await ttsPlaybackService.synthesizeAndPlay(command.text, provider, voice);
+      await publishVoiceEvent('speak.completed', { request_id: requestId });
+    } catch (err: any) {
+      log(`[Speak] TTS failed: ${err.message}`);
+      await publishVoiceEvent('speak.error', { message: err.message, request_id: requestId });
+    }
 
-  // Schedule auto-mute after speech
-  if (microphoneService) {
-    microphoneService.scheduleAutoMute(2000);
-  }
+  });
 }
 
 /**
  * Handle "speak_audio" command — play pre-rendered audio.
  */
 async function handleSpeakAudioCommand(command: any): Promise<void> {
-  if (!ttsPlaybackService) {
-    log('[SpeakAudio] TTS playback service not initialized');
-    return;
-  }
-
-  // Unmute mic before playing
-  if (microphoneService) {
-    await microphoneService.unmute();
-    await new Promise((r) => setTimeout(r, 500)); // Let Meet register unmute before audio
-  }
-
-  await publishVoiceEvent('speak.started', { source: command.audio_url ? 'url' : 'base64' });
-
-  try {
-    if (command.audio_url) {
-      log(`[SpeakAudio] Playing from URL: ${command.audio_url}`);
-      await ttsPlaybackService.playFromUrl(command.audio_url);
-    } else if (command.audio_base64) {
-      const format = command.format || 'wav';
-      const sampleRate = command.sample_rate || 24000;
-      log(`[SpeakAudio] Playing from base64 (${command.audio_base64.length} chars, format=${format}, rate=${sampleRate})`);
-      await ttsPlaybackService.playFromBase64(command.audio_base64, format, sampleRate);
-    } else {
-      log('[SpeakAudio] No audio_url or audio_base64 provided');
+  return enqueueVoicePlayback('speak_audio', async () => {
+    if (!ttsPlaybackService) {
+      log('[SpeakAudio] TTS playback service not initialized');
       return;
     }
-    log('[SpeakAudio] Playback completed');
-    await publishVoiceEvent('speak.completed');
-  } catch (err: any) {
-    log(`[SpeakAudio] Playback failed: ${err.message}`);
-    log(`[SpeakAudio] Stack: ${err.stack}`);
-    await publishVoiceEvent('speak.error', { message: err.message });
-  }
+    const requestId = command.request_id;
+    beginVoicePlayback();
 
-  if (microphoneService) {
-    microphoneService.scheduleAutoMute(2000);
-  }
+    // Keep duplicate suppression in the wake/session layer. The meeting mic is
+    // only opened so the rendered audio can reach the call.
+    if (microphoneService) {
+      await microphoneService.unmute();
+      await new Promise((r) => setTimeout(r, 500)); // Let Meet register unmute before audio
+      microphoneService.clearMuteTimer();
+    }
+
+    await publishVoiceEvent('speak.started', {
+      source: command.audio_url ? 'url' : 'base64',
+      request_id: requestId,
+    });
+
+    try {
+      if (command.audio_url) {
+        log(`[SpeakAudio] Playing from URL: ${command.audio_url}`);
+        await ttsPlaybackService.playFromUrl(command.audio_url);
+      } else if (command.audio_base64) {
+        const format = command.format || 'wav';
+        const sampleRate = command.sample_rate || 24000;
+        log(`[SpeakAudio] Playing from base64 (${command.audio_base64.length} chars, format=${format}, rate=${sampleRate})`);
+        await ttsPlaybackService.playFromBase64(command.audio_base64, format, sampleRate);
+      } else {
+        log('[SpeakAudio] No audio_url or audio_base64 provided');
+        return;
+      }
+      log('[SpeakAudio] Playback completed');
+      await publishVoiceEvent('speak.completed', { request_id: requestId });
+    } catch (err: any) {
+      log(`[SpeakAudio] Playback failed: ${err.message}`);
+      log(`[SpeakAudio] Stack: ${err.stack}`);
+      await publishVoiceEvent('speak.error', { message: err.message, request_id: requestId });
+    }
+
+  });
 }
 
 /**
@@ -1283,6 +1334,25 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
     });
     log('[PerSpeaker] SegmentPublisher created');
 
+    const wakeSttUrl = process.env.WAKE_STT_URL?.trim();
+    if (wakeSttUrl) {
+      wakeSttClient = new WakeSttClient({
+        serviceUrl: wakeSttUrl,
+        apiToken: process.env.WAKE_STT_TOKEN || process.env.WAKE_STT_API_TOKEN,
+        platform: botConfig.platform,
+        nativeMeetingId: botConfig.nativeMeetingId,
+        meetingId,
+        sampleRate: 16000,
+        flushIntervalMs: parseOptionalIntEnv('WAKE_STT_FLUSH_INTERVAL_MS', 500),
+        maxBatchDurationMs: parseOptionalIntEnv('WAKE_STT_MAX_BATCH_DURATION_MS', 1200),
+        maxInFlight: parseOptionalIntEnv('WAKE_STT_MAX_IN_FLIGHT', 4),
+      });
+      log(`[WakeSTT] Audio mirror enabled -> ${wakeSttUrl}`);
+    } else {
+      wakeSttClient = null;
+      log('[WakeSTT] WAKE_STT_URL not set; audio mirror disabled');
+    }
+
     // Publish session_start so the collector knows when this session began
     await segmentPublisher.publishSessionStart();
     log('[PerSpeaker] Session start published');
@@ -1302,14 +1372,18 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
     }
 
     const isGoogleMeet = botConfig.platform === 'google_meet';
-    speakerManager = new SpeakerStreamManager({
+    const streamConfig = {
       sampleRate: 16000,
-      minAudioDuration: 3,     // 3s of unconfirmed audio before submission
-      submitInterval: 2,       // submit every 2s — lower latency
-      confirmThreshold: 2,     // 2 consecutive matches — faster confirmation
-      maxBufferDuration: 30,   // force-flush at 30s — matches Whisper training window
-      idleTimeoutSec: 15,      // 15s idle → emit + reset
-    });
+      minAudioDuration: parseOptionalNumberEnv('WAKE_STREAM_MIN_AUDIO_DURATION_SEC', 3),
+      submitInterval: parseOptionalNumberEnv('WAKE_STREAM_SUBMIT_INTERVAL_SEC', 2),
+      confirmThreshold: parseOptionalIntEnv('WAKE_STREAM_CONFIRM_THRESHOLD', 2),
+      maxBufferDuration: parseOptionalNumberEnv('WAKE_STREAM_MAX_BUFFER_DURATION_SEC', 30),
+      idleTimeoutSec: parseOptionalNumberEnv('WAKE_STREAM_IDLE_TIMEOUT_SEC', 15),
+    };
+    speakerManager = new SpeakerStreamManager(streamConfig);
+    log(
+      `[PerSpeaker] SpeakerStreamManager config minAudioDuration=${streamConfig.minAudioDuration}s submitInterval=${streamConfig.submitInterval}s confirmThreshold=${streamConfig.confirmThreshold} maxBufferDuration=${streamConfig.maxBufferDuration}s idleTimeoutSec=${streamConfig.idleTimeoutSec}s`
+    );
     // VAD gating moved to handlePerSpeakerAudioData entry (per-speaker streaming).
     // SpeakerStreamManager no longer does VAD — it only receives real speech.
 
@@ -1723,6 +1797,7 @@ async function handlePerSpeakerAudioData(speakerIndex: number, audioDataArray: n
     rawCaptureService.feedAudio(speakerIndex, audioData, resolvedName);
   }
 
+  mirrorWakeSttAudio(speakerId, speakerManager.getSpeakerName(speakerId) || speakerId, audioData);
   speakerManager.feedAudio(speakerId, audioData);
 }
 
@@ -1763,6 +1838,12 @@ async function cleanupPerSpeakerPipeline(): Promise<void> {
     const outputPath = rawCaptureService.finalize();
     log(`[PerSpeaker] Raw capture finalized → ${outputPath}`);
     rawCaptureService = null;
+  }
+
+  if (wakeSttClient) {
+    await wakeSttClient.close();
+    wakeSttClient = null;
+    log('[WakeSTT] Audio mirror closed');
   }
 
   // Flush remaining speaker buffers
@@ -1820,6 +1901,7 @@ async function handleTeamsAudioData(speakerName: string, audioDataArray: number[
 
   // No VAD for Teams — caption-driven routing already gates audio.
   // Small ring buffer chunks are too short for Silero VAD to reliably detect speech.
+  mirrorWakeSttAudio(speakerId, speakerName, audioData);
   speakerManager.feedAudio(speakerId, audioData);
 }
 

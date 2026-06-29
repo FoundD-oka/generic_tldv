@@ -59,6 +59,7 @@ describe("withPostMeetingAutoStop", () => {
     expect(request.automatic_leave).toEqual({
       max_time_left_alone: POST_MEETING_AUTO_STOP_TIMEOUT_MS,
     });
+    expect(request.voice_agent_enabled).toBe(true);
   });
 
   it("preserves other automatic leave settings", () => {
@@ -75,5 +76,15 @@ describe("withPostMeetingAutoStop", () => {
       max_wait_for_admission: 300000,
       max_time_left_alone: POST_MEETING_AUTO_STOP_TIMEOUT_MS,
     });
+  });
+
+  it("preserves an explicit voice agent override", () => {
+    const request = withPostMeetingAutoStop({
+      platform: "google_meet",
+      native_meeting_id: "abc-defg-hij",
+      voice_agent_enabled: false,
+    });
+
+    expect(request.voice_agent_enabled).toBe(false);
   });
 });

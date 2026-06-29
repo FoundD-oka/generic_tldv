@@ -121,7 +121,12 @@ class TestSpeak:
         with _patch_find_active(active_meeting):
             resp = await client.post(
                 f"/bots/{TEST_PLATFORM}/{TEST_NATIVE_MEETING_ID}/speak",
-                json={"audio_base64": "UklGRg==", "format": "wav", "sample_rate": 24000},
+                json={
+                    "audio_base64": "UklGRg==",
+                    "format": "wav",
+                    "sample_rate": 24000,
+                    "request_id": "wake-reply-1",
+                },
             )
 
         assert resp.status_code == 202
@@ -130,6 +135,8 @@ class TestSpeak:
         assert parsed["audio_base64"] == "UklGRg=="
         assert parsed["format"] == "wav"
         assert parsed["sample_rate"] == 24000
+        assert parsed["request_id"] == "wake-reply-1"
+        assert resp.json()["request_id"] == "wake-reply-1"
 
     @pytest.mark.asyncio
     async def test_speak_no_content(self, client, mock_redis, active_meeting):

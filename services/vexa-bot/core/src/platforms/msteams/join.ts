@@ -483,8 +483,8 @@ export async function joinMicrosoftTeams(page: Page, botConfig: BotConfig): Prom
     log("⚠️ Join button not found — bot may not be able to enter the meeting");
   }
 
-  // Mute mic for all bots after join. TTS bots unmute only when speaking
-  // (handleSpeakCommand unmutes → speaks → re-mutes).
+  // Mute mic for recorder bots after join. TTS playback opens the meeting mic
+  // when speaking; duplicate suppression is handled by the wake/session layer.
   log("Step 6b: Muting mic...");
   try {
     await page.keyboard.press("Control+Shift+M");
