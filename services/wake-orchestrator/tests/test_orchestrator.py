@@ -27,8 +27,8 @@ class FakeGroq:
         self.calls = []
         self.reply = reply
 
-    async def generate_reply(self, recent_transcript, wake_utterance):
-        self.calls.append((recent_transcript, wake_utterance))
+    async def generate_reply(self, recent_transcript, wake_utterance, **kwargs):
+        self.calls.append((recent_transcript, wake_utterance, kwargs))
         return self.reply
 
 
@@ -59,10 +59,19 @@ class FakeVexa:
     def __init__(self):
         self.calls = []
         self.wait_calls = []
+        self.chat_calls = []
+        self.chat_messages_response = []
         self.terminal_event = "speak.completed"
 
     async def speak_audio(self, result, meeting=None, request_id=None):
         self.calls.append((result, meeting, request_id))
+
+    async def chat_messages(self, meeting=None):
+        return self.chat_messages_response
+
+    async def send_chat(self, text, meeting=None):
+        self.chat_calls.append((text, meeting))
+        return meeting.meeting_id if meeting else None
 
     async def wait_for_speech_to_finish(
         self,
@@ -969,6 +978,199 @@ class OrchestratorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(aivis.calls), 1)
         self.assertEqual(len(vexa.calls), 1)
         self.assertEqual(orchestrator.state, WakeState.IDLE)
+
+    async def test_chat_received_with_kabosu_triggers_chat_reply(self):
+        settings = Settings(
+            wake_cooldown_ms=0,
+            wake_ack_enabled=False,
+            bot_echo_cooldown_ms=0,
+            wake_chat_bootstrap_enabled=False,
+        )
+        groq = FakeGroq(reply="リンク先の中身までは確認できていないけど、論点は料金です。")
+        vexa = FakeVexa()
+        orchestrator = WakeOrchestrator(settings, groq, FakeAivis(), vexa)
+
+        await orchestrator.handle_message(
+            {
+                "event": "chat.received",
+                "sender": "Alice",
+                "text": "これカボス見て https://example.com/pricing",
+                "timestamp": 1760000000000,
+                "is_from_bot": False,
+            }
+        )
+
+        self.assertEqual(len(groq.calls), 1)
+        self.assertEqual(groq.calls[0][1], "これ見て https://example.com/pricing")
+        self.assertEqual(groq.calls[0][2]["input_mode"], "chat")
+        self.assertEqual(groq.calls[0][2]["output_mode"], "chat")
+        self.assertIn("https://example.com/pricing", groq.calls[0][0])
+        self.assertEqual(
+            vexa.chat_calls,
+            [("カボス:\nリンク先の中身までは確認できていないけど、論点は料金です。", None)],
+        )
+        self.assertEqual(vexa.calls, [])
+        self.assertEqual(orchestrator.state, WakeState.IDLE)
+
+    async def test_chat_wake_ignores_bot_messages_and_duplicate_events(self):
+        settings = Settings(
+            wake_cooldown_ms=0,
+            wake_ack_enabled=False,
+            bot_echo_cooldown_ms=0,
+            wake_chat_bootstrap_enabled=False,
+        )
+        groq = FakeGroq()
+        vexa = FakeVexa()
+        orchestrator = WakeOrchestrator(settings, groq, FakeAivis(), vexa)
+
+        await orchestrator.handle_message(
+            {
+                "event": "chat.received",
+                "sender": "カボス",
+                "text": "カボス: 了解です。",
+                "timestamp": 1760000000000,
+                "is_from_bot": False,
+            }
+        )
+        event = {
+            "event": "chat.received",
+            "sender": "Alice",
+            "text": "カボス、要約して",
+            "timestamp": 1760000001000,
+            "is_from_bot": False,
+        }
+        await orchestrator.handle_message(event)
+        await orchestrator.handle_message(event)
+
+        self.assertEqual(len(groq.calls), 1)
+        self.assertEqual(len(vexa.chat_calls), 1)
+
+    async def test_rest_bootstrap_adds_chat_context_without_triggering_old_wake(self):
+        settings = Settings(
+            wake_cooldown_ms=0,
+            wake_input_settle_ms=0,
+            wake_response_playback_guard_ms=0,
+            wake_ack_enabled=False,
+            bot_echo_cooldown_ms=0,
+            wake_chat_bootstrap_enabled=True,
+        )
+        groq = FakeGroq()
+        vexa = FakeVexa()
+        vexa.chat_messages_response = [
+            {
+                "sender": "Alice",
+                "text": "カボス、古い依頼です https://example.com/old",
+                "timestamp": 1760000000000,
+                "is_from_bot": False,
+            }
+        ]
+        orchestrator = WakeOrchestrator(settings, groq, FakeAivis(), vexa)
+
+        await orchestrator.handle_message(
+            {
+                "type": "transcript",
+                "speaker": "Bob",
+                "pending": [
+                    {
+                        "text": "カボス、さっき貼った資料を前提に要約して",
+                        "speaker": "Bob",
+                        "segment_id": "seg-1",
+                    }
+                ],
+            }
+        )
+
+        self.assertEqual(len(groq.calls), 1)
+        self.assertEqual(groq.calls[0][2]["input_mode"], "voice")
+        self.assertEqual(groq.calls[0][2]["output_mode"], "voice")
+        self.assertIn("https://example.com/old", groq.calls[0][0])
+        self.assertEqual(vexa.chat_calls, [])
+
+    async def test_chat_can_request_voice_output_too(self):
+        settings = Settings(
+            wake_cooldown_ms=0,
+            wake_response_playback_guard_ms=0,
+            wake_ack_enabled=False,
+            bot_echo_cooldown_ms=0,
+            wake_chat_bootstrap_enabled=False,
+        )
+        groq = FakeGroq(reply="要点は一つです。")
+        vexa = FakeVexa()
+        orchestrator = WakeOrchestrator(settings, groq, FakeAivis(), vexa)
+
+        await orchestrator.handle_message(
+            {
+                "event": "chat.received",
+                "sender": "Alice",
+                "text": "カボス、口頭で言って",
+                "timestamp": 1760000000000,
+                "is_from_bot": False,
+            }
+        )
+
+        self.assertEqual(groq.calls[0][2]["output_mode"], "both")
+        self.assertEqual(vexa.chat_calls, [("カボス:\n要点は一つです。", None)])
+        self.assertEqual(len(vexa.calls), 1)
+
+    async def test_voice_chat_reference_keeps_voice_output_mode(self):
+        settings = Settings(
+            wake_cooldown_ms=0,
+            wake_response_playback_guard_ms=0,
+            wake_ack_enabled=False,
+            bot_echo_cooldown_ms=0,
+            wake_chat_bootstrap_enabled=False,
+        )
+        groq = FakeGroq()
+        vexa = FakeVexa()
+        orchestrator = WakeOrchestrator(settings, groq, FakeAivis(), vexa)
+
+        await orchestrator.handle_message(
+            {
+                "event": "chat.received",
+                "sender": "Alice",
+                "text": "資料 https://example.com/doc",
+                "timestamp": 1760000000000,
+                "is_from_bot": False,
+            }
+        )
+        await orchestrator.handle_segment(
+            TranscriptSegment(
+                text="カボス、チャットに貼った資料を前提に要約して",
+                speaker="Bob",
+                segment_id="seg-1",
+                completed=True,
+            )
+        )
+
+        self.assertEqual(groq.calls[0][2]["output_mode"], "voice")
+        self.assertIn("https://example.com/doc", groq.calls[0][0])
+        self.assertEqual(vexa.chat_calls, [])
+        self.assertEqual(len(vexa.calls), 1)
+
+    async def test_voice_can_request_chat_output(self):
+        settings = Settings(
+            wake_cooldown_ms=0,
+            wake_response_playback_guard_ms=0,
+            wake_ack_enabled=False,
+            bot_echo_cooldown_ms=0,
+            wake_chat_bootstrap_enabled=False,
+        )
+        groq = FakeGroq(reply="ここまでの決定事項です。")
+        vexa = FakeVexa()
+        orchestrator = WakeOrchestrator(settings, groq, FakeAivis(), vexa)
+
+        await orchestrator.handle_segment(
+            TranscriptSegment(
+                text="カボス、ここまでの決定事項をチャットに貼って",
+                speaker="Alice",
+                segment_id="seg-1",
+                completed=True,
+            )
+        )
+
+        self.assertEqual(groq.calls[0][2]["output_mode"], "chat")
+        self.assertEqual(vexa.chat_calls, [("カボス:\nここまでの決定事項です。", None)])
+        self.assertEqual(vexa.calls, [])
 
     async def test_orchestrator_ignores_vexa_wake_word(self):
         settings = Settings(wake_cooldown_ms=1, wake_response_playback_guard_ms=0)

@@ -117,6 +117,18 @@ class Settings:
     wake_use_pending_transcripts: bool = True
     wake_use_confirmed_transcripts: bool = False
     recent_transcript_minutes: int = 5
+    wake_chat_enabled: bool = True
+    wake_chat_bootstrap_enabled: bool = True
+    wake_chat_recent_limit: int = 30
+    wake_chat_recent_minutes: int = 15
+    wake_chat_same_text_dedupe_ms: int = 3000
+    wake_chat_max_message_chars: int = 1000
+    wake_chat_bot_sender_names: list[str] = field(
+        default_factory=lambda: ["カボス", "Kabosu", "kabosu", "Vexa Bot"]
+    )
+    wake_chat_empty_prompt: str = (
+        "呼ばれたよ。要約、整理、チャット内容の確認、次アクション出しができます。"
+    )
 
     max_speech_chars: int = 220
     bot_echo_cooldown_ms: int = 2000
@@ -229,6 +241,29 @@ class Settings:
             ),
             recent_transcript_minutes=_get_int(
                 "RECENT_TRANSCRIPT_MINUTES", cls.recent_transcript_minutes
+            ),
+            wake_chat_enabled=_get_bool("WAKE_CHAT_ENABLED", cls.wake_chat_enabled),
+            wake_chat_bootstrap_enabled=_get_bool(
+                "WAKE_CHAT_BOOTSTRAP_ENABLED", cls.wake_chat_bootstrap_enabled
+            ),
+            wake_chat_recent_limit=_get_int(
+                "WAKE_CHAT_RECENT_LIMIT", cls.wake_chat_recent_limit
+            ),
+            wake_chat_recent_minutes=_get_int(
+                "WAKE_CHAT_RECENT_MINUTES", cls.wake_chat_recent_minutes
+            ),
+            wake_chat_same_text_dedupe_ms=_get_int(
+                "WAKE_CHAT_SAME_TEXT_DEDUPE_MS",
+                cls.wake_chat_same_text_dedupe_ms,
+            ),
+            wake_chat_max_message_chars=_get_int(
+                "WAKE_CHAT_MAX_MESSAGE_CHARS", cls.wake_chat_max_message_chars
+            ),
+            wake_chat_bot_sender_names=_get_list(
+                "WAKE_CHAT_BOT_SENDER_NAMES", cls().wake_chat_bot_sender_names
+            ),
+            wake_chat_empty_prompt=os.getenv(
+                "WAKE_CHAT_EMPTY_PROMPT", cls.wake_chat_empty_prompt
             ),
             max_speech_chars=_get_int("MAX_SPEECH_CHARS", cls.max_speech_chars),
             bot_echo_cooldown_ms=_get_int("BOT_ECHO_COOLDOWN_MS", cls.bot_echo_cooldown_ms),

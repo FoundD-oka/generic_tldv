@@ -1,6 +1,16 @@
 import unittest
 
-from app.text import clean_for_tts, detect_wake, is_echo_of_bot, is_wake_only_text, normalize_ja
+from app.text import (
+    clean_for_tts,
+    contains_chat_wake,
+    detect_wake,
+    is_echo_of_bot,
+    is_wake_only_text,
+    normalize_chat_text,
+    normalize_ja,
+    redact_secrets,
+    strip_chat_wake,
+)
 
 
 WAKE_WORDS = ["カボス", "ねえカボス", "カボスさん", "かぼす", "カボちゃん", "カーブス"]
@@ -161,6 +171,26 @@ class TextTests(unittest.TestCase):
         self.assertTrue(
             is_echo_of_bot("現時点では、論点は三つです。", ["現時点では、論点は三つです。第一に範囲です。"])
         )
+
+    def test_chat_wake_uses_exact_typed_mentions(self):
+        self.assertTrue(contains_chat_wake("これカボス見て"))
+        self.assertTrue(contains_chat_wake("@kabosu summarize this"))
+        self.assertTrue(contains_chat_wake("かぼす、お願い"))
+        self.assertFalse(contains_chat_wake("かもしれない"))
+        self.assertFalse(contains_chat_wake("かばす、お願い"))
+
+    def test_strip_chat_wake_removes_exact_mentions(self):
+        self.assertEqual(strip_chat_wake("カボス、このURL見て"), "このURL見て")
+        self.assertEqual(strip_chat_wake("これカボス見て"), "これ見て")
+        self.assertEqual(strip_chat_wake("@kabosu summarize this"), "summarize this")
+
+    def test_normalize_chat_text_keeps_typed_semantics(self):
+        self.assertEqual(normalize_chat_text("  Ｋａｂｏｓｕ   test  "), "Kabosu test")
+
+    def test_redact_secrets_masks_obvious_credentials(self):
+        text = redact_secrets("Bearer abc.def sk-test123")
+        self.assertIn("Bearer [REDACTED]", text)
+        self.assertIn("[REDACTED_API_KEY]", text)
 
 
 if __name__ == "__main__":

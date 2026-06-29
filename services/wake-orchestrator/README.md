@@ -50,6 +50,14 @@ WAKE_RESPONSE_PLAYBACK_GUARD_MS=1000
 WAKE_SPEECH_EVENT_POLL_MS=1000
 WAKE_USE_PENDING_TRANSCRIPTS=true
 WAKE_USE_CONFIRMED_TRANSCRIPTS=false
+WAKE_CHAT_ENABLED=true
+WAKE_CHAT_BOOTSTRAP_ENABLED=true
+WAKE_CHAT_RECENT_LIMIT=30
+WAKE_CHAT_RECENT_MINUTES=15
+WAKE_CHAT_SAME_TEXT_DEDUPE_MS=3000
+WAKE_CHAT_MAX_MESSAGE_CHARS=1000
+WAKE_CHAT_BOT_SENDER_NAMES=カボス,Kabosu,kabosu,Vexa Bot
+WAKE_CHAT_EMPTY_PROMPT=呼ばれたよ。要約、整理、チャット内容の確認、次アクション出しができます。
 BOT_ECHO_COOLDOWN_MS=2000
 ```
 
@@ -58,6 +66,11 @@ Default wake words:
 ```env
 WAKE_WORDS=カボス,ねえカボス,カボスさん,かぼす,カボちゃん,カーブス
 ```
+
+Meet chat is also a first-class input channel. REST chat bootstrap is kept as
+context only, while real-time `chat.received` messages trigger Kabosu whenever
+typed text contains `カボス`, `かぼす`, or `kabosu`. Bot/self messages,
+duplicates, and short repeated same-text chat wakes are ignored to avoid loops.
 
 The orchestrator sends Aivis audio to Vexa as `audio_base64`, not text, so the
 meeting hears the configured Aivis voice. WAV is the default because it is more

@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0",
+  "task_id": "chat-context-integration",
+  "runtime_profile": "codex-app",
+  "size": "M",
+  "result": {
+    "at_pass": true,
+    "fp_pass": true,
+    "nft_pass": true,
+    "hd_resolved": true,
+    "blocking_findings": 0
+  },
+  "evidence": {
+    "session_ledger": ".pipeline/sessions/chat-context-integration/events.jsonl",
+    "verification": [
+      ".pipeline/evidence/chat-context-integration/test-results.md",
+      ".pipeline/gates/chat-context-integration/gates-summary.json"
+    ],
+    "review": [
+      ".pipeline/evidence/chat-context-integration/qa-judgment.json"
+    ]
+  },
+  "notes": [
+    "Typed chat now triggers Kabosu turns when it contains explicit Kabosu mentions.",
+    "REST chat bootstrap is stored as context without triggering historical turns.",
+    "Chat-originated turns reply through Vexa chat by default.",
+    "Voice-originated turns receive recent chat and shared URLs as LLM context.",
+    "Output routing supports explicit chat output and chat-plus-voice requests.",
+    "Obvious credentials are redacted from context before LLM use.",
+    "Compose now passes WAKE_CHAT settings into wake-orchestrator and the local Docker service was rebuilt and restarted."
+  ]
+}

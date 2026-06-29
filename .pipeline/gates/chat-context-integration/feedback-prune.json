@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-06-29T16:40:27.096881+00:00",
+  "status": "pass",
+  "required": false,
+  "ledger": "/Users/bonginkan-3-gouki/project/generic_tldv/.pipeline/feedback/ledger.jsonl",
+  "rule_count": 0,
+  "decision_counts": {},
+  "conflict_count": 0,
+  "conflicts": [],
+  "decisions": [],
+  "kept_rules": [],
+  "review_rules": [],
+  "pruned_rules": [],
+  "hint": ""
+}
