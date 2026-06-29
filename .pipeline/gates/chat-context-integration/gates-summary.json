@@ -1,0 +1,16 @@
+{
+  "task_id": "chat-context-integration",
+  "status": "pass",
+  "checks": [
+    "GitNexus impact checks for WakeOrchestrator, VexaClient, VexaTranscriptSubscriber, GroqClient.generate_reply, and Settings were LOW",
+    "wake-orchestrator unit tests pass",
+    "compileall pass",
+    "config check pass without fixed meeting id",
+    "compose wake profile config includes WAKE_CHAT defaults",
+    "docker build wake-orchestrator pass",
+    "docker up -d --no-deps wake-orchestrator pass",
+    "running wake-orchestrator container includes WAKE_CHAT env",
+    "detect-changes reviewed with unrelated pre-existing worktree changes noted",
+    "pr-ready-gate pass for chat-context-integration"
+  ]
+}

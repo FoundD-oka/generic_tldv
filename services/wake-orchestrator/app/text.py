@@ -10,6 +10,18 @@ from dataclasses import dataclass
 _PUNCT_RE = re.compile(r"[\s、。,.!?！？「」『』（）()【】\[\]〈〉<>:：;；]+")
 _MARKDOWN_RE = re.compile(r"[*#`>\-•]+")
 _LINK_RE = re.compile(r"\[(.*?)\]\(.*?\)")
+_CHAT_WAKE_RE = re.compile(r"@?(?:カボス|かぼす|kabosu)", re.IGNORECASE)
+_SECRET_PATTERNS = (
+    (re.compile(r"Bearer\s+[A-Za-z0-9._~+/=-]+", re.IGNORECASE), "Bearer [REDACTED]"),
+    (re.compile(r"sk-[A-Za-z0-9_-]+"), "[REDACTED_API_KEY]"),
+    (
+        re.compile(
+            r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----",
+            re.IGNORECASE,
+        ),
+        "[REDACTED_PRIVATE_KEY]",
+    ),
+)
 _KABOSU_VARIANT_RE = (
     r"(?:(?:カ|か|コ|こ)[ーｰ]?(?:ボ|ぼ|ポ|ぽ|ホ|ほ|バ|ば)[ーｰ]?(?:ス|す|ズ|ず|酢)"
     r"|株酢|ｶﾎﾞｽ|カボちゃん|かぼちゃん|カーブス|かーぶす|kabosu|kabos|kavos|koposu|kopos|qabo?s)"
@@ -36,6 +48,36 @@ def normalize_ja(text: str) -> str:
     normalized = re.sub(r"(ヴェクサ|ベクサー|ベクサ|vexa)", "vexa", normalized, flags=re.IGNORECASE)
     normalized = _PUNCT_RE.sub("", normalized)
     return normalized
+
+
+def normalize_chat_text(text: str) -> str:
+    """Normalize typed chat text without ASR-only Kabosu fuzziness."""
+
+    return re.sub(r"\s+", " ", unicodedata.normalize("NFKC", text)).strip()
+
+
+def contains_chat_wake(text: str) -> bool:
+    """Return true when typed chat explicitly mentions Kabosu."""
+
+    return bool(_CHAT_WAKE_RE.search(normalize_chat_text(text)))
+
+
+def strip_chat_wake(text: str) -> str:
+    """Remove explicit Kabosu wake mentions from a chat request."""
+
+    stripped = _CHAT_WAKE_RE.sub("", normalize_chat_text(text))
+    stripped = re.sub(r"^[\s、。,.!?！？:：;；]+", "", stripped)
+    stripped = re.sub(r"[\s、。,.!?！？:：;；]+$", "", stripped)
+    return re.sub(r"\s+", " ", stripped).strip()
+
+
+def redact_secrets(text: str) -> str:
+    """Mask obvious credentials before chat/transcript context leaves the service."""
+
+    redacted = text
+    for pattern, replacement in _SECRET_PATTERNS:
+        redacted = pattern.sub(replacement, redacted)
+    return redacted
 
 
 def is_wake_only_text(text: str) -> bool:

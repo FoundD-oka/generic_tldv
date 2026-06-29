@@ -1,0 +1,22 @@
+{
+  "timestamp": "2026-06-29T16:40:26.903711+00:00",
+  "status": "pass",
+  "diff_hash": "sha256:40cd131949e90dada9a5ad78080c9b78d52ac3bda4c32bb3f711a31fbe597b18",
+  "changed_files": [
+    "deploy/compose/docker-compose.yml",
+    "deploy/env-example",
+    "services/agent-api/agent_api/chat.py",
+    "services/agent-api/tests/test_chat.py",
+    "services/dashboard/src/app/api/ai/chat/route.ts",
+    "services/wake-orchestrator/README.md",
+    "services/wake-orchestrator/app/clients.py",
+    "services/wake-orchestrator/app/config.py",
+    "services/wake-orchestrator/app/orchestrator.py",
+    "services/wake-orchestrator/app/text.py",
+    "services/wake-orchestrator/tests/test_clients.py",
+    "services/wake-orchestrator/tests/test_orchestrator.py",
+    "services/wake-orchestrator/tests/test_text.py"
+  ],
+  "flags": [],
+  "blocks": []
+}

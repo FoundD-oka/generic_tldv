@@ -198,6 +198,63 @@ class ClientTests(unittest.IsolatedAsyncioTestCase):
         client = VexaClient(settings, httpx.AsyncClient(transport=httpx.MockTransport(handler)))
         await client.stop_speech()
 
+    async def test_vexa_client_reads_chat_messages(self):
+        async def handler(request: httpx.Request) -> httpx.Response:
+            self.assertEqual(request.method, "GET")
+            self.assertEqual(str(request.url), "http://vexa.test/bots/google_meet/abc-defg-hij/chat")
+            self.assertEqual(request.headers["X-API-Key"], "vexa-key")
+            return httpx.Response(
+                200,
+                json={
+                    "messages": [
+                        {
+                            "sender": "Alice",
+                            "text": "カボス、このURL見て",
+                            "timestamp": 1760000000000,
+                            "is_from_bot": False,
+                        }
+                    ],
+                    "meeting_id": 42,
+                },
+            )
+
+        settings = Settings(
+            vexa_api_url="http://vexa.test",
+            vexa_api_key="vexa-key",
+            vexa_native_meeting_id="abc-defg-hij",
+        )
+        client = VexaClient(settings, httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+
+        self.assertEqual(
+            await client.chat_messages(),
+            [
+                {
+                    "sender": "Alice",
+                    "text": "カボス、このURL見て",
+                    "timestamp": 1760000000000,
+                    "is_from_bot": False,
+                }
+            ],
+        )
+
+    async def test_vexa_client_sends_chat_message(self):
+        async def handler(request: httpx.Request) -> httpx.Response:
+            body = json.loads(request.content)
+            self.assertEqual(request.method, "POST")
+            self.assertEqual(str(request.url), "http://vexa.test/bots/google_meet/abc-defg-hij/chat")
+            self.assertEqual(request.headers["X-API-Key"], "vexa-key")
+            self.assertEqual(body, {"text": "カボス:\n了解です。"})
+            return httpx.Response(202, json={"meeting_id": 42})
+
+        settings = Settings(
+            vexa_api_url="http://vexa.test",
+            vexa_api_key="vexa-key",
+            vexa_native_meeting_id="abc-defg-hij",
+        )
+        client = VexaClient(settings, httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+
+        self.assertEqual(await client.send_chat("カボス:\n了解です。"), 42)
+
     async def test_vexa_client_lists_running_bots_as_meeting_refs(self):
         async def handler(request: httpx.Request) -> httpx.Response:
             self.assertEqual(str(request.url), "http://vexa.test/bots/status")

@@ -98,7 +98,30 @@ class GroqClient:
         self._settings = settings
         self._client = client or httpx.AsyncClient(timeout=settings.groq_timeout_seconds)
 
-    async def generate_reply(self, recent_transcript: str, wake_utterance: str) -> str:
+    async def generate_reply(
+        self,
+        recent_context: str,
+        wake_utterance: str,
+        *,
+        input_mode: str = "voice",
+        output_mode: str = "voice",
+    ) -> str:
+        if output_mode == "voice":
+            output_rule = (
+                "回答は15〜25秒以内に読み上げられる長さにしてください。"
+                "Markdown、表、長いURL、過剰な記号、SSMLタグは使わないでください。"
+            )
+        elif output_mode == "both":
+            output_rule = (
+                "チャットにも貼りやすく、口頭でも読める短い箇条書きにしてください。"
+                "長いURLは必要な場合だけそのまま残してください。"
+            )
+        else:
+            output_rule = (
+                "Meetチャット欄で読みやすいように、短い段落か箇条書きで答えてください。"
+                "長くても1000文字程度に収めてください。"
+            )
+
         payload: dict[str, Any] = {
             "model": self._settings.groq_model,
             "temperature": 0.2,
@@ -109,22 +132,35 @@ class GroqClient:
                 {
                     "role": "system",
                     "content": (
-                        "あなたは会議中に呼び出された音声アシスタント「カボス」です。"
+                        "あなたはGoogle Meet内の音声・チャットアシスタント「カボス」です。"
+                        "会議の音声文字起こし、Meetチャット欄、共有URL、抽出済みメモを使って、"
+                        "現在のユーザー依頼に答えてください。"
+                        "チャット欄は会議参加者が共有した正式な文脈です。"
+                        "音声とチャットが矛盾する場合は、より新しい情報を優先してください。"
+                        "URLや資料名は見えている範囲だけで扱ってください。"
+                        "実際に中身を取得していないURLを読んだと言わないでください。"
+                        "不明なことは断定せず、「現時点では」と言ってください。"
+                        "現在の依頼を最優先し、回答後に不要な確認質問をしないでください。"
                         "日本語で短く、会議の流れを止めないように答えてください。"
-                        "回答は15〜25秒以内に読み上げられる長さにしてください。"
+                        f"{output_rule}"
                         "最後は必ず完結した一文で終えてください。"
                         "「ご質問があれば」「必要であれば」のような接続待ちの文末で終わらないでください。"
-                        "不明な点は断定せず、「現時点では」と言ってください。"
-                        "Markdown、表、長いURL、過剰な記号、SSMLタグは使わないでください。"
                     ),
                 },
                 {
                     "role": "user",
                     "content": (
-                        "直近の会議内容:\n"
-                        f"{recent_transcript}\n\n"
-                        "呼び出し発話:\n"
+                        "[現在の依頼]\n"
+                        f"入力種別: {input_mode}\n"
+                        f"出力先: {output_mode}\n"
                         f"{wake_utterance}\n\n"
+                        "[会議コンテキスト]\n"
+                        f"{recent_context}\n\n"
+                        "[回答条件]\n"
+                        "- 現在の依頼に直接答える\n"
+                        "- チャット欄の情報を必要に応じて使う\n"
+                        "- URLの中身を取得していない場合は、URLそのものと周辺文脈だけを根拠にする\n"
+                        "- 回答後に不要な確認質問をしない\n\n"
                         "回答:"
                     ),
                 },
@@ -168,7 +204,9 @@ class GroqClient:
 
         if finish_reason == "length":
             logger.warning("Groq reply still ended by token limit after retry")
-        return clean_for_tts(str(text), self._settings.max_speech_chars)
+        if output_mode == "voice":
+            return clean_for_tts(str(text), self._settings.max_speech_chars)
+        return str(text).strip()
 
 
 class AivisCloudClient:
@@ -319,6 +357,52 @@ class VexaClient:
         data = response.json()
         events = data.get("events") if isinstance(data, dict) else []
         return [event for event in events if isinstance(event, dict)]
+
+    async def chat_messages(self, meeting: MeetingRef | None = None) -> list[dict[str, Any]]:
+        platform = meeting.platform if meeting else self._settings.vexa_platform
+        native_id = meeting.native_id if meeting else self._settings.vexa_native_meeting_id
+        if not native_id:
+            raise ValueError("A native meeting id is required to read chat messages")
+
+        response = await self._client.get(
+            (
+                f"{self._settings.vexa_api_url}/bots/"
+                f"{platform}/"
+                f"{native_id}/chat"
+            ),
+            headers={"X-API-Key": self._settings.vexa_api_key},
+        )
+        response.raise_for_status()
+        data = response.json()
+        messages = data.get("messages") if isinstance(data, dict) else []
+        return [message for message in messages if isinstance(message, dict)]
+
+    async def send_chat(self, text: str, meeting: MeetingRef | None = None) -> int | None:
+        platform = meeting.platform if meeting else self._settings.vexa_platform
+        native_id = meeting.native_id if meeting else self._settings.vexa_native_meeting_id
+        if not native_id:
+            raise ValueError("A native meeting id is required to send chat")
+
+        response = await self._client.post(
+            (
+                f"{self._settings.vexa_api_url}/bots/"
+                f"{platform}/"
+                f"{native_id}/chat"
+            ),
+            headers={
+                "X-API-Key": self._settings.vexa_api_key,
+                "Content-Type": "application/json",
+            },
+            json={"text": text},
+        )
+        response.raise_for_status()
+        try:
+            data = response.json()
+        except ValueError:
+            data = {}
+        if isinstance(data, dict):
+            return _to_int(data.get("meeting_id")) or (meeting.meeting_id if meeting else None)
+        return meeting.meeting_id if meeting else None
 
     async def wait_for_speech_to_finish(
         self,
@@ -485,7 +569,9 @@ class VexaTranscriptSubscriber:
             return message
 
         meeting = message.get("meeting")
-        meeting_id = _to_int(meeting.get("id")) if isinstance(meeting, dict) else None
+        meeting_id = _to_int(message.get("meeting_id"))
+        if meeting_id is None and isinstance(meeting, dict):
+            meeting_id = _to_int(meeting.get("id"))
         ref = self._meeting_refs_by_id.get(meeting_id) if meeting_id is not None else None
         if not ref and isinstance(meeting, dict):
             ref = MeetingRef.from_message(meeting)

@@ -1,0 +1,58 @@
+{
+  "timestamp": "2026-06-29T16:40:27.141790+00:00",
+  "task_id": "chat-context-integration",
+  "size": "M",
+  "status": "ready",
+  "checks": [
+    {
+      "check": "harness-residency",
+      "ok": true,
+      "detail": "status=pass"
+    },
+    {
+      "check": "preflight",
+      "ok": true,
+      "detail": "status=pass"
+    },
+    {
+      "check": "hd-gate",
+      "ok": true,
+      "detail": "unresolved=[]"
+    },
+    {
+      "check": "doc-staleness",
+      "ok": true,
+      "detail": "status=pass"
+    },
+    {
+      "check": "adapter-contract",
+      "ok": true,
+      "detail": "status=pass count=2"
+    },
+    {
+      "check": "feedback-prune",
+      "ok": true,
+      "detail": "status=pass required=False"
+    },
+    {
+      "check": "sml-decision",
+      "ok": true,
+      "detail": "size=M"
+    },
+    {
+      "check": "verification-contract",
+      "ok": true,
+      "detail": "/Users/bonginkan-3-gouki/project/generic_tldv/.pipeline/plans/chat-context-integration/verification-contract.md"
+    },
+    {
+      "check": "evidence-pack",
+      "ok": true,
+      "detail": "/Users/bonginkan-3-gouki/project/generic_tldv/.pipeline/evidence/chat-context-integration"
+    },
+    {
+      "check": "qa-judgment",
+      "ok": true,
+      "detail": "verdict=pass"
+    }
+  ]
+}

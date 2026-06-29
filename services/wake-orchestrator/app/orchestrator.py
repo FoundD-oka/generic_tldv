@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import importlib.resources
 import io
 import logging
+import re
 import time
 import uuid
 import wave
@@ -21,7 +23,16 @@ import httpx
 
 from .clients import MeetingRef, TtsResult, VexaClient
 from .config import Settings
-from .text import clean_for_tts, detect_wake, is_echo_of_bot, normalize_ja
+from .text import (
+    clean_for_tts,
+    contains_chat_wake,
+    detect_wake,
+    is_echo_of_bot,
+    normalize_chat_text,
+    normalize_ja,
+    redact_secrets,
+    strip_chat_wake,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +69,21 @@ class TranscriptSegment:
 
 
 @dataclass
+class ChatMessage:
+    id: str
+    sender: str
+    normalized_sender: str
+    text: str
+    normalized_text: str
+    timestamp_ms: int
+    received_at_ms: int
+    source: str
+    is_from_bot: bool = False
+    has_wake_word: bool = False
+    consumed_turn_id: str | None = None
+
+
+@dataclass
 class PendingWake:
     wake: str
     speaker: str
@@ -84,6 +110,9 @@ class WakeOrchestrator:
         self.meeting = meeting
         self.state = WakeState.IDLE
         self._recent_transcript: Deque[tuple[float, str, str]] = deque(maxlen=800)
+        self._recent_chat: Deque[ChatMessage] = deque(maxlen=max(settings.wake_chat_recent_limit, 1))
+        self._chat_by_id: dict[str, ChatMessage] = {}
+        self._recent_chat_texts: Deque[tuple[float, str, str]] = deque(maxlen=80)
         self._recent_bot_texts: Deque[tuple[float, str]] = deque(maxlen=20)
         self._recent_wake_segment_keys: Deque[tuple[float, str]] = deque(maxlen=80)
         self._recent_stabilized_wakes: Deque[tuple[float, str, str]] = deque(maxlen=30)
@@ -95,9 +124,18 @@ class WakeOrchestrator:
         self._wake_ack_audio: TtsResult | None = None
         self._pending_wake: PendingWake | None = None
         self._pending_wake_task: asyncio.Task[None] | None = None
+        self._chat_bootstrapped = False
 
     async def handle_message(self, message: dict[str, Any]) -> None:
-        message_type = message.get("type")
+        message_type = str(message.get("type") or message.get("event") or "")
+        if message_type in {"chat.received", "chat.sent"}:
+            await self.bootstrap_chat_context()
+            await self._handle_chat_event(message, message_type)
+            return
+        if message_type == "chat.messages":
+            self.ingest_chat_messages(message.get("messages") or [], source="ws_chat_messages")
+            return
+        await self.bootstrap_chat_context()
         if message_type in {"command.partial", "command.final"}:
             await self._handle_command_message(message)
             return
@@ -123,6 +161,198 @@ class WakeOrchestrator:
                                 _short_log_text(remaining.text),
                             )
                 break
+
+    async def bootstrap_chat_context(self) -> None:
+        if self._chat_bootstrapped or not self.settings.wake_chat_bootstrap_enabled:
+            return
+        self._chat_bootstrapped = True
+        try:
+            messages = await self.vexa.chat_messages(self.meeting)
+        except Exception as exc:
+            logger.info("Chat bootstrap skipped: %s", exc)
+            return
+        stored = self.ingest_chat_messages(messages, source="rest_bootstrap")
+        if stored:
+            logger.info("Chat bootstrap stored messages=%d meeting=%s", stored, _meeting_log_key(self.meeting))
+
+    def ingest_chat_messages(self, messages: list[Any], *, source: str) -> int:
+        stored = 0
+        for raw in messages:
+            if not isinstance(raw, dict):
+                continue
+            message = self._chat_message_from_raw(raw, source=source)
+            _, is_new = self._store_chat_message(message)
+            if is_new:
+                stored += 1
+        return stored
+
+    async def _handle_chat_event(self, raw: dict[str, Any], message_type: str) -> None:
+        source = "ws_chat_sent" if message_type == "chat.sent" else "ws_chat_received"
+        incoming = self._chat_message_from_raw(raw, source=source)
+        message, is_new = self._store_chat_message(incoming)
+
+        should_allow_bootstrap_replay = (
+            not is_new
+            and source == "ws_chat_received"
+            and message.source == "rest_bootstrap"
+            and not message.consumed_turn_id
+        )
+        if not is_new and not should_allow_bootstrap_replay:
+            logger.info(
+                "Ignoring duplicate chat message sender=%s source=%s id=%s",
+                message.sender,
+                source,
+                message.id[:12],
+            )
+            return
+
+        if source == "ws_chat_sent":
+            return
+
+        await self._maybe_answer_chat(message)
+
+    def _chat_message_from_raw(self, raw: dict[str, Any], *, source: str) -> ChatMessage:
+        received_at_ms = int(time.time() * 1000)
+        text = str(raw.get("text") or raw.get("message") or "").strip()
+        sender = str(raw.get("sender") or ("カボス" if source == "ws_chat_sent" else "Unknown")).strip()
+        timestamp_ms = (
+            _coerce_ms(raw.get("timestamp"))
+            or _coerce_ms(raw.get("timestamp_ms"))
+            or _coerce_ms(raw.get("ts"))
+            or received_at_ms
+        )
+        normalized_sender = normalize_ja(sender) or normalize_chat_text(sender).lower()
+        normalized_text = normalize_chat_text(text)
+        is_from_bot = source == "ws_chat_sent" or _coerce_bool(raw.get("is_from_bot"))
+        has_wake_word = contains_chat_wake(text)
+        message_id = _chat_message_id(
+            meeting_key=_meeting_log_key(self.meeting)
+            if self.meeting
+            else f"{self.settings.vexa_platform}:{self.settings.vexa_native_meeting_id or 'default'}",
+            sender=normalized_sender,
+            text=normalized_text,
+            timestamp_ms=timestamp_ms,
+        )
+        return ChatMessage(
+            id=message_id,
+            sender=sender or "Unknown",
+            normalized_sender=normalized_sender,
+            text=text,
+            normalized_text=normalized_text,
+            timestamp_ms=timestamp_ms,
+            received_at_ms=received_at_ms,
+            source=source,
+            is_from_bot=is_from_bot,
+            has_wake_word=has_wake_word,
+        )
+
+    def _store_chat_message(self, message: ChatMessage) -> tuple[ChatMessage, bool]:
+        existing = self._chat_by_id.get(message.id)
+        if existing:
+            existing.is_from_bot = existing.is_from_bot or message.is_from_bot
+            existing.has_wake_word = existing.has_wake_word or message.has_wake_word
+            return existing, False
+
+        self._chat_by_id[message.id] = message
+        self._recent_chat.append(message)
+        self._trim_recent_chat()
+        return message, True
+
+    async def _maybe_answer_chat(self, message: ChatMessage) -> None:
+        if not self.settings.wake_chat_enabled:
+            return
+        if message.consumed_turn_id:
+            return
+        if self._is_bot_chat_message(message):
+            logger.info("Ignoring bot chat message sender=%s text=%s", message.sender, _short_log_text(message.text))
+            return
+        if not message.has_wake_word:
+            return
+
+        now = time.monotonic()
+        if self._is_recent_chat_text_duplicate(now, message):
+            logger.info(
+                "Ignoring repeated chat wake sender=%s text=%s",
+                message.sender,
+                _short_log_text(message.text),
+            )
+            return
+        if self.state != WakeState.IDLE:
+            logger.info(
+                "Ignoring chat wake while busy state=%s sender=%s text=%s",
+                self.state,
+                message.sender,
+                _short_log_text(message.text),
+            )
+            return
+
+        turn_id = f"chat-{uuid.uuid4().hex}"
+        message.consumed_turn_id = turn_id
+        self._remember_chat_text(now, message)
+        utterance = strip_chat_wake(message.text) or self.settings.wake_chat_empty_prompt
+        output_mode = _chat_output_mode(utterance)
+        logger.info(
+            "Chat wake accepted: turn=%s sender=%s output=%s text=%s",
+            turn_id,
+            message.sender,
+            output_mode,
+            _short_log_text(utterance),
+        )
+        await self._answer_chat(message, utterance, output_mode=output_mode)
+
+    async def _answer_chat(self, message: ChatMessage, utterance: str, *, output_mode: str) -> None:
+        if self.groq is None:
+            logger.error("Chat wake detected but Groq client is not configured")
+            await self._send_chat_reply("カボス:\n処理中に失敗しました。もう一度送ってください。")
+            return
+        if output_mode in {"voice", "both"} and self.aivis is None:
+            logger.error("Chat wake requested voice output but Aivis client is not configured")
+            await self._send_chat_reply("カボス:\n音声出力の準備ができていません。チャットで返します。")
+            output_mode = "chat"
+
+        try:
+            self.state = WakeState.THINKING
+            context = self.assistant_context_text(current_chat=message)
+            reply = await self._with_one_retry(
+                lambda: self.groq.generate_reply(
+                    context,
+                    utterance,
+                    input_mode="chat",
+                    output_mode=output_mode,
+                ),
+                label="Groq chat reply",
+            )
+            reply = reply.strip()
+            if not reply:
+                logger.warning("Groq returned an empty chat reply sender=%s", message.sender)
+                return
+
+            self.state = WakeState.SPEAKING if output_mode == "both" else WakeState.THINKING
+            await self._send_chat_reply(_format_chat_reply(reply))
+
+            if output_mode == "both":
+                assert self.aivis is not None
+                voice_reply = clean_for_tts(reply, self.settings.max_speech_chars)
+                audio = await self._with_one_retry(
+                    lambda: self.aivis.synthesize(voice_reply),
+                    label="Aivis synthesize chat reply",
+                )
+                self._recent_bot_texts.append((time.monotonic(), voice_reply))
+                self._last_bot_speak_at = time.monotonic()
+                request_id = f"chat-reply-{uuid.uuid4().hex}"
+                await self._with_one_retry(
+                    lambda: self.vexa.speak_audio(audio, self.meeting, request_id=request_id),
+                    label="Vexa chat reply speak",
+                )
+        except Exception:
+            logger.exception("Chat answer failed")
+            try:
+                await self._send_chat_reply("カボス:\n処理中に失敗しました。もう一度送ってください。")
+            except Exception:
+                logger.exception("Chat failure notice could not be sent")
+        finally:
+            self.state = WakeState.COOLDOWN
+            await self._cooldown()
 
     async def handle_segment(self, segment: TranscriptSegment) -> bool:
         now = time.monotonic()
@@ -255,6 +485,41 @@ class WakeOrchestrator:
     def recent_transcript_text(self) -> str:
         self._trim_recent()
         return "\n".join(f"{speaker}: {text}" for _, speaker, text in self._recent_transcript)[-5000:]
+
+    def recent_chat_text(self, current_chat: ChatMessage | None = None) -> str:
+        self._trim_recent_chat()
+        messages = list(self._recent_chat)
+        if current_chat and all(message.id != current_chat.id for message in messages):
+            messages.append(current_chat)
+        lines = []
+        for message in messages[-self.settings.wake_chat_recent_limit :]:
+            sender = message.sender or "Unknown"
+            source = "bot" if self._is_bot_chat_message(message) else "participant"
+            text = redact_secrets(message.text)
+            lines.append(f"{sender} ({source}, {message.source}): {text}")
+        return "\n".join(lines)[-5000:]
+
+    def assistant_context_text(self, current_chat: ChatMessage | None = None) -> str:
+        transcript = self.recent_transcript_text()
+        chat = self.recent_chat_text(current_chat)
+        urls = _extract_urls("\n".join(message.text for message in self._recent_chat))
+        sections = [
+            "[直近の音声文字起こし]\n" + (redact_secrets(transcript) if transcript else "(なし)"),
+            "[直近のチャット]\n" + (chat if chat else "(なし)"),
+        ]
+        if urls:
+            sections.append(
+                "[共有URL]\n"
+                + "\n".join(f"- {redact_secrets(url)} (リンク先本文は未取得)" for url in urls[-10:])
+            )
+        return "\n\n".join(sections)[-9000:]
+
+    async def _send_chat_reply(self, text: str) -> None:
+        for chunk in _split_chat_text(text, self.settings.wake_chat_max_message_chars):
+            await self._with_one_retry(
+                lambda chunk=chunk: self.vexa.send_chat(chunk, self.meeting),
+                label="Vexa chat send",
+            )
 
     def _log_wake_timing(self, segment: TranscriptSegment) -> None:
         audio_end_ms = _timestamp_ms(segment.absolute_end_time)
@@ -589,8 +854,14 @@ class WakeOrchestrator:
             await asyncio.gather(pending_task, return_exceptions=True)
 
     async def _answer(self, wake: str, speaker: str, utterance: str, *, play_ack: bool = True) -> None:
-        if self.groq is None or self.aivis is None:
-            logger.error("Wake detected but Groq/Aivis clients are not configured")
+        if self.groq is None:
+            logger.error("Wake detected but Groq client is not configured")
+            self.state = WakeState.COOLDOWN
+            await self._cooldown()
+            return
+        output_mode = _voice_output_mode(utterance)
+        if output_mode in {"voice", "both"} and self.aivis is None:
+            logger.error("Wake detected but Aivis client is not configured")
             self.state = WakeState.COOLDOWN
             await self._cooldown()
             return
@@ -602,20 +873,37 @@ class WakeOrchestrator:
 
             self.state = WakeState.THINKING
             reply = await self._with_one_retry(
-                lambda: self.groq.generate_reply(self.recent_transcript_text(), utterance),
+                lambda: self.groq.generate_reply(
+                    self.assistant_context_text(),
+                    utterance,
+                    input_mode="voice",
+                    output_mode=output_mode,
+                ),
                 label="Groq reply",
             )
-            reply = clean_for_tts(reply, self.settings.max_speech_chars)
             if not reply:
                 logger.warning("Groq returned an empty reply for wake=%s speaker=%s", wake, speaker)
                 return
 
+            if output_mode in {"chat", "both"}:
+                await self._send_chat_reply(_format_chat_reply(reply))
+                if output_mode == "chat":
+                    logger.info(
+                        "Wake reply sent to chat: wake=%s speaker=%s chars=%d",
+                        wake,
+                        speaker,
+                        len(reply),
+                    )
+                    return
+
+            voice_reply = clean_for_tts(reply, self.settings.max_speech_chars)
             self.state = WakeState.SYNTHESIZING
+            assert self.aivis is not None
             audio = await self._with_one_retry(
-                lambda: self.aivis.synthesize(reply),
+                lambda: self.aivis.synthesize(voice_reply),
                 label="Aivis synthesize",
             )
-            self._recent_bot_texts.append((time.monotonic(), reply))
+            self._recent_bot_texts.append((time.monotonic(), voice_reply))
 
             self.state = WakeState.SPEAKING
             self._last_bot_speak_at = time.monotonic()
@@ -631,7 +919,7 @@ class WakeOrchestrator:
                 "Wake reply sent: wake=%s speaker=%s chars=%d audio_bytes=%d request_id=%s event_timeout_ms=%d",
                 wake,
                 speaker,
-                len(reply),
+                len(voice_reply),
                 len(audio.audio),
                 request_id,
                 int(event_timeout_seconds * 1000),
@@ -805,6 +1093,117 @@ class WakeOrchestrator:
         bot_cutoff = time.monotonic() - 120
         while self._recent_bot_texts and self._recent_bot_texts[0][0] < bot_cutoff:
             self._recent_bot_texts.popleft()
+
+    def _trim_recent_chat(self) -> None:
+        cutoff = int((time.time() - self.settings.wake_chat_recent_minutes * 60) * 1000)
+        while self._recent_chat and self._recent_chat[0].received_at_ms < cutoff:
+            old = self._recent_chat.popleft()
+            self._chat_by_id.pop(old.id, None)
+        while len(self._recent_chat) > max(self.settings.wake_chat_recent_limit, 1):
+            old = self._recent_chat.popleft()
+            self._chat_by_id.pop(old.id, None)
+
+    def _is_bot_chat_message(self, message: ChatMessage) -> bool:
+        if message.is_from_bot:
+            return True
+        bot_names = {normalize_ja(name) or normalize_chat_text(name).lower() for name in self.settings.wake_chat_bot_sender_names}
+        return message.normalized_sender in bot_names
+
+    def _is_recent_chat_text_duplicate(self, now: float, message: ChatMessage) -> bool:
+        window_seconds = max(self.settings.wake_chat_same_text_dedupe_ms, 0) / 1000
+        if window_seconds <= 0:
+            return False
+        cutoff = now - window_seconds
+        while self._recent_chat_texts and self._recent_chat_texts[0][0] < cutoff:
+            self._recent_chat_texts.popleft()
+        return any(
+            sender == message.normalized_sender and text == message.normalized_text
+            for _, sender, text in self._recent_chat_texts
+        )
+
+    def _remember_chat_text(self, now: float, message: ChatMessage) -> None:
+        self._recent_chat_texts.append((now, message.normalized_sender, message.normalized_text))
+
+
+def _chat_message_id(*, meeting_key: str, sender: str, text: str, timestamp_ms: int) -> str:
+    rounded_timestamp = int(timestamp_ms / 1000) * 1000
+    raw = "|".join([meeting_key, sender, text, str(rounded_timestamp)])
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _chat_output_mode(text: str) -> str:
+    if re.search(r"(声で|口頭で|読み上げて|みんなに話して)", text):
+        return "both"
+    return "chat"
+
+
+def _voice_output_mode(text: str) -> str:
+    if re.search(r"チャットにも(?:貼って|送って|返して|共有して|書いて)?", text):
+        return "both"
+    if re.search(
+        r"(チャットで(?:返して|回答して|送って|教えて)|(?:チャットに|チャットへ)(?:貼って|送って|共有して|書いて|返して)|テキストで返して)",
+        text,
+    ):
+        return "chat"
+    return "voice"
+
+
+def _format_chat_reply(text: str) -> str:
+    stripped = text.strip()
+    if not stripped:
+        return "カボス:\n現時点では、返答できる内容がありません。"
+    if stripped.startswith("カボス:") or stripped.startswith("カボス："):
+        return stripped
+    return f"カボス:\n{stripped}"
+
+
+def _split_chat_text(text: str, max_chars: int) -> list[str]:
+    limit = max(max_chars, 200)
+    if len(text) <= limit:
+        return [text]
+
+    chunks: list[str] = []
+    remaining = text.strip()
+    while remaining:
+        if len(remaining) <= limit:
+            chunks.append(remaining)
+            break
+        boundary = max(
+            remaining.rfind("\n", 0, limit),
+            remaining.rfind("。", 0, limit),
+            remaining.rfind("、", 0, limit),
+            remaining.rfind(" ", 0, limit),
+        )
+        if boundary < int(limit * 0.5):
+            boundary = limit
+        chunks.append(remaining[:boundary].strip())
+        remaining = remaining[boundary:].strip()
+    return [chunk for chunk in chunks if chunk]
+
+
+def _extract_urls(text: str) -> list[str]:
+    seen: set[str] = set()
+    urls: list[str] = []
+    for match in re.findall(r"https?://[^\s<>\]\)\"']+", text):
+        url = match.rstrip("、。,.!?！？")
+        if url and url not in seen:
+            seen.add(url)
+            urls.append(url)
+    return urls
+
+
+def _meeting_log_key(meeting: MeetingRef | None) -> str:
+    if meeting:
+        return meeting.key
+    return "default"
+
+
+def _coerce_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
 
 
 def _new_segment_text(previous: str | None, current: str) -> str:

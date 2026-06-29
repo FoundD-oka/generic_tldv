@@ -1,0 +1,7 @@
+{
+  "task": "chat-context-integration",
+  "size": "M",
+  "reason": "Adds a first-class chat input route to the wake runtime and changes LLM context construction.",
+  "plan": ".pipeline/plans/chat-context-integration/plan.md",
+  "verification_contract": ".pipeline/plans/chat-context-integration/verification-contract.md"
+}
