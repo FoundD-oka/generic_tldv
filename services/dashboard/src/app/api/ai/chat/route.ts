@@ -1,6 +1,7 @@
 import { streamText } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createAnthropic } from "@ai-sdk/anthropic";
+import { buildKabosuTranscriptSystemPrompt } from "@/lib/kabosu-persona";
 
 export const runtime = "nodejs";
 
@@ -118,20 +119,6 @@ function getModel() {
   }
 }
 
-const SYSTEM_PROMPT = `You are a helpful AI assistant specialized in analyzing meeting transcripts and conversations. You help users find information, summarize discussions, identify action items, and answer questions based on the transcript content provided.
-
-Guidelines:
-- Always respond in the same language as the user's message
-- Answer questions based on the transcript context provided
-- If the answer is not in the transcripts, clearly state that
-- When referencing specific parts of conversations, mention the speaker's name when available
-- Be concise but thorough
-- Format responses with markdown for readability
-- When asked to summarize, focus on key points, decisions, and action items
-
-Available transcript context:
-`;
-
 interface UIMessagePart {
   type: string;
   text?: string;
@@ -188,10 +175,8 @@ export async function POST(request: Request) {
     const body: ChatRequest = await request.json();
     const { messages, context } = body;
 
-    // Build the full system prompt with context
-    const systemPrompt = context
-      ? `${SYSTEM_PROMPT}\n\n${context}`
-      : SYSTEM_PROMPT + "\n\nNo transcript context available. You can still help with general questions.";
+    // Build the full system prompt with Kabosu persona before transcript context.
+    const systemPrompt = buildKabosuTranscriptSystemPrompt(context);
 
     const model = getModel();
 
