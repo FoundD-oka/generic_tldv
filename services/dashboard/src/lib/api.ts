@@ -342,8 +342,11 @@ export const vexaAPI = {
     return mapMeeting(raw);
   },
 
-  async deleteMeeting(platform: Platform, nativeId: string): Promise<void> {
-    const response = await fetch(withBasePath(`/api/vexa/meetings/${platform}/${nativeId}`), {
+  async deleteMeeting(platform: Platform, nativeId: string, meetingId?: string): Promise<void> {
+    const params = new URLSearchParams();
+    if (meetingId) params.set("meeting_id", String(meetingId));
+    const query = params.toString();
+    const response = await fetch(withBasePath(`/api/vexa/meetings/${platform}/${nativeId}${query ? `?${query}` : ""}`), {
       method: "DELETE",
     });
     if (!response.ok) {

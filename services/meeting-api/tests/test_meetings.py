@@ -6,11 +6,12 @@ verifies Runtime API delegation via httpx mocks.
 
 import json
 from datetime import datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from meeting_api.schemas import MeetingStatus, MeetingResponse, BotStatusResponse
+from meeting_api.schemas import MeetingStatus, MeetingResponse, BotStatusResponse, Platform
 
 from .conftest import (
     TEST_USER_ID,
@@ -228,6 +229,45 @@ class TestDeferredTranscription:
 
         assert resp.status_code == 409
         assert "already transcribed" in resp.json()["detail"]
+
+
+class TestDeleteMeetingArtifacts:
+
+    @pytest.mark.asyncio
+    async def test_delete_meeting_uses_specific_meeting_id_when_provided(self, mock_db):
+        """DELETE /meetings can target the exact meeting row, not just latest native ID."""
+        from meeting_api.collector.endpoints import delete_meeting
+
+        meeting = make_meeting(id=77, status=MeetingStatus.FAILED.value)
+        mock_db.execute = AsyncMock(side_effect=[
+            MockResult([meeting]),
+            MockResult([]),
+        ])
+        request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(redis_client=None)))
+
+        with patch(
+            "meeting_api.collector.endpoints._purge_recordings_for_meeting",
+            new_callable=AsyncMock,
+            return_value={
+                "model_recordings_deleted": 0,
+                "storage_files_deleted": 0,
+                "storage_files_targeted": 0,
+            },
+        ):
+            response = await delete_meeting(
+                platform=Platform.GOOGLE_MEET,
+                native_meeting_id=TEST_NATIVE_MEETING_ID,
+                request=request,
+                meeting_id=77,
+                current_user=make_user(),
+                db=mock_db,
+            )
+
+        assert "transcripts and recording artifacts deleted" in response["message"]
+        first_stmt = mock_db.execute.await_args_list[0].args[0]
+        assert "meetings.id = :id_1" in str(first_stmt)
+        assert meeting.platform_specific_id is None
+        assert meeting.data["redacted"] is True
 
 
 # ===================================================================

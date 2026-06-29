@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AppLayout } from "@/components/layout/app-layout";
+import { DocumentTitle } from "@/components/layout/document-title";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { withBasePath } from "@/lib/base-path";
 import { resolveDashboardBrand } from "@/lib/dashboard-brand";
@@ -59,6 +60,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <TooltipProvider delayDuration={0}>
+            <DocumentTitle />
             <AppLayout>{children}</AppLayout>
           </TooltipProvider>
         </ThemeProvider>
