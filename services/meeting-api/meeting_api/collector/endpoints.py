@@ -532,6 +532,7 @@ async def delete_meeting(
     platform: Platform,
     native_meeting_id: str,
     request: Request,
+    meeting_id: Optional[int] = Query(None, description="Specific internal meeting ID to delete."),
     current_user: UserProxy = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -540,26 +541,45 @@ async def delete_meeting(
     Only allows deletion for meetings in finalized states (completed, failed).
     """
 
-    stmt = select(Meeting).where(
-        Meeting.user_id == current_user.id,
-        Meeting.platform == platform.value,
-        Meeting.platform_specific_id == native_meeting_id
-    ).order_by(Meeting.created_at.desc())
+    if meeting_id is not None:
+        stmt = select(Meeting).where(
+            Meeting.user_id == current_user.id,
+            Meeting.platform == platform.value,
+            Meeting.id == meeting_id,
+        )
+    else:
+        stmt = select(Meeting).where(
+            Meeting.user_id == current_user.id,
+            Meeting.platform == platform.value,
+            Meeting.platform_specific_id == native_meeting_id,
+        ).order_by(Meeting.created_at.desc())
 
     result = await db.execute(stmt)
     meeting = result.scalars().first()
 
     if not meeting:
+        target_detail = (
+            f"meeting ID {meeting_id} for platform {platform.value} and ID {native_meeting_id}"
+            if meeting_id is not None
+            else f"platform {platform.value} and ID {native_meeting_id}"
+        )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Meeting not found for platform {platform.value} and ID {native_meeting_id}"
+            detail=f"Meeting not found for {target_detail}"
         )
 
     internal_meeting_id = meeting.id
     original_data = dict(meeting.data or {})
+    is_redacted = bool(meeting.data and meeting.data.get('redacted'))
+
+    if meeting_id is not None and meeting.platform_specific_id != native_meeting_id and not is_redacted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Meeting not found for meeting ID {meeting_id}, platform {platform.value}, and ID {native_meeting_id}"
+        )
 
     # Check if already redacted (idempotency)
-    if meeting.data and meeting.data.get('redacted'):
+    if is_redacted:
         logger.info(f"[API] Meeting {internal_meeting_id} already redacted, returning success")
         return {"message": f"Meeting {platform.value}/{native_meeting_id} artifacts already deleted and data anonymized"}
 

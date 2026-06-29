@@ -357,7 +357,7 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
   },
 
   deleteMeeting: async (platform: Platform, nativeId: string, meetingId?: string) => {
-    await vexaAPI.deleteMeeting(platform, nativeId);
+    await vexaAPI.deleteMeeting(platform, nativeId, meetingId);
 
     const targetId = meetingId ? String(meetingId) : null;
     const { meetings, currentMeeting } = get();
