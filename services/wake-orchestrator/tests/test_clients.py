@@ -318,6 +318,59 @@ class ClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(subscriber._meeting_refs_by_id[14].key, "google_meet:abc-defg-hij")
         self.assertNotIn(13, subscriber._meeting_refs_by_id)
 
+    def test_transcript_subscriber_normalizes_realtime_chat_event(self):
+        settings = Settings(vexa_api_key="vexa-key", wake_auto_discover_bots=True)
+        subscriber = VexaTranscriptSubscriber(settings, None)
+        subscriber._meeting_refs_by_id[42] = MeetingRef(
+            platform="google_meet",
+            native_id="abc-defg-hij",
+            meeting_id=42,
+        )
+
+        message = subscriber._enrich_message(
+            {
+                "type": "chat.new_message",
+                "meeting": {"id": 42},
+                "payload": {
+                    "sender": "Alice",
+                    "text": "カボス自己紹介して",
+                    "timestamp": 1760000000000,
+                    "is_from_bot": False,
+                },
+            }
+        )
+
+        self.assertEqual(message["type"], "chat.received")
+        self.assertEqual(message["event"], "chat.received")
+        self.assertEqual(message["sender"], "Alice")
+        self.assertEqual(message["text"], "カボス自己紹介して")
+        self.assertFalse(message["is_from_bot"])
+        self.assertEqual(
+            message["_wake_meeting"],
+            {"platform": "google_meet", "native_id": "abc-defg-hij", "meeting_id": 42},
+        )
+
+    def test_transcript_subscriber_marks_bot_chat_as_sent(self):
+        settings = Settings(vexa_api_key="vexa-key", wake_auto_discover_bots=True)
+        subscriber = VexaTranscriptSubscriber(settings, None)
+
+        message = subscriber._enrich_message(
+            {
+                "type": "chat.new_message",
+                "meeting": {"platform": "google_meet", "native_id": "abc-defg-hij"},
+                "payload": {
+                    "sender": "カボス",
+                    "text": "カボス:\n了解です。",
+                    "timestamp": 1760000000000,
+                    "is_from_bot": True,
+                },
+            }
+        )
+
+        self.assertEqual(message["type"], "chat.sent")
+        self.assertEqual(message["event"], "chat.sent")
+        self.assertTrue(message["is_from_bot"])
+
     def test_wake_stt_ws_url_uses_ws_path_and_token(self):
         self.assertEqual(
             _wake_stt_ws_url("http://wake-stt:8058", "secret"),
