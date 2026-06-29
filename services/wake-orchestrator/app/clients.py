@@ -77,6 +77,14 @@ def _to_int(value: Any) -> int | None:
         return None
 
 
+def _to_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+    return bool(value)
+
+
 def _ws_url(api_url: str, api_key: str) -> str:
     parsed = urlparse(api_url)
     scheme = "wss" if parsed.scheme == "https" else "ws"
@@ -565,6 +573,7 @@ class VexaTranscriptSubscriber:
         logger.info("Subscribed to Vexa meetings: %s", [ref.key for ref in new_refs])
 
     def _enrich_message(self, message: dict[str, Any]) -> dict[str, Any]:
+        message = self._normalize_chat_event(message)
         if MeetingRef.from_message(message.get("_wake_meeting")):
             return message
 
@@ -587,6 +596,30 @@ class VexaTranscriptSubscriber:
         enriched = dict(message)
         enriched["_wake_meeting"] = ref.as_message_value()
         return enriched
+
+    def _normalize_chat_event(self, message: dict[str, Any]) -> dict[str, Any]:
+        message_type = str(message.get("type") or message.get("event") or "")
+        if message_type not in {"chat.new_message", "chat_message"}:
+            return message
+
+        payload = message.get("payload") if isinstance(message.get("payload"), dict) else message
+        is_from_bot = _to_bool(payload.get("is_from_bot") or payload.get("isFromBot"))
+        normalized_type = "chat.sent" if is_from_bot else "chat.received"
+        normalized = dict(message)
+        normalized.update(
+            {
+                "type": normalized_type,
+                "event": normalized_type,
+                "sender": payload.get("sender") or message.get("sender"),
+                "text": payload.get("text") or payload.get("message") or message.get("text") or "",
+                "timestamp": payload.get("timestamp")
+                or payload.get("timestamp_ms")
+                or message.get("timestamp")
+                or message.get("ts"),
+                "is_from_bot": is_from_bot,
+            }
+        )
+        return normalized
 
     async def messages(self):
         url = _ws_url(self._settings.vexa_api_url, self._settings.vexa_api_key or "")
