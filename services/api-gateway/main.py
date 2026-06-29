@@ -554,6 +554,16 @@ async def speak_stop_proxy(platform: Platform, native_meeting_id: str, request: 
     url = f"{MEETING_API_URL}/bots/{platform.value}/{native_meeting_id}/speak"
     return await forward_request(app.state.http_client, "DELETE", url, request)
 
+@app.get("/bots/{platform}/{native_meeting_id}/events",
+         tags=["Voice Agent"],
+         summary="Read recent bot voice events",
+         description="Returns recent voice agent playback events for a meeting.",
+         dependencies=[Depends(api_key_scheme)])
+async def voice_events_proxy(platform: Platform, native_meeting_id: str, request: Request):
+    """Forward voice event reads to Bot Manager."""
+    url = f"{MEETING_API_URL}/bots/{platform.value}/{native_meeting_id}/events"
+    return await forward_request(app.state.http_client, "GET", url, request)
+
 @app.post("/bots/{platform}/{native_meeting_id}/chat",
           tags=["Voice Agent"],
           summary="Send a chat message in the meeting",

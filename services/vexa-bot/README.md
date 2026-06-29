@@ -228,7 +228,7 @@ redis-cli PUBLISH bot_commands:meeting:123 '{"action":"speak_audio","audio_base6
 
 `speak` calls the local Vexa TTS service (`TTS_SERVICE_URL`) and streams Piper PCM into `tts_sink`. `voice: "auto"` chooses a prepared Piper voice based on the text language; explicit Piper names and OpenAI-style aliases are accepted by the TTS service.
 
-`speak_audio` bypasses synthesis. The bot decodes `audio_url` or `audio_base64` with ffmpeg and plays the resulting audio through the same `tts_sink` / `virtual_mic` path. The bot unmutes before playback and re-mutes after completion or interruption.
+`speak_audio` bypasses synthesis. The bot decodes `audio_url` or `audio_base64` with ffmpeg and plays the resulting audio through the same `tts_sink` / `virtual_mic` path. The bot opens the meeting mic before playback; duplicate responses are suppressed by the wake/session layer, while PulseAudio is muted after playback as audio-path cleanup.
 
 Status callbacks via HTTP POST to [meeting-api](../meeting-api/README.md): `joining`, `awaiting_admission`,
 `active`, `completed`, `failed`.

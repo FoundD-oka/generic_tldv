@@ -1,4 +1,4 @@
-.PHONY: all all-build env build build-bot-image build-transcript-rendering up down ps logs test test-transcription guard-runtime-profiles init-db restore-db check_docker preflight publish promote-staging promote-latest help-tags setup-api-key
+.PHONY: all all-build env build build-bot-image build-transcript-rendering build-wake-stt build-wake-orchestrator up down ps logs test test-transcription guard-runtime-profiles init-db restore-db check_docker preflight publish promote-staging promote-latest help-tags setup-api-key
 
 # --- Paths ---
 ROOT := $(shell git rev-parse --show-toplevel)
@@ -20,7 +20,7 @@ DOCKERHUB_USER ?= vexaai
 # All images that get built and published.
 # agent-api remains NO-SHIP for v0.10.x (see docker-compose.yml); do not
 # promote a non-deployed image to :dev/:latest as part of public releases.
-IMAGES := api-gateway admin-api runtime-api meeting-api mcp dashboard tts-service vexa-lite
+IMAGES := api-gateway admin-api runtime-api meeting-api mcp dashboard tts-service wake-stt wake-orchestrator vexa-lite
 BOT_IMAGE := vexa-bot
 
 -include $(ENV_FILE)
@@ -167,11 +167,23 @@ build-lite: check_docker
 		-t $(DOCKERHUB_USER)/vexa-lite:$(BUILD_TAG) \
 		-f $(ROOT)/deploy/lite/Dockerfile.lite $(ROOT)
 
+build-wake-orchestrator: check_docker
+	@echo "Building $(DOCKERHUB_USER)/wake-orchestrator:$(BUILD_TAG)..."
+	docker build --platform linux/amd64 \
+		-t $(DOCKERHUB_USER)/wake-orchestrator:$(BUILD_TAG) \
+		-f $(ROOT)/services/wake-orchestrator/Dockerfile $(ROOT)
+
+build-wake-stt: check_docker
+	@echo "Building $(DOCKERHUB_USER)/wake-stt:$(BUILD_TAG)..."
+	docker build --platform linux/amd64 \
+		-t $(DOCKERHUB_USER)/wake-stt:$(BUILD_TAG) \
+		-f $(ROOT)/services/wake-stt/Dockerfile $(ROOT)
+
 build-transcript-rendering:
 	@echo "Building transcript-rendering package..."
 	@cd $(ROOT)/packages/transcript-rendering && npm install && npm run build
 
-build: check_docker build-bot-image build-transcript-rendering build-lite
+build: check_docker build-bot-image build-transcript-rendering build-lite build-wake-stt build-wake-orchestrator
 	@echo "Building all images with tag: $(BUILD_TAG)"
 	@# v0.10.5.3 Pack D-1 follow-up: VEXA_VERSION + VEXA_RELEASE_DATE are
 	@# read by docker-compose.yml's dashboard service `args:` block to feed

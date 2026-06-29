@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "task_id": "wake-assistant",
+  "runtime_profile": "codex-app",
+  "size": "M",
+  "result": {
+    "at_pass": true,
+    "fp_pass": true,
+    "nft_pass": true,
+    "hd_resolved": true,
+    "blocking_findings": 0
+  },
+  "evidence": {
+    "session_ledger": ".pipeline/sessions/wake-assistant/events.jsonl",
+    "verification": [
+      ".pipeline/evidence/wake-assistant/test-results.md",
+      ".pipeline/gates/wake-assistant/gates-summary.json"
+    ],
+    "review": [
+      ".pipeline/evidence/wake-assistant/qa-judgment.json"
+    ]
+  },
+  "notes": [
+    "Wake words now default to Kabosu-facing terms.",
+    "Groq is configured for openai/gpt-oss-20b with hidden reasoning.",
+    "Aivis Cloud defaults to model UUID 18972473-ca36-4e06-a33a-5cc14adba0c4 and mp3 audio.",
+    "Vexa speech uses audio_base64 rather than text TTS.",
+    "Wake auto-discovers dashboard-created running bots when VEXA_NATIVE_MEETING_ID is empty.",
+    "Dashboard bot creation defaults voice_agent_enabled to true while preserving explicit false."
+  ]
+}

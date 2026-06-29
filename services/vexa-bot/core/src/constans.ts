@@ -73,7 +73,8 @@ const baseBrowserArgs = [
  * All bots use PulseAudio (no /dev/null). Silence is achieved by:
  * - PulseAudio: tts_sink and virtual_mic muted at startup (entrypoint.sh)
  * - Teams UI: mic muted after join (join.ts)
- * - TTS: unmutes pactl + UI mic before speaking, re-mutes after
+ * - TTS: opens PulseAudio + UI mic for playback; duplicate suppression is handled
+ *   by the wake/session layer, while PulseAudio is muted after playback cleanup
  */
 // CDP debug args — shared by EVERY browser launch (meeting + browser-session) so an
 // agent can attach over the gateway /b/{token}/cdp proxy to clear captcha/blocking

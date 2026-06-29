@@ -45,6 +45,8 @@ async def bot_speak(
         raise HTTPException(status_code=503, detail="Redis unavailable")
 
     meeting = await _find_active_meeting(db, current_user.id, platform.value, native_meeting_id)
+    request_id = req.get("request_id")
+    request_id = str(request_id).strip() if request_id is not None else ""
 
     if req.get("text"):
         command = {
@@ -66,9 +68,12 @@ async def bot_speak(
     else:
         raise HTTPException(status_code=400, detail="Must provide one of: text, audio_url, or audio_base64")
 
+    if request_id:
+        command["request_id"] = request_id
+
     channel = f"bot_commands:meeting:{meeting.id}"
     await redis_client.publish(channel, json.dumps(command))
-    return {"message": "Speak command sent", "meeting_id": meeting.id}
+    return {"message": "Speak command sent", "meeting_id": meeting.id, "request_id": request_id or None}
 
 
 @router.delete(

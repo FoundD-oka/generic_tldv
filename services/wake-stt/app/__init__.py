@@ -1,0 +1,1 @@
+"""Kabosu wake STT bridge."""

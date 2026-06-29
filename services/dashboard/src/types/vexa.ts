@@ -82,6 +82,7 @@ export interface CreateBotRequest {
   language?: string;
   transcribe_enabled?: boolean;
   authenticated?: boolean;
+  voice_agent_enabled?: boolean;
   video?: boolean;
   video_receive_enabled?: boolean;
 }

@@ -18,6 +18,7 @@ export function withPostMeetingAutoStop(
 
   return {
     ...request,
+    voice_agent_enabled: request.voice_agent_enabled ?? true,
     automatic_leave: {
       ...automaticLeave,
       max_time_left_alone: POST_MEETING_AUTO_STOP_TIMEOUT_MS,

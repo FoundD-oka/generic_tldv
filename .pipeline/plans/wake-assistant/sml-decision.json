@@ -1,0 +1,8 @@
+{
+  "task": "wake-assistant",
+  "size": "M",
+  "decided_after": "codex-app implementation planning",
+  "rationale": "Adds a new service with external API clients and deploy wiring, while preserving existing Vexa API contracts.",
+  "plan": ".pipeline/plans/wake-assistant/plan.md",
+  "verification_contract": ".pipeline/plans/wake-assistant/verification-contract.md"
+}
