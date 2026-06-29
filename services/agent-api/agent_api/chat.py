@@ -12,6 +12,7 @@ from typing import AsyncGenerator, Optional
 
 from agent_api import config
 from agent_api.container_manager import ContainerManager
+from agent_api.kabosu_persona import build_kabosu_chat_prompt
 from agent_api.stream_parser import parse_event
 from agent_api import workspace
 
@@ -193,8 +194,8 @@ async def run_chat_turn(
     else:
         session_id = None
 
-    # Build prompt (with optional context prefix)
-    full_prompt = f"{context_prefix}\n\n---\n\n{message}" if context_prefix else message
+    # Build prompt with Kabosu persona before any runtime context.
+    full_prompt = build_kabosu_chat_prompt(message, context_prefix=context_prefix)
     encoded = base64.b64encode(full_prompt.encode()).decode()
     await cm.exec_with_stdin(
         container,

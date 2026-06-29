@@ -1,5 +1,6 @@
 """Tests for agent_api.chat — session helpers and chat turn logic."""
 
+import base64
 import json
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -15,6 +16,7 @@ from agent_api.chat import (
     SESSION_PREFIX,
     SESSIONS_INDEX,
 )
+from agent_api.kabosu_persona import KABOSU_PERSONA_PROMPT
 
 
 # ---------------------------------------------------------------------------
@@ -195,6 +197,11 @@ async def _async_iter(items):
         yield item
 
 
+def _decode_prompt_from_stdin(cm) -> str:
+    encoded = cm.exec_with_stdin.call_args.kwargs["stdin_data"]
+    return base64.b64decode(encoded).decode()
+
+
 class TestRunChatTurn:
     @pytest.mark.asyncio
     async def test_yields_stream_end(self):
@@ -255,5 +262,22 @@ class TestRunChatTurn:
             context_prefix="You are a helpful assistant",
         ):
             events.append(data)
-        # exec_with_stdin should have been called with the prompt
         cm.exec_with_stdin.assert_called_once()
+        prompt = _decode_prompt_from_stdin(cm)
+        assert prompt.startswith(KABOSU_PERSONA_PROMPT)
+        assert prompt.index("[RUNTIME CONTEXT]\nYou are a helpful assistant") > prompt.index(
+            KABOSU_PERSONA_PROMPT
+        )
+        assert prompt.index("[USER REQUEST]\nHello") > prompt.index("[RUNTIME CONTEXT]")
+
+    @pytest.mark.asyncio
+    async def test_kabosu_persona_is_first_even_without_context_prefix(self):
+        redis = _mock_redis()
+        cm = _mock_cm()
+        events = []
+        async for data in run_chat_turn(redis, cm, "user-1", "Hello"):
+            events.append(data)
+        prompt = _decode_prompt_from_stdin(cm)
+        assert prompt.startswith(KABOSU_PERSONA_PROMPT)
+        assert "[RUNTIME CONTEXT]" not in prompt
+        assert prompt.endswith("[USER REQUEST]\nHello")

@@ -15,6 +15,7 @@ from app.clients import (
     _wake_stt_ws_url,
 )
 from app.config import Settings
+from app.persona import KABOSU_PERSONA_PROMPT
 
 
 class ClientTests(unittest.IsolatedAsyncioTestCase):
@@ -26,6 +27,8 @@ class ClientTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(body["reasoning_format"], "hidden")
             self.assertEqual(body["max_completion_tokens"], 768)
             self.assertIn("カボス", body["messages"][0]["content"])
+            self.assertTrue(body["messages"][0]["content"].startswith(KABOSU_PERSONA_PROMPT))
+            self.assertIn("Meet内リアルタイム応答ルール", body["messages"][0]["content"])
             return httpx.Response(
                 200,
                 json={
