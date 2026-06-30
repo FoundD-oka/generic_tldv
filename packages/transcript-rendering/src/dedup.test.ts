@@ -252,6 +252,33 @@ describe('deduplicateByIdentity', () => {
     expect(result).toHaveLength(1);
   });
 
+  it('does not collapse same absolute_start_time across different sessions', () => {
+    const result = deduplicateByIdentity([
+      seg('Alice', 0, 5, 'from session 1', { session_uid: 'sess-1' }),
+      seg('Bob', 0, 5, 'from session 2', { session_uid: 'sess-2' }),
+    ]);
+    expect(result).toHaveLength(2);
+  });
+
+  it('updates speaker metadata for same internal identity', () => {
+    const result = deduplicateByIdentity([
+      seg('Unknown', 0, 5, 'draft', {
+        session_uid: 'sess-1',
+        speaker_mapping_status: 'NO_SPEAKER_EVENTS',
+        updated_at: '2026-03-21T12:00:00Z',
+      }),
+      seg('Alice', 0, 5, 'corrected', {
+        session_uid: 'sess-1',
+        speaker_mapping_status: 'MAPPED',
+        updated_at: '2026-03-21T12:00:01Z',
+      }),
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0].speaker).toBe('Alice');
+    expect(result[0].speaker_mapping_status).toBe('MAPPED');
+    expect(result[0].text).toBe('corrected');
+  });
+
   it('keeps different segments with different keys', () => {
     const result = deduplicateByIdentity([
       seg('Alice', 0, 5, 'first', { segment_id: 'seg-1' }),
@@ -266,9 +293,6 @@ describe('deduplicateByIdentity', () => {
       seg('Alice', 0, 5, 'v2', { segment_id: 'seg-1' }),
     ]);
     expect(result).toHaveLength(1);
-    // Without updated_at, the comparison `seg.updated_at > existing.updated_at` is false,
-    // so the second one doesn't replace the first unless it has a newer updated_at.
-    // With no updated_at on either, the first one wins.
-    expect(result[0].text).toBe('v1');
+    expect(result[0].text).toBe('v2');
   });
 });

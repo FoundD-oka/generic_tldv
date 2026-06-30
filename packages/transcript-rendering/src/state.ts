@@ -1,17 +1,11 @@
 import type { TranscriptSegment, TranscriptState } from './types';
+import { getSegmentIdentityKey, shouldReplaceSegment } from './identity';
 
 /**
  * Create an empty transcript state container.
  */
 export function createTranscriptState<T extends TranscriptSegment = TranscriptSegment>(): TranscriptState<T> {
   return { confirmed: new Map(), pendingBySpeaker: new Map() };
-}
-
-/**
- * Segment key used for identity throughout the state functions.
- */
-function segKey<T extends TranscriptSegment>(seg: T): string {
-  return seg.segment_id || seg.absolute_start_time;
 }
 
 // ---------------------------------------------------------------------------
@@ -35,7 +29,11 @@ export function bootstrapConfirmed<T extends TranscriptSegment>(
 
   for (const seg of segments) {
     if (!seg.absolute_start_time || !(seg.text || '').trim()) continue;
-    state.confirmed.set(segKey(seg), seg);
+    const key = getSegmentIdentityKey(seg);
+    const existing = state.confirmed.get(key);
+    if (shouldReplaceSegment(existing, seg)) {
+      state.confirmed.set(key, { ...existing, ...seg });
+    }
   }
 
   return recomputeTranscripts(state);
@@ -60,8 +58,12 @@ export function applyTranscriptTick<T extends TranscriptSegment>(
 
   for (const seg of confirmed) {
     if (!seg.absolute_start_time || !(seg.text || '').trim()) continue;
-    state.confirmed.set(segKey(seg), seg);
-    changed = true;
+    const key = getSegmentIdentityKey(seg);
+    const existing = state.confirmed.get(key);
+    if (shouldReplaceSegment(existing, seg)) {
+      state.confirmed.set(key, { ...existing, ...seg });
+      changed = true;
+    }
   }
 
   if (speaker !== undefined && speaker !== null) {
@@ -143,15 +145,18 @@ export function addSegment<T extends TranscriptSegment>(
   segments: readonly T[],
   segment: T,
 ): T[] {
-  const key = segKey(segment);
-  const existingIndex = segments.findIndex(t => segKey(t) === key);
+  const key = getSegmentIdentityKey(segment);
+  const existingIndex = segments.findIndex(t => getSegmentIdentityKey(t) === key);
 
   let updated: T[];
 
   if (existingIndex !== -1) {
+    const existing = segments[existingIndex];
+    if (!shouldReplaceSegment(existing, segment)) return [...segments];
+
     // Same segment — update in place (latest version wins)
     updated = [...segments];
-    updated[existingIndex] = segment;
+    updated[existingIndex] = { ...existing, ...segment };
   } else {
     updated = [...segments, segment];
 
@@ -189,7 +194,11 @@ export function bootstrapSegments<T extends TranscriptSegment>(
 
   const map = new Map<string, T>();
   for (const seg of valid) {
-    map.set(segKey(seg), seg);
+    const key = getSegmentIdentityKey(seg);
+    const existing = map.get(key);
+    if (shouldReplaceSegment(existing, seg)) {
+      map.set(key, { ...existing, ...seg });
+    }
   }
 
   return Array.from(map.values());

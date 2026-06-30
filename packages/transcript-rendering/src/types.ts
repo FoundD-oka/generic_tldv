@@ -4,12 +4,25 @@
  */
 export interface TranscriptSegment {
   text: string;
+  /** Optional meeting scope. Consumers may use either naming style. */
+  meeting_id?: string | number;
+  meetingInstanceId?: string | number;
   speaker?: string;
   absolute_start_time: string;
   absolute_end_time: string;
   completed?: boolean;
   /** Stable segment identity (e.g., "speakerA:3" or "inject-0-10.5") */
   segment_id?: string;
+  /** Bot/session stream identity. Prefer this over speaker display names. */
+  session_uid?: string;
+  speakerSessionUid?: string;
+  /** Audio track identity, when available from the bot/audio pipeline. */
+  track_id?: string;
+  speaker_track_id?: string;
+  speakerTrackId?: string;
+  /** Speaker mapping confidence/status from the producer or mapper. */
+  speaker_mapping_status?: string;
+  speakerMappingStatus?: string;
   /** Relative start time in seconds (used by grouping) */
   start_time?: number;
   /** Relative end time in seconds (used by grouping) */

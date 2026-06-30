@@ -28,14 +28,49 @@ __export(index_exports, {
   createTranscriptState: () => createTranscriptState,
   deduplicateByIdentity: () => deduplicateByIdentity,
   deduplicateSegments: () => deduplicateSegments,
+  getSegmentIdentityKey: () => getSegmentIdentityKey,
   groupSegments: () => groupSegments,
   parseUTCTimestamp: () => parseUTCTimestamp,
   recomputeTranscripts: () => recomputeTranscripts,
+  shouldReplaceSegment: () => shouldReplaceSegment,
   sortByStartTime: () => sortByStartTime,
   sortSegments: () => sortSegments,
   upsertSegments: () => upsertSegments
 });
 module.exports = __toCommonJS(index_exports);
+
+// src/identity.ts
+function keyPart(value) {
+  if (value === void 0 || value === null || value === "") return "unknown";
+  return String(value);
+}
+function streamId(seg) {
+  return keyPart(
+    seg.track_id ?? seg.speaker_track_id ?? seg.speakerTrackId ?? seg.speakerSessionUid ?? seg.session_uid
+  );
+}
+function meetingId(seg) {
+  return keyPart(seg.meeting_id ?? seg.meetingInstanceId);
+}
+function getSegmentIdentityKey(seg) {
+  const scope = `${meetingId(seg)}|${streamId(seg)}`;
+  if (seg.segment_id) return `segment|${scope}|${seg.segment_id}`;
+  return `time|${scope}|${seg.absolute_start_time}`;
+}
+function updatedAtMs(value) {
+  if (!value) return null;
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+function shouldReplaceSegment(existing, incoming) {
+  if (!existing) return true;
+  const existingUpdated = updatedAtMs(existing.updated_at);
+  const incomingUpdated = updatedAtMs(incoming.updated_at);
+  if (existingUpdated !== null && incomingUpdated !== null) {
+    return incomingUpdated >= existingUpdated;
+  }
+  return true;
+}
 
 // src/timestamps.ts
 function parseUTCTimestamp(timestamp) {
@@ -135,29 +170,22 @@ function preferSeg(seg, last) {
 function upsertSegments(existing, incoming) {
   for (const seg of incoming) {
     if (!seg.absolute_start_time || !(seg.text || "").trim()) continue;
-    const key = seg.segment_id || seg.absolute_start_time;
-    const prev = existing.get(key);
+    const key = getSegmentIdentityKey(seg);
+    const legacyKey = seg.segment_id || seg.absolute_start_time;
+    const storedKey = existing.has(key) ? key : existing.has(legacyKey) ? legacyKey : key;
+    const prev = existing.get(storedKey);
     if (seg.completed && seg.speaker) {
       for (const [k, v] of existing.entries()) {
-        if (k === key) continue;
+        if (k === storedKey) continue;
         if (!v.completed && v.speaker === seg.speaker && k.includes(":draft:")) {
           existing.delete(k);
         }
       }
     }
-    if (prev) {
-      const prevText = (prev.text || "").trim();
-      const newText = (seg.text || "").trim();
-      const completedChanged = Boolean(prev.completed) !== Boolean(seg.completed);
-      if (prevText !== newText || completedChanged) {
-        existing.set(key, seg);
-        continue;
-      }
-      if (prev.updated_at && seg.updated_at && prev.updated_at >= seg.updated_at) {
-        continue;
-      }
+    if (prev && !shouldReplaceSegment(prev, seg)) {
+      continue;
     }
-    existing.set(key, seg);
+    existing.set(storedKey, { ...prev, ...seg });
   }
   const textIndex = /* @__PURE__ */ new Map();
   for (const [key, seg] of existing.entries()) {
@@ -194,10 +222,10 @@ function sortByStartTime(segments) {
 function deduplicateByIdentity(segments) {
   const seen = /* @__PURE__ */ new Map();
   for (const seg of segments) {
-    const key = seg.segment_id || seg.absolute_start_time;
+    const key = getSegmentIdentityKey(seg);
     const existing = seen.get(key);
-    if (!existing || seg.updated_at && existing.updated_at && seg.updated_at > existing.updated_at) {
-      seen.set(key, seg);
+    if (shouldReplaceSegment(existing, seg)) {
+      seen.set(key, { ...existing, ...seg });
     }
   }
   return Array.from(seen.values());
@@ -269,15 +297,16 @@ function groupSegments(segments, options = {}) {
 function createTranscriptState() {
   return { confirmed: /* @__PURE__ */ new Map(), pendingBySpeaker: /* @__PURE__ */ new Map() };
 }
-function segKey(seg) {
-  return seg.segment_id || seg.absolute_start_time;
-}
 function bootstrapConfirmed(state, segments) {
   state.confirmed.clear();
   state.pendingBySpeaker.clear();
   for (const seg of segments) {
     if (!seg.absolute_start_time || !(seg.text || "").trim()) continue;
-    state.confirmed.set(segKey(seg), seg);
+    const key = getSegmentIdentityKey(seg);
+    const existing = state.confirmed.get(key);
+    if (shouldReplaceSegment(existing, seg)) {
+      state.confirmed.set(key, { ...existing, ...seg });
+    }
   }
   return recomputeTranscripts(state);
 }
@@ -285,8 +314,12 @@ function applyTranscriptTick(state, confirmed, pending, speaker) {
   let changed = false;
   for (const seg of confirmed) {
     if (!seg.absolute_start_time || !(seg.text || "").trim()) continue;
-    state.confirmed.set(segKey(seg), seg);
-    changed = true;
+    const key = getSegmentIdentityKey(seg);
+    const existing = state.confirmed.get(key);
+    if (shouldReplaceSegment(existing, seg)) {
+      state.confirmed.set(key, { ...existing, ...seg });
+      changed = true;
+    }
   }
   if (speaker !== void 0 && speaker !== null) {
     const validPending = (pending || []).filter(
@@ -331,12 +364,14 @@ function recomputeTranscripts(state) {
   return all;
 }
 function addSegment(segments, segment) {
-  const key = segKey(segment);
-  const existingIndex = segments.findIndex((t) => segKey(t) === key);
+  const key = getSegmentIdentityKey(segment);
+  const existingIndex = segments.findIndex((t) => getSegmentIdentityKey(t) === key);
   let updated;
   if (existingIndex !== -1) {
+    const existing = segments[existingIndex];
+    if (!shouldReplaceSegment(existing, segment)) return [...segments];
     updated = [...segments];
-    updated[existingIndex] = segment;
+    updated[existingIndex] = { ...existing, ...segment };
   } else {
     updated = [...segments, segment];
     if (segment.completed && segment.speaker) {
@@ -361,7 +396,11 @@ function bootstrapSegments(segments) {
   );
   const map = /* @__PURE__ */ new Map();
   for (const seg of valid) {
-    map.set(segKey(seg), seg);
+    const key = getSegmentIdentityKey(seg);
+    const existing = map.get(key);
+    if (shouldReplaceSegment(existing, seg)) {
+      map.set(key, { ...existing, ...seg });
+    }
   }
   return Array.from(map.values());
 }
@@ -405,9 +444,11 @@ function createTranscriptManager() {
   createTranscriptState,
   deduplicateByIdentity,
   deduplicateSegments,
+  getSegmentIdentityKey,
   groupSegments,
   parseUTCTimestamp,
   recomputeTranscripts,
+  shouldReplaceSegment,
   sortByStartTime,
   sortSegments,
   upsertSegments

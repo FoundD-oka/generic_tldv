@@ -4,12 +4,25 @@
  */
 interface TranscriptSegment {
     text: string;
+    /** Optional meeting scope. Consumers may use either naming style. */
+    meeting_id?: string | number;
+    meetingInstanceId?: string | number;
     speaker?: string;
     absolute_start_time: string;
     absolute_end_time: string;
     completed?: boolean;
     /** Stable segment identity (e.g., "speakerA:3" or "inject-0-10.5") */
     segment_id?: string;
+    /** Bot/session stream identity. Prefer this over speaker display names. */
+    session_uid?: string;
+    speakerSessionUid?: string;
+    /** Audio track identity, when available from the bot/audio pipeline. */
+    track_id?: string;
+    speaker_track_id?: string;
+    speakerTrackId?: string;
+    /** Speaker mapping confidence/status from the producer or mapper. */
+    speaker_mapping_status?: string;
+    speakerMappingStatus?: string;
     /** Relative start time in seconds (used by grouping) */
     start_time?: number;
     /** Relative end time in seconds (used by grouping) */
@@ -68,6 +81,22 @@ interface GroupingOptions {
 }
 
 /**
+ * Stable transcript identity for mutable/live segments.
+ *
+ * Speaker names are intentionally excluded: they are display labels that can be
+ * corrected after the first event. Prefer bot segment_id when available, scoped
+ * by meeting + stream identity; otherwise fall back to absolute start time plus
+ * the same scope.
+ */
+declare function getSegmentIdentityKey<T extends TranscriptSegment>(seg: T): string;
+/**
+ * Mutable transcript updates should only move forward when both versions carry
+ * updated_at. If either side lacks freshness metadata, preserve event order by
+ * accepting the incoming segment.
+ */
+declare function shouldReplaceSegment<T extends TranscriptSegment>(existing: T | undefined, incoming: T): boolean;
+
+/**
  * Deduplicate overlapping transcript segments.
  *
  * **Speaker-aware:** segments from different speakers are NEVER deduped against
@@ -90,15 +119,15 @@ declare function deduplicateSegments<T extends TranscriptSegment>(segments: T[])
  * Upsert segments into an existing map, handling draft→confirmed transitions.
  *
  * This is the core merge logic used by WS consumers (dashboard). Given a map
- * of existing segments (keyed by segment_id or absolute_start_time) and new
+ * of existing segments (keyed by internal segment identity) and new
  * incoming segments, it:
  *
  * - Inserts new segments
- * - Updates existing segments when text or completed status changes
+ * - Updates existing segments when the incoming segment is not older by updated_at
  * - Removes drafts when a confirmed segment from the same speaker arrives
  * - Deduplicates same-speaker same-text entries with different IDs
  *
- * @param existing - Map of existing segments (segment_id → segment)
+ * @param existing - Map of existing segments (identity key → segment)
  * @param incoming - New segments from WS or REST
  * @returns Updated map (mutates and returns `existing` for efficiency)
  */
@@ -256,4 +285,4 @@ interface TranscriptManager<T extends TranscriptSegment = TranscriptSegment> {
  */
 declare function createTranscriptManager<T extends TranscriptSegment = TranscriptSegment>(): TranscriptManager<T>;
 
-export { type GroupingOptions, type SegmentGroup, type TranscriptManager, type TranscriptMessage, type TranscriptSegment, type TranscriptState, addSegment, applyTranscriptTick, bootstrapConfirmed, bootstrapSegments, createTranscriptManager, createTranscriptState, deduplicateByIdentity, deduplicateSegments, groupSegments, parseUTCTimestamp, recomputeTranscripts, sortByStartTime, sortSegments, upsertSegments };
+export { type GroupingOptions, type SegmentGroup, type TranscriptManager, type TranscriptMessage, type TranscriptSegment, type TranscriptState, addSegment, applyTranscriptTick, bootstrapConfirmed, bootstrapSegments, createTranscriptManager, createTranscriptState, deduplicateByIdentity, deduplicateSegments, getSegmentIdentityKey, groupSegments, parseUTCTimestamp, recomputeTranscripts, shouldReplaceSegment, sortByStartTime, sortSegments, upsertSegments };

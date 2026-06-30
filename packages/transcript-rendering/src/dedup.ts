@@ -1,4 +1,5 @@
 import type { TranscriptSegment } from './types';
+import { getSegmentIdentityKey, shouldReplaceSegment } from './identity';
 import { parseUTCTimestamp } from './timestamps';
 
 function normalizeText(t: string): string {
@@ -157,15 +158,15 @@ function preferSeg<T extends TranscriptSegment>(seg: T, last: T): boolean {
  * Upsert segments into an existing map, handling draft→confirmed transitions.
  *
  * This is the core merge logic used by WS consumers (dashboard). Given a map
- * of existing segments (keyed by segment_id or absolute_start_time) and new
+ * of existing segments (keyed by internal segment identity) and new
  * incoming segments, it:
  *
  * - Inserts new segments
- * - Updates existing segments when text or completed status changes
+ * - Updates existing segments when the incoming segment is not older by updated_at
  * - Removes drafts when a confirmed segment from the same speaker arrives
  * - Deduplicates same-speaker same-text entries with different IDs
  *
- * @param existing - Map of existing segments (segment_id → segment)
+ * @param existing - Map of existing segments (identity key → segment)
  * @param incoming - New segments from WS or REST
  * @returns Updated map (mutates and returns `existing` for efficiency)
  */
@@ -176,36 +177,26 @@ export function upsertSegments<T extends TranscriptSegment>(
   for (const seg of incoming) {
     if (!seg.absolute_start_time || !(seg.text || '').trim()) continue;
 
-    const key = seg.segment_id || seg.absolute_start_time;
-    const prev = existing.get(key);
+    const key = getSegmentIdentityKey(seg);
+    const legacyKey = seg.segment_id || seg.absolute_start_time;
+    const storedKey = existing.has(key) ? key : existing.has(legacyKey) ? legacyKey : key;
+    const prev = existing.get(storedKey);
 
     // When a confirmed segment arrives, remove drafts from same speaker
     if (seg.completed && seg.speaker) {
       for (const [k, v] of existing.entries()) {
-        if (k === key) continue;
+        if (k === storedKey) continue;
         if (!v.completed && v.speaker === seg.speaker && k.includes(':draft:')) {
           existing.delete(k);
         }
       }
     }
 
-    if (prev) {
-      const prevText = (prev.text || '').trim();
-      const newText = (seg.text || '').trim();
-      const completedChanged = Boolean(prev.completed) !== Boolean(seg.completed);
-
-      if (prevText !== newText || completedChanged) {
-        existing.set(key, seg);
-        continue;
-      }
-
-      // Same text — keep newer by updated_at
-      if (prev.updated_at && seg.updated_at && prev.updated_at >= seg.updated_at) {
-        continue;
-      }
+    if (prev && !shouldReplaceSegment(prev, seg)) {
+      continue;
     }
 
-    existing.set(key, seg);
+    existing.set(storedKey, { ...prev, ...seg });
   }
 
   // Remove draft→confirmed duplicates (same speaker + same text, different IDs)
@@ -272,10 +263,10 @@ export function sortByStartTime<T extends TranscriptSegment>(segments: T[]): T[]
 export function deduplicateByIdentity<T extends TranscriptSegment>(segments: T[]): T[] {
   const seen = new Map<string, T>();
   for (const seg of segments) {
-    const key = seg.segment_id || seg.absolute_start_time;
+    const key = getSegmentIdentityKey(seg);
     const existing = seen.get(key);
-    if (!existing || (seg.updated_at && existing.updated_at && seg.updated_at > existing.updated_at)) {
-      seen.set(key, seg);
+    if (shouldReplaceSegment(existing, seg)) {
+      seen.set(key, { ...existing, ...seg });
     }
   }
   return Array.from(seen.values());

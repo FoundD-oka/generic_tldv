@@ -278,6 +278,9 @@ async def process_stream_message(message_id: str, message_data: Dict[str, Any], 
                      "speaker_mapping_status": "PRODUCER_LABELED",
                      "segment_id": segment_id,
                  }
+                 track_id = segment.get("track_id") or segment.get("speaker_track_id")
+                 if track_id:
+                     segment_redis_data["track_id"] = track_id
                  if abs_start_iso:
                      segment_redis_data["absolute_start_time"] = abs_start_iso
                  if abs_end_iso:
@@ -347,6 +350,9 @@ async def process_transcript_bundle(message_id: str, stream_data: Dict[str, Any]
                         "speaker_mapping_status": "PRODUCER_LABELED",
                         "segment_id": seg_id,
                     }
+                    track_id = seg.get("track_id") or seg.get("speaker_track_id")
+                    if track_id:
+                        redis_data["track_id"] = track_id
                     if seg.get('absolute_start_time'):
                         redis_data["absolute_start_time"] = seg['absolute_start_time']
                     if seg.get('absolute_end_time'):

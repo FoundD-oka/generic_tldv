@@ -94,7 +94,14 @@ class TestProcessTranscriptBundle:
         from meeting_api.collector.processors import process_transcript_bundle
 
         confirmed = [
-            {"segment_id": "seg-1", "text": "Hello world", "start": 0.0, "end": 5.0, "speaker": "Alice"},
+            {
+                "segment_id": "seg-1",
+                "text": "Hello world",
+                "start": 0.0,
+                "end": 5.0,
+                "speaker": "Alice",
+                "track_id": "track-a",
+            },
             {"segment_id": "seg-2", "text": "Goodbye", "start": 5.0, "end": 8.0, "speaker": "Alice"},
         ]
         result = await process_transcript_bundle("msg-1", {
@@ -103,6 +110,12 @@ class TestProcessTranscriptBundle:
 
         assert result is True
         mock_redis.pipeline.assert_called()
+        pipe = mock_redis.pipeline.return_value.__aenter__.return_value
+        first_hset = pipe.hset.call_args_list[0]
+        stored = json.loads(first_hset.args[2])
+        assert stored["session_uid"] == "sess-1"
+        assert stored["speaker_mapping_status"] == "PRODUCER_LABELED"
+        assert stored["track_id"] == "track-a"
 
     async def test_pending_segments_stored_with_ttl(self, mock_redis):
         from meeting_api.collector.processors import process_transcript_bundle

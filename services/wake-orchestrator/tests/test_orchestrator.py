@@ -166,6 +166,33 @@ class OrchestratorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.format, "wav")
         self.assertEqual(result.headers["purpose"], "wake_ack")
 
+    async def test_low_confidence_speaker_metadata_is_passed_to_llm_context(self):
+        settings = Settings(
+            wake_cooldown_ms=1,
+            wake_response_playback_guard_ms=0,
+            wake_ack_enabled=False,
+            bot_echo_cooldown_ms=1,
+        )
+        groq = FakeGroq()
+        orchestrator = WakeOrchestrator(settings, groq, FakeAivis(), FakeVexa())
+
+        await orchestrator.handle_segment(
+            TranscriptSegment(
+                text="カボス、次の論点を整理して。",
+                speaker="Alice",
+                segment_id="seg-1",
+                completed=True,
+                speaker_session_uid="sess-1",
+                speaker_mapping_status="NO_SPEAKER_EVENTS",
+            )
+        )
+
+        context = groq.calls[0][0]
+        self.assertIn("[話者不明]", context)
+        self.assertIn("display=Alice", context)
+        self.assertIn("session_uid=sess-1", context)
+        self.assertIn("speaker_mapping_status=NO_SPEAKER_EVENTS", context)
+
     async def test_orchestrator_speaks_to_its_meeting_ref(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             ack_path = Path(tmpdir) / "wake_ack.wav"

@@ -214,6 +214,7 @@ async def _get_full_transcript_segments(
                 created_at=seg.created_at, completed=True,
                 absolute_start_time=abs_start, absolute_end_time=abs_end,
                 segment_id=seg.segment_id,
+                session_uid=seg.session_uid,
             )
         except Exception as e:
             logger.error(f"[Segments] PG segment error {key}: {e}")
@@ -273,6 +274,9 @@ async def _get_full_transcript_segments(
                 completed=bool(d.get("completed", False)),
                 absolute_start_time=abs_start, absolute_end_time=abs_end,
                 segment_id=d.get('segment_id'),
+                session_uid=d.get("session_uid"),
+                speaker_mapping_status=d.get("speaker_mapping_status"),
+                track_id=d.get("track_id") or d.get("speaker_track_id"),
             )
         except Exception as e:
             logger.error(f"[Segments] Redis segment error {seg_key}: {e}")
