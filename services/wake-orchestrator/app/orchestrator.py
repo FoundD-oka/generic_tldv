@@ -55,6 +55,9 @@ class TranscriptSegment:
     completed: bool = False
     absolute_start_time: str | None = None
     absolute_end_time: str | None = None
+    speaker_session_uid: str | None = None
+    speaker_track_id: str | None = None
+    speaker_mapping_status: str | None = None
     wake_trace_id: str | None = None
     bot_audio_received_ts_ms: int | None = None
     audio_chunk_sent_to_stt_ts_ms: int | None = None
@@ -415,7 +418,7 @@ class WakeOrchestrator:
                 )
             return False
 
-        self._recent_transcript.append((time.time(), segment.speaker, delta_text or text))
+        self._recent_transcript.append((time.time(), _speaker_context_label(segment), delta_text or text))
         self._trim_recent()
 
         bot_texts = [bot_text for _, bot_text in self._recent_bot_texts]
@@ -438,7 +441,7 @@ class WakeOrchestrator:
         if not match:
             return False
 
-        dedupe_key = (segment.speaker, normalize_ja(match.wake))
+        dedupe_key = (_speaker_stream_key(segment), normalize_ja(match.wake))
         last = self._last_wake_by_speaker.get(dedupe_key, 0.0)
         dedupe_seconds = self.settings.wake_same_speaker_dedupe_ms / 1000
         if dedupe_seconds > 0 and last > 0 and now - last < dedupe_seconds:
@@ -704,7 +707,9 @@ class WakeOrchestrator:
             return
 
         utterance = clean_for_tts(match.seed or pending.text, max_chars=1200)
-        self._recent_transcript.append((time.time(), pending.speaker, pending.text))
+        self._recent_transcript.append(
+            (time.time(), _speaker_context_label(pending.segment), pending.text)
+        )
         self._trim_recent()
         self._remember_stabilized_wake(time.monotonic(), pending.speaker, pending.text)
         logger.info(
@@ -754,6 +759,26 @@ class WakeOrchestrator:
                     completed=bool(raw.get("completed", False)),
                     absolute_start_time=raw.get("absolute_start_time"),
                     absolute_end_time=raw.get("absolute_end_time"),
+                    speaker_session_uid=_first_str(
+                        raw,
+                        message,
+                        "speaker_session_uid",
+                        "session_uid",
+                        "uid",
+                    ),
+                    speaker_track_id=_first_str(
+                        raw,
+                        message,
+                        "speaker_track_id",
+                        "track_id",
+                        "trackId",
+                    ),
+                    speaker_mapping_status=_first_str(
+                        raw,
+                        message,
+                        "speaker_mapping_status",
+                        "speakerMappingStatus",
+                    ),
                     wake_trace_id=_first_str(raw, message, "wake_trace_id"),
                     bot_audio_received_ts_ms=_first_ms(raw, message, "bot_audio_received_ts_ms"),
                     audio_chunk_sent_to_stt_ts_ms=_first_ms(
@@ -1227,7 +1252,7 @@ def _has_wake(text: str, settings: Settings) -> bool:
 
 def _wake_segment_keys(segment: TranscriptSegment) -> list[str]:
     keys: list[str] = []
-    speaker = normalize_ja(segment.speaker) or segment.speaker
+    speaker = _speaker_stream_key(segment)
     if segment.segment_id:
         keys.append(f"segment:{speaker}:{segment.segment_id}")
     if segment.absolute_start_time:
@@ -1236,8 +1261,8 @@ def _wake_segment_keys(segment: TranscriptSegment) -> list[str]:
 
 
 def _same_pending_wake_turn(pending: PendingWake, segment: TranscriptSegment) -> bool:
-    pending_speaker = normalize_ja(pending.speaker) or pending.speaker
-    segment_speaker = normalize_ja(segment.speaker) or segment.speaker
+    pending_speaker = _speaker_stream_key(pending.segment)
+    segment_speaker = _speaker_stream_key(segment)
     if pending_speaker != segment_speaker:
         return False
 
@@ -1249,6 +1274,41 @@ def _same_pending_wake_turn(pending: PendingWake, segment: TranscriptSegment) ->
     pending_text = _wake_turn_fingerprint(pending.text)
     segment_text = _wake_turn_fingerprint(segment.text)
     return _same_wake_turn_text(pending_text, segment_text)
+
+
+def _speaker_stream_key(segment: TranscriptSegment) -> str:
+    return (
+        segment.speaker_track_id
+        or segment.speaker_session_uid
+        or normalize_ja(segment.speaker)
+        or segment.speaker
+        or "unknown"
+    )
+
+
+def _speaker_context_label(segment: TranscriptSegment) -> str:
+    status = (segment.speaker_mapping_status or "").upper()
+    low_confidence = status in {
+        "UNKNOWN",
+        "NO_SPEAKER_EVENTS",
+        "ERROR_IN_MAPPING",
+        "MULTIPLE_CONCURRENT_SPEAKERS",
+    }
+    speaker = segment.speaker or "Unknown"
+
+    label = "[話者不明]" if low_confidence else speaker
+    details: list[str] = []
+    if low_confidence and speaker and speaker != "Unknown":
+        details.append(f"display={speaker}")
+    if segment.speaker_session_uid:
+        details.append(f"session_uid={segment.speaker_session_uid}")
+    if segment.speaker_track_id:
+        details.append(f"track_id={segment.speaker_track_id}")
+    if status:
+        details.append(f"speaker_mapping_status={status}")
+    if details:
+        return f"{label} ({', '.join(details)})"
+    return label
 
 
 def _wake_turn_fingerprint(text: str) -> str:
@@ -1358,11 +1418,14 @@ def _first_ms(raw: dict[str, Any], message: dict[str, Any], *names: str) -> int 
     return None
 
 
-def _first_str(raw: dict[str, Any], message: dict[str, Any], name: str) -> str | None:
-    value = raw.get(name)
-    if value is None:
-        value = message.get(name)
-    if value is None:
-        return None
-    text = str(value).strip()
-    return text or None
+def _first_str(raw: dict[str, Any], message: dict[str, Any], *names: str) -> str | None:
+    for name in names:
+        value = raw.get(name)
+        if value is None:
+            value = message.get(name)
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return None

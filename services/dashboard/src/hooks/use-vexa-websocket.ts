@@ -41,6 +41,9 @@ interface SpeakerTranscriptSegment {
   language?: string;
   completed?: boolean;
   session_uid?: string;
+  speaker_mapping_status?: string;
+  track_id?: string;
+  speaker_track_id?: string;
   updated_at?: string;
 }
 
@@ -153,6 +156,9 @@ export function useVexaWebSocket(
                 language: seg.language || "en",
                 completed: seg.completed ?? false,
                 session_uid: seg.session_uid || "",
+                speaker_mapping_status: seg.speaker_mapping_status,
+                track_id: seg.track_id,
+                speaker_track_id: seg.speaker_track_id,
                 created_at: absoluteStart,
                 updated_at: seg.updated_at,
                 segment_id: seg.segment_id,
@@ -179,6 +185,9 @@ export function useVexaWebSocket(
                   language: seg.language || "en",
                   completed: seg.completed,
                   session_uid: seg.session_uid || "",
+                  speaker_mapping_status: seg.speaker_mapping_status,
+                  track_id: seg.track_id,
+                  speaker_track_id: seg.speaker_track_id,
                   created_at: seg.absolute_start_time,
                   updated_at: seg.updated_at,
                   segment_id: seg.segment_id,

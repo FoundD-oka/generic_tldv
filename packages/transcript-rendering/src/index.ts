@@ -1,4 +1,5 @@
 export type { TranscriptSegment, SegmentGroup, GroupingOptions, TranscriptState } from './types';
+export { getSegmentIdentityKey, shouldReplaceSegment } from './identity';
 export { deduplicateSegments, upsertSegments, sortSegments, sortByStartTime, deduplicateByIdentity } from './dedup';
 export { groupSegments } from './grouping';
 export { parseUTCTimestamp } from './timestamps';

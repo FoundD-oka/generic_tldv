@@ -67,6 +67,9 @@ export interface TranscriptSegment {
   language: string;
   completed?: boolean;
   session_uid: string;
+  speaker_mapping_status?: string;
+  track_id?: string;
+  speaker_track_id?: string;
   created_at: string;
   updated_at?: string;
   /** Stable segment identity from bot: {session_uid}:{speakerId}:{seq} */
@@ -121,6 +124,9 @@ export interface WebSocketSegment {
   speaker: string | null;
   language?: string;
   session_uid?: string;
+  speaker_mapping_status?: string;
+  track_id?: string;
+  speaker_track_id?: string;
   segment_id?: string;
   completed?: boolean;
   start?: number;

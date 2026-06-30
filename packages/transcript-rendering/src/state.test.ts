@@ -8,6 +8,7 @@ import {
   addSegment,
   bootstrapSegments,
 } from './state';
+import { getSegmentIdentityKey } from './identity';
 
 function seg(
   speaker: string,
@@ -57,7 +58,8 @@ describe('bootstrapConfirmed', () => {
       seg('Alice', 0, 5, 'new', { segment_id: 'seg-1' }),
     ]);
     expect(state.confirmed.size).toBe(1);
-    expect(state.confirmed.get('seg-1')!.text).toBe('new');
+    const key = getSegmentIdentityKey(seg('Alice', 0, 5, 'new', { segment_id: 'seg-1' }));
+    expect(state.confirmed.get(key)!.text).toBe('new');
     expect(state.pendingBySpeaker.size).toBe(0);
   });
 
@@ -80,7 +82,8 @@ describe('bootstrapConfirmed', () => {
       seg('Alice', 0, 5, 'version 2', { segment_id: 'seg-1' }),
     ]);
     expect(state.confirmed.size).toBe(1);
-    expect(state.confirmed.get('seg-1')!.text).toBe('version 2');
+    const key = getSegmentIdentityKey(seg('Alice', 0, 5, 'version 1', { segment_id: 'seg-1' }));
+    expect(state.confirmed.get(key)!.text).toBe('version 2');
   });
 
   it('returns segments sorted by absolute_start_time', () => {
@@ -154,6 +157,28 @@ describe('applyTranscriptTick', () => {
     expect(result).toEqual([]);
     expect(state.confirmed.size).toBe(0);
     expect(state.pendingBySpeaker.has('Alice')).toBe(false);
+  });
+
+  it('does not let older updated_at overwrite a newer confirmed segment', () => {
+    const state = createTranscriptState();
+    const newer = seg('Alice', 0, 5, 'new speaker label', {
+      session_uid: 'sess-1',
+      speaker_mapping_status: 'MAPPED',
+      updated_at: '2026-03-21T12:00:02Z',
+    });
+    const older = seg('Unknown', 0, 5, 'old speaker label', {
+      session_uid: 'sess-1',
+      speaker_mapping_status: 'NO_SPEAKER_EVENTS',
+      updated_at: '2026-03-21T12:00:01Z',
+    });
+
+    applyTranscriptTick(state, [newer]);
+    const result = applyTranscriptTick(state, [older]);
+
+    expect(result).toBeNull();
+    expect(state.confirmed.size).toBe(1);
+    expect(Array.from(state.confirmed.values())[0].speaker).toBe('Alice');
+    expect(Array.from(state.confirmed.values())[0].speaker_mapping_status).toBe('MAPPED');
   });
 });
 
@@ -313,6 +338,44 @@ describe('bootstrapSegments', () => {
     const result = bootstrapSegments([s1, s2]);
     expect(result).toHaveLength(1);
     expect(result[0].text).toBe('v2');
+  });
+
+  it('keeps same-start segments from different sessions separate', () => {
+    const s1 = seg('Alice', 0, 5, 'session one', { session_uid: 'sess-1' });
+    const s2 = seg('Bob', 0, 5, 'session two', { session_uid: 'sess-2' });
+    const result = bootstrapSegments([s1, s2]);
+    expect(result).toHaveLength(2);
+  });
+
+  it('updates speaker metadata for the same session/start identity', () => {
+    const s1 = seg('Unknown', 0, 5, 'hello', {
+      session_uid: 'sess-1',
+      speaker_mapping_status: 'NO_SPEAKER_EVENTS',
+    });
+    const s2 = seg('Alice', 0, 5, 'hello updated', {
+      session_uid: 'sess-1',
+      speaker_mapping_status: 'MAPPED',
+      updated_at: '2026-03-21T12:00:02Z',
+    });
+    const result = bootstrapSegments([s1, s2]);
+    expect(result).toHaveLength(1);
+    expect(result[0].speaker).toBe('Alice');
+    expect(result[0].speaker_mapping_status).toBe('MAPPED');
+    expect(result[0].text).toBe('hello updated');
+  });
+
+  it('keeps newer updated_at when an older mutable update arrives later', () => {
+    const newer = seg('Alice', 0, 5, 'newer', {
+      session_uid: 'sess-1',
+      updated_at: '2026-03-21T12:00:02Z',
+    });
+    const older = seg('Alice', 0, 5, 'older', {
+      session_uid: 'sess-1',
+      updated_at: '2026-03-21T12:00:01Z',
+    });
+    const result = bootstrapSegments([newer, older]);
+    expect(result).toHaveLength(1);
+    expect(result[0].text).toBe('newer');
   });
 
   it('returns empty for empty input', () => {

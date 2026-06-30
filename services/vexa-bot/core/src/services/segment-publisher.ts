@@ -17,6 +17,16 @@ export interface TranscriptionSegment {
   absolute_end_time?: string;
   /** Stable segment identity: {session_uid}:{speakerId}:{sequenceNumber} */
   segment_id?: string;
+  /** Bot session identity used by downstream upsert/context logic */
+  session_uid?: string;
+  /** Browser MediaStreamTrack.id when available; falls back to speakerId */
+  track_id?: string;
+  /** Alias kept for consumers that model speaker identity separately from raw track identity */
+  speaker_track_id?: string;
+  /** Producer-side speaker attribution confidence/status */
+  speaker_mapping_status?: string;
+  /** Update timestamp for mutable transcript upsert */
+  updated_at?: string;
   /** Source of this segment: 'audio' (Whisper), 'caption' (Teams ASR), or 'merged' */
   source?: 'audio' | 'caption' | 'merged';
   /** Raw caption text from Teams ASR (if available) */
@@ -196,6 +206,11 @@ export class SegmentPublisher {
           completed: segment.completed ?? true,
           speaker: segment.speaker,
           segment_id: segment.segment_id,
+          session_uid: segment.session_uid ?? this.sessionUid,
+          track_id: segment.track_id,
+          speaker_track_id: segment.speaker_track_id,
+          speaker_mapping_status: segment.speaker_mapping_status,
+          updated_at: segment.updated_at,
           ...(segment.absolute_start_time && { absolute_start_time: segment.absolute_start_time }),
           ...(segment.absolute_end_time && { absolute_end_time: segment.absolute_end_time }),
         }],
@@ -209,6 +224,7 @@ export class SegmentPublisher {
         ...segment,
         meeting_id: this.meetingId,
         timestamp: Date.now(),
+        session_uid: segment.session_uid ?? this.sessionUid,
         ...(segment.absolute_start_time && { absolute_start_time: segment.absolute_start_time }),
         ...(segment.absolute_end_time && { absolute_end_time: segment.absolute_end_time }),
       }));
@@ -225,10 +241,16 @@ export class SegmentPublisher {
   async publishTranscript(speaker: string, confirmed: TranscriptionSegment[], pending: TranscriptionSegment[]): Promise<void> {
     try {
       const client = await this.ensureConnected();
+      const nowIso = new Date().toISOString();
 
       const mapSeg = (s: TranscriptionSegment) => ({
         start: s.start, end: s.end, text: s.text, language: s.language,
         completed: s.completed ?? true, speaker: s.speaker, segment_id: s.segment_id,
+        session_uid: s.session_uid ?? this.sessionUid,
+        track_id: s.track_id,
+        speaker_track_id: s.speaker_track_id,
+        speaker_mapping_status: s.speaker_mapping_status,
+        updated_at: s.updated_at ?? nowIso,
         ...(s.absolute_start_time && { absolute_start_time: s.absolute_start_time }),
         ...(s.absolute_end_time && { absolute_end_time: s.absolute_end_time }),
       });
@@ -259,10 +281,11 @@ export class SegmentPublisher {
       await client.publish(wsChannel, JSON.stringify({
         type: 'transcript',
         meeting: { id: parseInt(this.meetingId) },
+        uid: this.sessionUid,
         speaker,
         confirmed: confirmed.map(mapSeg),
         pending: pending.map(mapSeg),
-        ts: new Date().toISOString(),
+        ts: nowIso,
       }));
     } catch (err: any) {
       log(`[SegmentPublisher] Failed to publish transcript: ${err.message}`);

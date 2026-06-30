@@ -1055,6 +1055,9 @@ class TranscriptionSegment(BaseModel):
     absolute_start_time: Optional[datetime] = Field(None, description="Absolute start timestamp of the segment (UTC)")
     absolute_end_time: Optional[datetime] = Field(None, description="Absolute end timestamp of the segment (UTC)")
     segment_id: Optional[str] = Field(None, description="Stable segment identity from bot")
+    session_uid: Optional[str] = Field(None, description="Bot session/stream identity for internal attribution")
+    speaker_mapping_status: Optional[str] = Field(None, description="Speaker attribution confidence/status")
+    track_id: Optional[str] = Field(None, description="Audio track identity when provided by the bot")
 
     @field_validator('language')
     @classmethod

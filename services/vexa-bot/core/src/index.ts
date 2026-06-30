@@ -28,6 +28,7 @@ import { ensureBrowserDataDir, syncBrowserDataFromS3, syncBrowserDataToS3, clean
 // Per-speaker transcription pipeline
 import { TranscriptionClient } from './services/transcription-client';
 import { SegmentPublisher } from './services/segment-publisher';
+import type { TranscriptionSegment } from './services/segment-publisher';
 import { SpeakerStreamManager } from './services/speaker-streams';
 import { resolveSpeakerName, clearSpeakerNameCache, isTrackLocked, isNameTaken, reportTrackAudio, getLockedMapping } from './services/speaker-identity';
 import { SileroVAD } from './services/vad';
@@ -178,7 +179,9 @@ let activeSpeakerStreamHandles: SpeakerStreamHandle[] = [];
 let rawCaptureService: RawCaptureService | null = null;
 export function getRawCaptureService(): RawCaptureService | null { return rawCaptureService; }
 /** Per-speaker confirmed segment batches — drained on each draft tick, flushed on cleanup */
-let confirmedBatches = new Map<string, import('./services/segment-publisher').TranscriptionSegment[]>();
+let confirmedBatches = new Map<string, TranscriptionSegment[]>();
+/** Browser MediaStreamTrack.id by internal speakerId. Falls back to speakerId for older browser callbacks. */
+const speakerTrackIds: Map<string, string> = new Map();
 // ------------------------------------------
 
 function parseOptionalIntEnv(name: string, fallback: number): number {
@@ -193,6 +196,31 @@ function parseOptionalNumberEnv(name: string, fallback: number): number {
   if (!value || value.trim() === '') return fallback;
   const parsed = Number.parseFloat(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function normalizeTrackIdentity(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function rememberSpeakerTrackIdentity(speakerId: string, trackId?: string, streamId?: string): void {
+  const identity = normalizeTrackIdentity(trackId) || normalizeTrackIdentity(streamId);
+  if (identity) speakerTrackIds.set(speakerId, identity);
+}
+
+function getSpeakerTrackIdentity(speakerId: string): string {
+  return speakerTrackIds.get(speakerId) || speakerId;
+}
+
+function buildSegmentIdentityMetadata(speakerId: string, speakerName: string): Pick<TranscriptionSegment, 'session_uid' | 'track_id' | 'speaker_track_id' | 'speaker_mapping_status'> {
+  const trackId = getSpeakerTrackIdentity(speakerId);
+  return {
+    session_uid: segmentPublisher?.sessionUid,
+    track_id: trackId,
+    speaker_track_id: trackId,
+    speaker_mapping_status: speakerName ? 'PRODUCER_LABELED' : 'NO_SPEAKER_EVENTS',
+  };
 }
 
 function mirrorWakeSttAudio(speakerId: string, speakerName: string, audioData: Float32Array): void {
@@ -1320,8 +1348,8 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
     transcriptionClient = new TranscriptionClient({
       serviceUrl: transcriptionServiceUrl,
       apiToken: botConfig.transcriptionServiceToken || process.env.TRANSCRIPTION_SERVICE_TOKEN,
-      maxSpeechDurationSec: process.env.MAX_SPEECH_DURATION_SEC ? parseFloat(process.env.MAX_SPEECH_DURATION_SEC) : undefined,
-      minSilenceDurationMs: process.env.MIN_SILENCE_DURATION_MS ? parseInt(process.env.MIN_SILENCE_DURATION_MS) : 100,
+      maxSpeechDurationSec: parseOptionalNumberEnv('MAX_SPEECH_DURATION_SEC', 5),
+      minSilenceDurationMs: parseOptionalIntEnv('MIN_SILENCE_DURATION_MS', 100),
     });
     log('[PerSpeaker] TranscriptionClient created');
 
@@ -1374,11 +1402,11 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
     const isGoogleMeet = botConfig.platform === 'google_meet';
     const streamConfig = {
       sampleRate: 16000,
-      minAudioDuration: parseOptionalNumberEnv('WAKE_STREAM_MIN_AUDIO_DURATION_SEC', 3),
-      submitInterval: parseOptionalNumberEnv('WAKE_STREAM_SUBMIT_INTERVAL_SEC', 2),
-      confirmThreshold: parseOptionalIntEnv('WAKE_STREAM_CONFIRM_THRESHOLD', 2),
-      maxBufferDuration: parseOptionalNumberEnv('WAKE_STREAM_MAX_BUFFER_DURATION_SEC', 30),
-      idleTimeoutSec: parseOptionalNumberEnv('WAKE_STREAM_IDLE_TIMEOUT_SEC', 15),
+      minAudioDuration: parseOptionalNumberEnv('WAKE_STREAM_MIN_AUDIO_DURATION_SEC', 1),
+      submitInterval: parseOptionalNumberEnv('WAKE_STREAM_SUBMIT_INTERVAL_SEC', 1),
+      confirmThreshold: parseOptionalIntEnv('WAKE_STREAM_CONFIRM_THRESHOLD', 1),
+      maxBufferDuration: parseOptionalNumberEnv('WAKE_STREAM_MAX_BUFFER_DURATION_SEC', 15),
+      idleTimeoutSec: parseOptionalNumberEnv('WAKE_STREAM_IDLE_TIMEOUT_SEC', 5),
     };
     speakerManager = new SpeakerStreamManager(streamConfig);
     log(
@@ -1517,13 +1545,15 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
 
             // Pending: one entry per Whisper segment (preserves sentence boundaries)
             const whisperSegments = result.segments || [{ text: result.text, start: 0, end: 0 }];
-            const pendingSegs: import('./services/segment-publisher').TranscriptionSegment[] = whisperSegments
+            const segmentIdentity = buildSegmentIdentityMetadata(speakerId, speakerName);
+            const pendingSegs: TranscriptionSegment[] = whisperSegments
               .map(ws => ({
                 speaker: speakerName,
                 text: (ws.text || '').trim(),
                 start: startSec + (ws.start || 0),
                 end: startSec + (ws.end || 0),
                 language: lang, completed: false,
+                ...segmentIdentity,
                 absolute_start_time: new Date(bufStart + (ws.start || 0) * 1000).toISOString(),
                 absolute_end_time: new Date(bufStart + (ws.end || 0) * 1000).toISOString(),
               }))
@@ -1559,6 +1589,7 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
 
     // Reset confirmed batches for this session
     confirmedBatches = new Map();
+    speakerTrackIds.clear();
 
     // onSegmentConfirmed: collect into batch (published atomically with pending)
     speakerManager.onSegmentConfirmed = (speakerId: string, speakerName: string, transcript: string, bufferStartMs: number, bufferEndMs: number, segmentId: string) => {
@@ -1585,6 +1616,7 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
       confirmedBatches.get(speakerId)!.push({
         speaker: speakerName, text: transcript, start: startSec, end: endSec,
         language: lang, completed: true, segment_id: fullSegmentId,
+        ...buildSegmentIdentityMetadata(speakerId, speakerName),
         absolute_start_time: new Date(bufferStartMs).toISOString(),
         absolute_end_time: new Date(bufferEndMs).toISOString(),
       });
@@ -1604,6 +1636,8 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
  *
  * @param speakerIndex - index of the media element
  * @param audioDataArray - the Float32 audio samples as a plain number array (serialized from browser)
+ * @param trackId - browser MediaStreamTrack.id when available
+ * @param streamId - browser MediaStream.id fallback when available
  */
 /** Track last re-resolution time per unmapped speaker */
 const lastReResolveTime = new Map<string, number>();
@@ -1621,13 +1655,14 @@ function isDuplicateSpeakerName(name: string, excludeSpeakerId: string): boolean
   return false;
 }
 
-async function handlePerSpeakerAudioData(speakerIndex: number, audioDataArray: number[]): Promise<void> {
+async function handlePerSpeakerAudioData(speakerIndex: number, audioDataArray: number[], trackId?: string, streamId?: string): Promise<void> {
   if (!speakerManager || !segmentPublisher || !page || page.isClosed()) return;
 
   // Report audio activity for Zoom active-speaker disambiguation
   reportTrackAudio(speakerIndex);
 
   const speakerId = `speaker-${speakerIndex}`;
+  rememberSpeakerTrackIdentity(speakerId, trackId, streamId);
   const audioData = new Float32Array(audioDataArray);
 
   const platformKey = currentPlatform === 'google_meet' ? 'googlemeet'
@@ -1863,6 +1898,7 @@ async function cleanupPerSpeakerPipeline(): Promise<void> {
     }
     confirmedBatches = new Map();
   }
+  speakerTrackIds.clear();
 
   // Publish session_end and close Redis connections
   if (segmentPublisher) {
@@ -2040,6 +2076,7 @@ export async function startPerSpeakerAudioCapture(pageToCaptureFrom: Page): Prom
         if (!stream || stream.getAudioTracks().length === 0) return false;
         const streamId = stream.id;
         if (connectedStreamIds.has(streamId)) return false;
+        const track = stream.getAudioTracks()[0];
 
         const ctx = new AudioContext({ sampleRate: TARGET_SAMPLE_RATE });
         const source = ctx.createMediaStreamSource(stream);
@@ -2055,7 +2092,7 @@ export async function startPerSpeakerAudioCapture(pageToCaptureFrom: Page): Prom
           const maxVal = Math.max(...Array.from(data).map(Math.abs));
           if (maxVal > 0.005) {
             streamLastActive.set(index, Date.now());
-            (window as any).__vexaPerSpeakerAudioData(index, Array.from(data));
+            (window as any).__vexaPerSpeakerAudioData(index, Array.from(data), track.id, streamId);
           }
         };
 
@@ -2064,7 +2101,6 @@ export async function startPerSpeakerAudioCapture(pageToCaptureFrom: Page): Prom
         connectedStreamIds.add(streamId);
 
         // Monitor track ending — log when MediaStreamTrack becomes "ended"
-        const track = stream.getAudioTracks()[0];
         track.addEventListener('ended', () => {
           (window as any).logBot?.(`[PerSpeaker] Track ${index} ENDED (streamId=${streamId.substring(0, 12)})`);
           connectedStreamIds.delete(streamId);
