@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { vexaAPI } from "@/lib/api";
 import { AdminGuard } from "@/components/admin/admin-guard";
 import { withBasePath } from "@/lib/base-path";
+import { DEFAULT_DASHBOARD_BRAND, type DashboardBrand } from "@/lib/dashboard-brand";
 
 interface AIConfig {
   enabled: boolean;
@@ -24,6 +25,7 @@ interface AIConfig {
 interface RuntimeConfig {
   wsUrl: string;
   apiUrl: string;
+  brand?: DashboardBrand;
 }
 
 function SettingsContent() {
@@ -33,6 +35,7 @@ function SettingsContent() {
   const [aiConfig, setAIConfig] = useState<AIConfig | null>(null);
   const [isLoadingAIConfig, setIsLoadingAIConfig] = useState(true);
   const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfig | null>(null);
+  const brand = runtimeConfig?.brand || DEFAULT_DASHBOARD_BRAND;
 
   // Fetch configurations on mount
   useEffect(() => {
@@ -71,7 +74,7 @@ function SettingsContent() {
       if (result.success) {
         setConnectionStatus("connected");
         toast.success("接続に成功しました", {
-          description: "Vexa APIに接続できました",
+          description: "カボス APIに接続できました",
         });
       } else {
         setConnectionStatus("error");
@@ -107,10 +110,10 @@ function SettingsContent() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Settings className="h-5 w-5" />
-              Vexa API設定
+              カボス API設定
             </CardTitle>
             <CardDescription>
-              Vexaインスタンスへの接続情報です。これらの値は環境変数で管理されています。
+              カボスインスタンスへの接続情報です。これらの値は環境変数で管理されています。
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -298,12 +301,12 @@ function SettingsContent() {
           </CardHeader>
           <CardContent>
             <pre className="bg-muted p-4 rounded-lg text-sm overflow-x-auto">
-{`# Vexa API Configuration (required)
+{`# カボス API設定（必須）
 	VEXA_API_URL=<your-api-gateway-url>
 VEXA_ADMIN_API_KEY=your_admin_api_key_here
 
-# AI Assistant Configuration (optional)
-# Format: provider/model
+# AIアシスタント設定（任意）
+# 形式: provider/model
 AI_MODEL=openai/gpt-4o
 AI_API_KEY=your_ai_api_key_here`}
             </pre>
@@ -323,25 +326,25 @@ AI_API_KEY=your_ai_api_key_here`}
             <Separator />
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">
-                カボス ダッシュボードは、セルフホスト可能な会議文字起こしAPIであるVexa向けのWeb管理画面です。
+                {brand.name} ダッシュボードは、セルフホスト可能な会議文字起こしAPI向けのWeb管理画面です。
               </p>
               <div className="flex gap-4">
                 <a
-                  href="https://github.com/Vexa-ai/vexa"
+                  href="https://github.com/FoundD-oka/generic_tldv"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-sm text-primary hover:underline inline-flex items-center gap-1"
                 >
-                  Vexa GitHub
+                  GitHub
                   <ExternalLink className="h-3 w-3" />
                 </a>
                 <a
-                  href="https://vexa.ai"
+                  href={brand.issueUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-sm text-primary hover:underline inline-flex items-center gap-1"
                 >
-                  Vexa Website
+                  問題を報告
                   <ExternalLink className="h-3 w-3" />
                 </a>
               </div>

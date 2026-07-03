@@ -56,8 +56,8 @@ function VideoPlayer({ src, className, onTimeUpdate }, ref) {
       setError(
         mediaError?.message ||
         (mediaError?.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED
-          ? "Video format not supported"
-          : "Failed to load video")
+          ? "動画形式に対応していません"
+          : "動画の読み込みに失敗しました")
       );
     };
 

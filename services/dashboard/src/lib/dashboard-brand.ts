@@ -12,13 +12,12 @@ export interface DashboardBrand {
 }
 
 export const DEFAULT_DASHBOARD_BRAND: DashboardBrand = {
-  name: "Vexa",
-  shortName: "vexa",
-  slug: "vexa",
-  locale: "en",
-  botName: "Vexa - Open Source Bot",
-  issueUrl:
-    "https://github.com/Vexa-ai/vexa/issues/new?labels=bug,hosted&title=[Hosted]%20&body=%23%23%20Environment%0AHosted%20service%20(dashboard.vexa.ai)%0A%0A%23%23%20Description%0A%0A%23%23%20Steps%20to%20reproduce%0A1.%20%0A%0A%23%23%20Expected%20behavior%0A%0A%23%23%20Actual%20behavior%0A",
+  name: "カボス",
+  shortName: "カボス",
+  slug: "kabosu",
+  locale: "ja",
+  botName: "カボス",
+  issueUrl: "https://github.com/FoundD-oka/generic_tldv/issues/new?template=bug_report.md",
 };
 
 const KABOSU_DASHBOARD_ISSUE_URL =
@@ -60,7 +59,8 @@ export function resolveDashboardBrand(env: Env = {}): DashboardBrand {
       env.DASHBOARD_BRAND_LOCALE,
       env.NEXT_PUBLIC_DASHBOARD_BRAND_LOCALE,
       env.DASHBOARD_LOCALE,
-      env.NEXT_PUBLIC_DASHBOARD_LOCALE
+      env.NEXT_PUBLIC_DASHBOARD_LOCALE,
+      DEFAULT_DASHBOARD_BRAND.locale
     )
   );
   const botName =

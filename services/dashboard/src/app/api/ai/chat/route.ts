@@ -2,8 +2,11 @@ import { streamText } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { buildKabosuTranscriptSystemPrompt } from "@/lib/kabosu-persona";
+import { redactSecrets } from "@/lib/redact-secrets";
 
 export const runtime = "nodejs";
+
+const MAX_CONTEXT_CHARS = 24000;
 
 // Parse AI_MODEL env var format: "provider/model" (e.g., "openai/gpt-4o")
 function parseAIModel(): { provider: string; model: string } | null {
@@ -132,7 +135,93 @@ interface UIMessage {
 
 interface ChatRequest {
   messages: UIMessage[];
-  context: string;
+  context?: string;
+  meeting?: {
+    platform: string;
+    nativeId: string;
+    meetingId?: string | number;
+  };
+}
+
+interface AssistantContextPayload {
+  meeting?: {
+    title?: string;
+    native_meeting_id?: string;
+    platform?: string;
+    participants?: string[];
+  };
+  latest_segments?: Array<{ speaker?: string; text?: string }>;
+  chat_messages?: Array<{ sender?: string; text?: string }>;
+  shared_urls?: string[];
+}
+
+function sanitizeTranscriptContext(context: string): string {
+  const clipped = context.slice(-MAX_CONTEXT_CHARS);
+  return redactSecrets(clipped);
+}
+
+function assistantContextToText(context: AssistantContextPayload): string {
+  const meeting = context.meeting || {};
+  const lines: string[] = [];
+  lines.push(`会議: ${meeting.title || meeting.native_meeting_id || ""}`);
+  lines.push(`プラットフォーム: ${meeting.platform || ""}`);
+  if (Array.isArray(meeting.participants) && meeting.participants.length > 0) {
+    lines.push(`参加者: ${meeting.participants.join(", ")}`);
+  }
+  lines.push("");
+  lines.push("文字起こし:");
+  for (const segment of context.latest_segments || []) {
+    const speaker = segment.speaker || "Unknown";
+    const text = segment.text || "";
+    if (text) lines.push(`[${speaker}] ${text}`);
+  }
+  if (Array.isArray(context.chat_messages) && context.chat_messages.length > 0) {
+    lines.push("");
+    lines.push("会議チャット:");
+    for (const message of context.chat_messages) {
+      const sender = message.sender || "Unknown";
+      const text = message.text || "";
+      if (text) lines.push(`[${sender}] ${text}`);
+    }
+  }
+  if (Array.isArray(context.shared_urls) && context.shared_urls.length > 0) {
+    lines.push("");
+    lines.push("共有URL:");
+    for (const url of context.shared_urls) {
+      lines.push(`- ${url}`);
+    }
+  }
+  return lines.join("\n").trim();
+}
+
+async function resolveTranscriptContext(request: Request, body: ChatRequest): Promise<string> {
+  if (!body.meeting?.platform || !body.meeting.nativeId) {
+    return body.context || "";
+  }
+
+  const assistantContextUrl = new URL(
+    `/api/vexa/meetings/${encodeURIComponent(body.meeting.platform)}/${encodeURIComponent(body.meeting.nativeId)}/assistant-context`,
+    request.url
+  );
+  if (body.meeting.meetingId != null) {
+    assistantContextUrl.searchParams.set("meeting_id", String(body.meeting.meetingId));
+  }
+
+  try {
+    const response = await fetch(assistantContextUrl, {
+      headers: {
+        cookie: request.headers.get("cookie") || "",
+      },
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      throw new Error(`assistant-context failed: ${response.status}`);
+    }
+    return assistantContextToText(await response.json());
+  } catch (error) {
+    console.warn("[AI Chat] Falling back to client-provided context:", error);
+    return body.context || "";
+  }
 }
 
 // Convert UI messages (with parts) to model messages (with content)
@@ -173,10 +262,11 @@ export async function POST(request: Request) {
     }
 
     const body: ChatRequest = await request.json();
-    const { messages, context } = body;
+    const { messages } = body;
+    const context = await resolveTranscriptContext(request, body);
 
     // Build the full system prompt with Kabosu persona before transcript context.
-    const systemPrompt = buildKabosuTranscriptSystemPrompt(context);
+    const systemPrompt = buildKabosuTranscriptSystemPrompt(sanitizeTranscriptContext(context || ""));
 
     const model = getModel();
 

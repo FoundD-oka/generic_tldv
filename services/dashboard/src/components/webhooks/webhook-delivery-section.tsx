@@ -28,7 +28,7 @@ export function WebhookDeliverySection({ meetingId }: WebhookDeliverySectionProp
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Webhook className="h-4 w-4" />
-          Webhook Delivery
+          Webhook配信履歴
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -52,9 +52,9 @@ export function WebhookDeliverySection({ meetingId }: WebhookDeliverySectionProp
                   />
                   <div>
                     <p className="text-sm">
-                      Attempt {attempt.attempt}{" "}
+                      試行 {attempt.attempt}{" "}
                       <span className="text-muted-foreground">
-                        {new Date(attempt.timestamp).toLocaleString("en-US", {
+                        {new Date(attempt.timestamp).toLocaleString("ja-JP", {
                           month: "short",
                           day: "numeric",
                           hour: "2-digit",
@@ -78,7 +78,7 @@ export function WebhookDeliverySection({ meetingId }: WebhookDeliverySectionProp
                         : "bg-red-900/30 text-red-300"
                     )}
                   >
-                    {attempt.response_status ?? "timeout"}
+                    {attempt.response_status ?? "タイムアウト"}
                   </span>
                   <p className="text-[11px] text-muted-foreground mt-0.5">
                     {attempt.response_time_ms

@@ -30,10 +30,11 @@ import { shouldTriggerZoomOAuth, startZoomOAuth } from "@/lib/zoom-oauth-client"
 import { withBasePath } from "@/lib/base-path";
 import { DEFAULT_DASHBOARD_BRAND } from "@/lib/dashboard-brand";
 import { getDashboardCopy } from "@/lib/dashboard-copy";
-import { withPostMeetingAutoStop } from "@/lib/bot-create-defaults";
-
-const FIXED_BOT_NAME = "カボス";
-const FIXED_TRANSCRIPTION_LANGUAGE = "ja";
+import {
+  DEFAULT_TRANSCRIPTION_LANGUAGE,
+  applyBotCreationDefaults,
+  withPostMeetingAutoStop,
+} from "@/lib/bot-create-defaults";
 
 const VIDEO_RECORDING_COPY = {
   en: {
@@ -144,10 +145,13 @@ export function JoinModal() {
     // Path 3 (URL + platform): when parser identified platform, use parsed
     // meetingId. Otherwise (platformNeeded), send meeting_url + platform; backend
     // synthesizes/extracts native_meeting_id best-effort.
-    const request: CreateBotRequestWithVideo = withPostMeetingAutoStop({
-      platform: effectivePlatform!,
-      native_meeting_id: parsedInput.meetingId || "",
-    });
+    const request: CreateBotRequestWithVideo = applyBotCreationDefaults(
+      withPostMeetingAutoStop({
+        platform: effectivePlatform!,
+        native_meeting_id: parsedInput.meetingId || "",
+      }),
+      config
+    );
 
     if ((effectivePlatform === "teams" || effectivePlatform === "zoom") && finalPasscode) {
       request.passcode = finalPasscode;
@@ -157,8 +161,7 @@ export function JoinModal() {
       request.meeting_url = parsedInput.originalUrl;
     }
 
-    request.bot_name = FIXED_BOT_NAME;
-    request.language = FIXED_TRANSCRIPTION_LANGUAGE;
+    request.language = DEFAULT_TRANSCRIPTION_LANGUAGE;
     request.transcribe_enabled = true;
 
     if (authenticated) {
@@ -234,6 +237,7 @@ export function JoinModal() {
     brand.locale,
     copy,
     recordingCopy,
+    config,
     setActiveMeeting,
     setCurrentMeeting,
     closeModal,

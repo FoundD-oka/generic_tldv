@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0",
+  "task_id": "issues-4-19",
+  "checkpoint_id": "",
+  "size": "L",
+  "decided_at": "2026-07-03T04:41:34.729048+00:00",
+  "basis": {
+    "residual_uncertainty": "Sixteen linked GitHub issues touch security redaction, final-transcript data preservation, bot creation defaults, persona/branding, websocket contracts, deletion semantics, compose profiles, and documentation; requires broad evidence and sidechain-style review.",
+    "not_based_on": "issue title or diff size alone"
+  },
+  "quality_gates": {
+    "required": [
+      "residency",
+      "preflight",
+      "hd-gate",
+      "doc-staleness",
+      "adapter-contract",
+      "backcast-contracts",
+      "evidence-pack",
+      "qa-judgment",
+      "tribunal-or-sidechain",
+      "external-consultation",
+      "approval-hash"
+    ],
+    "external_consultation": "optional"
+  }
+}

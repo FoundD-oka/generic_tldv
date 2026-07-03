@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://local/external-consultation.schema.json",
+  "title": "External Consultation Summary",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "task_id",
+    "provider",
+    "status",
+    "authentication_mode",
+    "redaction_confirmed",
+    "prompt_hash",
+    "response_hash",
+    "response_path",
+    "not_source_of_truth",
+    "adopted_points",
+    "rejected_points",
+    "needs_verification"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string"
+    },
+    "task_id": {
+      "type": "string"
+    },
+    "provider": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["completed", "unavailable", "skipped"]
+    },
+    "authentication_mode": {
+      "type": "string",
+      "enum": ["existing_browser_session_only", "not_used"]
+    },
+    "redaction_confirmed": {
+      "type": "boolean"
+    },
+    "prompt_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "response_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "response_path": {
+      "type": "string"
+    },
+    "not_source_of_truth": {
+      "type": "boolean"
+    },
+    "adopted_points": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "rejected_points": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "needs_verification": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true
+}

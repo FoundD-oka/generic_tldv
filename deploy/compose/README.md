@@ -77,6 +77,11 @@ Groq `openai/gpt-oss-20b`, Aivis Cloud TTS, and Vexa `/speak` with
 conversation-speed wake detection, set `WAKE_STT_URL=http://wake-stt:8058` so
 meeting bots mirror speaker PCM into the low-latency wake STT lane.
 
+`VEXA_API_KEY` must belong to the same dashboard user that creates the bots;
+`/bots/status` is user-scoped, so another user's key cannot discover them.
+Wake startup requires `VEXA_API_KEY`, `GROQ_API_KEY`, `AIVIS_API_KEY`, and
+`AIVIS_MODEL_UUID`.
+
 Set these in `.env`:
 
 ```bash
@@ -108,10 +113,16 @@ WAKE_PROCESSING_CHIME_INTERVAL_MS=4500
 WAKE_WORDS=カボス,ねえカボス,カボスさん,かぼす,カボちゃん
 ```
 
-Start it alongside dashboard-created meetings:
+Start the Vexa transcript fallback lane:
 
 ```bash
-docker compose --env-file ../../.env -f docker-compose.yml --profile wake up -d wake-stt wake-orchestrator
+docker compose --env-file ../../.env -f docker-compose.yml --profile wake up -d wake-orchestrator
+```
+
+Start the low-latency wake STT lane as well:
+
+```bash
+docker compose --env-file ../../.env -f docker-compose.yml --profile wake --profile wake-stt up -d wake-stt wake-orchestrator
 ```
 
 The dashboard defaults new meeting bots to `voice_agent_enabled=true` so the

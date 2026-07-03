@@ -8,6 +8,7 @@
  */
 
 import { RELEASE, releaseUrl } from "@/lib/release-version";
+import { DEFAULT_DASHBOARD_BRAND } from "@/lib/dashboard-brand";
 
 type Variant = "full" | "compact" | "minimal";
 type Look = "pill" | "text";
@@ -18,10 +19,12 @@ export function VersionChip({
   variant = "minimal",
   look = "pill",
   className = "",
+  brandName = DEFAULT_DASHBOARD_BRAND.name,
 }: {
   variant?: Variant;
   look?: Look;
   className?: string;
+  brandName?: string;
 }) {
   const url = releaseUrl(RELEASE.version);
   const versionLabel = `${RELEASE.version}${VERSION_SUFFIX}`;
@@ -49,7 +52,7 @@ export function VersionChip({
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      title={`Vexa ${versionLabel} · released ${RELEASE.releaseDate} · click for release notes`}
+      title={`${brandName} ${versionLabel} · リリース日 ${RELEASE.releaseDate} · リリースノートを開く`}
       className={baseClasses + " " + className}
     >
       <span>{label}</span>

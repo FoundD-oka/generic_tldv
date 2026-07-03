@@ -42,7 +42,12 @@ async def run() -> None:
 
     missing = settings.missing_required()
     if missing:
-        raise SystemExit(f"Missing required environment variables: {', '.join(missing)}")
+        raise SystemExit(
+            "Wake orchestrator configuration is incomplete. "
+            f"Missing required environment variables: {', '.join(missing)}. "
+            "Set WAKE_AUTO_DISCOVER_BOTS=true to follow running bots automatically, "
+            "or set VEXA_NATIVE_MEETING_ID for a single fixed meeting."
+        )
 
     groq = GroqClient(settings)
     aivis = AivisCloudClient(settings)

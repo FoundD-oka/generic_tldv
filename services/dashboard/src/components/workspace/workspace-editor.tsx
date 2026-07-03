@@ -148,12 +148,12 @@ export function WorkspaceEditor() {
     setSelectedFile(path);
     try {
       const resp = await fetch(`${AGENT_API}/workspace/file?user_id=${userId}&path=${encodeURIComponent(path)}`);
-      if (!resp.ok) throw new Error("Failed to load file");
+      if (!resp.ok) throw new Error("ファイルの読み込みに失敗しました");
       const data = await resp.json();
       setContent(data.content || "");
       setOriginalContent(data.content || "");
     } catch (e) {
-      toast.error("Failed to load file");
+      toast.error("ファイルの読み込みに失敗しました");
       setContent("");
       setOriginalContent("");
     } finally {
@@ -170,12 +170,12 @@ export function WorkspaceEditor() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user_id: userId, path: selectedFile, content }),
       });
-      if (!resp.ok) throw new Error("Save failed");
+      if (!resp.ok) throw new Error("保存に失敗しました");
       setOriginalContent(content);
-      toast.success("Saved");
+      toast.success("保存しました");
       loadDiff();
     } catch {
-      toast.error("Failed to save");
+      toast.error("保存に失敗しました");
     } finally {
       setIsSaving(false);
     }
@@ -187,15 +187,15 @@ export function WorkspaceEditor() {
       const resp = await fetch(`${AGENT_API}/workspace/commit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: userId, message: commitMsg || "Update workspace" }),
+        body: JSON.stringify({ user_id: userId, message: commitMsg || "ワークスペースを更新" }),
       });
-      if (!resp.ok) throw new Error("Commit failed");
-      toast.success("Committed and synced");
+      if (!resp.ok) throw new Error("コミットに失敗しました");
+      toast.success("コミットして同期しました");
       setCommitMsg("");
       setChangedCount(0);
       loadDiff();
     } catch {
-      toast.error("Commit failed");
+      toast.error("コミットに失敗しました");
     } finally {
       setIsCommitting(false);
     }
@@ -210,19 +210,19 @@ export function WorkspaceEditor() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user_id: userId, path, content: "" }),
       });
-      if (!resp.ok) throw new Error("Create failed");
+      if (!resp.ok) throw new Error("作成に失敗しました");
       setShowNewFile(false);
       setNewFilePath("");
       loadTree();
       loadFile(path);
     } catch {
-      toast.error("Failed to create file");
+      toast.error("ファイルの作成に失敗しました");
     }
   }, [newFilePath, loadTree, loadFile, userId]);
 
   const deleteFile = useCallback(async (path: string) => {
     // Delete via writing empty + noting in UI (no delete endpoint yet)
-    toast.info(`Delete not implemented yet: ${path}`);
+    toast.info(`削除はまだ実装されていません: ${path}`);
   }, []);
 
   const isDirty = content !== originalContent;
@@ -235,7 +235,7 @@ export function WorkspaceEditor() {
         <div className="flex items-center justify-between px-2 py-2 border-b">
           <div className="flex items-center gap-1">
             <FolderOpen className="h-4 w-4 text-muted-foreground" />
-            <span className="text-xs font-medium">Workspace</span>
+            <span className="text-xs font-medium">ワークスペース</span>
           </div>
           <div className="flex gap-0.5">
             <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setShowNewFile(true)}>
@@ -280,14 +280,14 @@ export function WorkspaceEditor() {
         <div className="border-t p-2 space-y-1">
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <GitCommit className="h-3 w-3" />
-            <span>{changedCount} changed file{changedCount !== 1 ? "s" : ""}</span>
+            <span>変更ファイル {changedCount} 件</span>
           </div>
           {changedCount > 0 && (
             <div className="flex gap-1">
               <Input
                 value={commitMsg}
                 onChange={(e) => setCommitMsg(e.target.value)}
-                placeholder="Commit message..."
+                placeholder="コミットメッセージ..."
                 className="h-7 text-xs flex-1"
                 onKeyDown={(e) => e.key === "Enter" && commitChanges()}
               />
@@ -297,7 +297,7 @@ export function WorkspaceEditor() {
                 onClick={commitChanges}
                 disabled={isCommitting}
               >
-                {isCommitting ? <Loader2 className="h-3 w-3 animate-spin" /> : "Commit"}
+                {isCommitting ? <Loader2 className="h-3 w-3 animate-spin" /> : "コミット"}
               </Button>
             </div>
           )}
@@ -313,7 +313,7 @@ export function WorkspaceEditor() {
               <div className="flex items-center gap-2 min-w-0">
                 <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                 <span className="text-sm font-mono truncate">{selectedFile}</span>
-                {isDirty && <Badge variant="secondary" className="text-xs">Modified</Badge>}
+                {isDirty && <Badge variant="secondary" className="text-xs">変更あり</Badge>}
               </div>
               <Button
                 size="sm"
@@ -322,7 +322,7 @@ export function WorkspaceEditor() {
                 className="gap-1"
               >
                 {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-                Save
+                保存
               </Button>
             </div>
 
@@ -348,8 +348,8 @@ export function WorkspaceEditor() {
           <div className="flex items-center justify-center h-full text-muted-foreground">
             <div className="text-center">
               <FolderOpen className="h-10 w-10 mx-auto mb-2" />
-              <p className="text-sm">Select a file to edit</p>
-              <p className="text-xs mt-1">Or create a new file with the + button</p>
+              <p className="text-sm">編集するファイルを選択してください</p>
+              <p className="text-xs mt-1">または + ボタンで新しいファイルを作成してください</p>
             </div>
           </div>
         )}

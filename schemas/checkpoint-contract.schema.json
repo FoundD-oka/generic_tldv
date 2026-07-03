@@ -1,0 +1,285 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://local/checkpoint-contract.schema.json",
+  "title": "Backcast Checkpoint Contract",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "task_id",
+    "checkpoint_id",
+    "checkpoint_type",
+    "state",
+    "target_state",
+    "quality_conditions",
+    "acceptance_criteria",
+    "progression_policy",
+    "non_goals",
+    "blast_radius",
+    "execution_bounds",
+    "verification_commands",
+    "evidence_manifest_required"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string"
+    },
+    "task_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "goal_id": {
+      "type": "string"
+    },
+    "checkpoint_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "checkpoint_type": {
+      "type": "string",
+      "enum": [
+        "discovery",
+        "agreement",
+        "implementation",
+        "risk_reduction",
+        "validation",
+        "midpoint"
+      ]
+    },
+    "state": {
+      "type": "string"
+    },
+    "target_state": {
+      "type": "object",
+      "required": [
+        "description"
+      ],
+      "properties": {
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target_state_type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "midpoint_score": {
+      "type": "object",
+      "properties": {
+        "value_distance_reduction": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "risk_reduction": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "uncertainty_reduction": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "agreement_clarity": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "verification_ease": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "total": {
+          "type": "integer"
+        },
+        "rationale": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "quality_checkpoint": {
+      "type": "object",
+      "properties": {
+        "purpose": {
+          "type": "string"
+        },
+        "issue_goal": {
+          "type": "string"
+        },
+        "checkpoint_target": {
+          "type": "string"
+        },
+        "not_the_issue_goal": {
+          "type": "boolean"
+        },
+        "conditions_must_be_minimal": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    },
+    "quality_conditions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "condition",
+          "ok_line",
+          "target_state",
+          "verification"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "condition": {
+            "type": "string",
+            "minLength": 1
+          },
+          "ok_line": {
+            "type": "string",
+            "minLength": 1
+          },
+          "target_state": {
+            "type": "string",
+            "minLength": 1
+          },
+          "verification": {
+            "type": "object"
+          },
+          "progression": {
+            "type": "object"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "acceptance_criteria": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "text",
+          "verification"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "verification": {
+            "type": "object"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "progression_policy": {
+      "type": "object",
+      "required": [
+        "pass_rule",
+        "loop_guard"
+      ],
+      "properties": {
+        "pass_rule": {
+          "type": "string"
+        },
+        "loop_guard": {
+          "type": "string"
+        },
+        "single_simple_feature_may_skip_checkpoint": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    },
+    "non_goals": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "blast_radius": {
+      "type": "object",
+      "required": [
+        "allowed_paths",
+        "forbidden_paths"
+      ],
+      "properties": {
+        "allowed_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "forbidden_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "execution_bounds": {
+      "type": "object",
+      "properties": {
+        "max_changed_files": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "require_human_approval_before_pr": {
+          "type": "boolean"
+        },
+        "require_scope_check_before_pr": {
+          "type": "boolean"
+        },
+        "require_evidence_manifest_before_pr": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    },
+    "verification_commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "command",
+          "required"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "command": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "evidence_manifest_required": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": true
+}

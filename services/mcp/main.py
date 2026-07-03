@@ -83,7 +83,7 @@ class RequestMeetingBot(BaseModel):
     meeting_url: Optional[str] = Field(
         None,
         description=(
-            "Full meeting URL. If provided, Vexa will parse it and extract platform/native_meeting_id/passcode.\n"
+            "会議URL全体。指定するとカボスが platform/native_meeting_id/passcode を抽出します。\n"
             "Example (Teams Free): https://teams.live.com/meet/9361792952021?p=IXw5JhZRdoBvKnUXPy"
         ),
     )
@@ -96,8 +96,8 @@ class RequestMeetingBot(BaseModel):
             "- Zoom: numeric meeting ID only (10-11 digits)"
         ),
     )
-    language: Optional[str] = Field(None, description="Optional language code for transcription (e.g., 'en', 'es'). If not specified, auto-detected")
-    bot_name: Optional[str] = Field(None, description="Optional custom name for the bot in the meeting")
+    language: Optional[str] = Field(None, description="文字起こし言語コード（例: 'ja'）。未指定時は日本語既定。")
+    bot_name: Optional[str] = Field(None, description="会議内に表示するボット名。")
     platform: str = Field("google_meet", description="The meeting platform (e.g., 'google_meet', 'teams', 'zoom'). Default is 'google_meet'.")
     passcode: Optional[str] = Field(
         None,
@@ -371,7 +371,7 @@ async def parse_meeting_link(
     """
     Parse a meeting URL into platform/native_meeting_id/passcode.
 
-    This is useful for agents: users can paste the full meeting URL, and Vexa will extract the
+    This is useful for agents: users can paste the full meeting URL, and Kabosu will extract the
     exact fields needed by the REST API.
     """
     _ = api_key  # Auth required for MCP usage, even though parsing doesn't call backend.
@@ -385,11 +385,11 @@ async def request_meeting_bot(
     api_key: str = Depends(get_api_key)
 ) -> Dict[str, Any]:
     """
-    Request a Vexa bot to join a meeting for transcription.
+    Request a Kabosu bot to join a meeting for transcription.
     
     Args:
         native_meeting_id: The meeting identifier (see field description for platform-specific formats)
-        language: Optional language code for transcription (e.g., 'en', 'es'). If not specified, auto-detected
+        language: Optional language code for transcription (default: ja)
         bot_name: Optional custom name for the bot in the meeting
         meeting_platform: The meeting platform (e.g., 'google_meet', 'teams', 'zoom'). Default is 'google_meet'.
         passcode: Passcode for Teams (and optionally Zoom). For Teams, extracted from `?p=...` in the meeting URL.
@@ -791,55 +791,55 @@ mcp = FastApiMCP(app, headers=["authorization", "x-api-key"])
 _PROMPTS: Dict[str, mcp_types.Prompt] = {
     "vexa.meeting_prep": mcp_types.Prompt(
         name="vexa.meeting_prep",
-        title="Vexa: Meeting Prep",
-        description="Parse link, request bot, and attach meeting notes/metadata.",
+        title="カボス: 会議準備",
+        description="リンクを解析し、ボットを起動して、会議メモやメタデータを紐づけます。",
         arguments=[
             mcp_types.PromptArgument(
                 name="meeting_url",
-                description="Full meeting URL (recommended for Teams/Zoom).",
+                description="会議URL全体（Teams/Zoomでは推奨）。",
                 required=False,
             ),
             mcp_types.PromptArgument(
                 name="meeting_platform",
-                description="google_meet | teams | zoom (optional if meeting_url is provided).",
+                description="google_meet | teams | zoom（meeting_url がある場合は省略可）。",
                 required=False,
             ),
             mcp_types.PromptArgument(
                 name="meeting_id",
-                description="Native meeting ID (optional if meeting_url is provided).",
+                description="ネイティブ会議ID（meeting_url がある場合は省略可）。",
                 required=False,
             ),
             mcp_types.PromptArgument(
                 name="notes",
-                description="Optional notes/agenda/context to store on the meeting.",
+                description="会議に保存する任意のメモ、アジェンダ、文脈。",
                 required=False,
             ),
         ],
     ),
     "vexa.during_meeting": mcp_types.Prompt(
         name="vexa.during_meeting",
-        title="Vexa: During Meeting",
-        description="Check bot status and retrieve current transcript snapshot.",
+        title="カボス: 会議中",
+        description="ボット状態を確認し、現在の文字起こしスナップショットを取得します。",
         arguments=[
             mcp_types.PromptArgument(name="meeting_platform", description="google_meet | teams | zoom", required=True),
-            mcp_types.PromptArgument(name="meeting_id", description="Native meeting ID", required=True),
+            mcp_types.PromptArgument(name="meeting_id", description="ネイティブ会議ID", required=True),
         ],
     ),
     "vexa.post_meeting": mcp_types.Prompt(
         name="vexa.post_meeting",
-        title="Vexa: Post Meeting",
-        description="Fetch bundle (notes, recordings, share link) and produce follow-ups.",
+        title="カボス: 会議後",
+        description="会議バンドル（メモ、録画、共有リンク）を取得し、フォローアップを作ります。",
         arguments=[
             mcp_types.PromptArgument(name="meeting_platform", description="google_meet | teams | zoom", required=True),
-            mcp_types.PromptArgument(name="meeting_id", description="Native meeting ID", required=True),
+            mcp_types.PromptArgument(name="meeting_id", description="ネイティブ会議ID", required=True),
         ],
     ),
     "vexa.teams_link_help": mcp_types.Prompt(
         name="vexa.teams_link_help",
-        title="Vexa: Teams Link Help",
-        description="Supported Teams links and passcode requirements (issues #105/#110).",
+        title="カボス: Teamsリンク確認",
+        description="対応しているTeamsリンク形式とパスコード要件を確認します（issues #105/#110）。",
         arguments=[
-            mcp_types.PromptArgument(name="meeting_url", description="Teams meeting URL from the user", required=False),
+            mcp_types.PromptArgument(name="meeting_url", description="ユーザーから渡されたTeams会議URL", required=False),
         ],
     ),
 }
@@ -864,28 +864,28 @@ async def _get_prompt(name: str, arguments: Optional[Dict[str, str]] = None) -> 
         notes = (args.get("notes") or "").strip()
 
         return mcp_types.GetPromptResult(
-            description="Meeting prep flow using Vexa MCP tools.",
+            description="カボスMCPツールを使った会議準備フロー。",
             messages=[
                 mcp_types.PromptMessage(
                     role="user",
                     content=t(
-                        "You are helping me prepare a meeting using Vexa.\n\n"
-                        "Goals:\n"
-                        "1. Identify meeting platform + native meeting id (+ passcode if needed).\n"
-                        "2. Request the meeting bot (idempotent).\n"
-                        "3. Store meeting notes/metadata so it appears in transcript responses.\n\n"
-                        "Rules:\n"
-                        "- Prefer calling `parse_meeting_link` when `meeting_url` is provided.\n"
-                        "- For Teams: only `teams.live.com/meet/<id>?p=<passcode>` is supported; "
-                        "`teams.microsoft.com/l/meetup-join/...` is not supported.\n"
-                        "- When requesting a bot, pass `meeting_url` if you have it; otherwise use "
-                        "`native_meeting_id` (+ `passcode` for Teams, from ?p=).\n"
-                        "- After the meeting exists, call `update_meeting_data` with `notes` if provided.\n\n"
-                        f"Input:\n- meeting_url: {meeting_url or '(none)'}\n"
-                        f"- meeting_platform: {meeting_platform or '(none)'}\n"
-                        f"- meeting_id: {meeting_id or '(none)'}\n"
-                        f"- notes: {notes or '(none)'}\n\n"
-                        "Now do the tool calls and tell me what you did and what to do next."
+                        "カボスMCPツールを使って会議準備を進めてください。\n\n"
+                        "目的:\n"
+                        "1. 会議プラットフォーム、ネイティブ会議ID、必要ならパスコードを特定する。\n"
+                        "2. 会議ボットを冪等に起動する。\n"
+                        "3. 文字起こし応答に出るよう、会議メモやメタデータを保存する。\n\n"
+                        "ルール:\n"
+                        "- `meeting_url` がある場合は `parse_meeting_link` を優先して呼び出す。\n"
+                        "- Teamsは `teams.live.com/meet/<id>?p=<passcode>` のみ対応。"
+                        "`teams.microsoft.com/l/meetup-join/...` は未対応。\n"
+                        "- ボット起動時、URLがあるなら `meeting_url` を渡す。ない場合は "
+                        "`native_meeting_id`（Teamsでは ?p= 由来の `passcode` も）を使う。\n"
+                        "- 会議が存在したら、`notes` がある場合は `update_meeting_data` で保存する。\n\n"
+                        f"入力:\n- meeting_url: {meeting_url or '(なし)'}\n"
+                        f"- meeting_platform: {meeting_platform or '(なし)'}\n"
+                        f"- meeting_id: {meeting_id or '(なし)'}\n"
+                        f"- notes: {notes or '(なし)'}\n\n"
+                        "必要なツールを呼び出し、実行したことと次にすべきことを日本語で報告してください。"
                     ),
                 )
             ],
@@ -895,19 +895,18 @@ async def _get_prompt(name: str, arguments: Optional[Dict[str, str]] = None) -> 
         meeting_platform = (args.get("meeting_platform") or "").strip()
         meeting_id = (args.get("meeting_id") or "").strip()
         return mcp_types.GetPromptResult(
-            description="During-meeting helper prompt using Vexa MCP tools.",
+            description="カボスMCPツールを使った会議中支援プロンプト。",
             messages=[
                 mcp_types.PromptMessage(
                     role="user",
                     content=t(
-                        "You are my during-meeting assistant using Vexa.\n\n"
-                        f"Meeting: platform={meeting_platform}, id={meeting_id}\n\n"
-                        "Steps:\n"
-                        "- Call `get_bot_status` to confirm the bot is active / requested.\n"
-                        "- Call `get_meeting_transcript` to fetch the current transcript snapshot.\n"
-                        "- If the transcript is empty, explain whether the meeting may not have started, "
-                        "bot may not be admitted yet, or transcription isn't producing segments.\n\n"
-                        "Then summarize key points and action items so far."
+                        "カボスMCPツールを使って、会議中の支援をしてください。\n\n"
+                        f"会議: platform={meeting_platform}, id={meeting_id}\n\n"
+                        "手順:\n"
+                        "- `get_bot_status` を呼び、ボットがactive/requestedか確認する。\n"
+                        "- `get_meeting_transcript` を呼び、現在の文字起こしスナップショットを取得する。\n"
+                        "- 文字起こしが空の場合は、会議未開始、入室待ち、文字起こし未生成のどれがありそうか説明する。\n\n"
+                        "最後に、ここまでの要点とアクション項目を日本語でまとめてください。"
                     ),
                 )
             ],
@@ -917,21 +916,21 @@ async def _get_prompt(name: str, arguments: Optional[Dict[str, str]] = None) -> 
         meeting_platform = (args.get("meeting_platform") or "").strip()
         meeting_id = (args.get("meeting_id") or "").strip()
         return mcp_types.GetPromptResult(
-            description="Post-meeting helper prompt using Vexa MCP tools.",
+            description="カボスMCPツールを使った会議後支援プロンプト。",
             messages=[
                 mcp_types.PromptMessage(
                     role="user",
                     content=t(
-                        "You are my post-meeting assistant using Vexa.\n\n"
-                        f"Meeting: platform={meeting_platform}, id={meeting_id}\n\n"
-                        "Steps:\n"
-                        "- Call `get_meeting_bundle` (segments off) to fetch meeting status, notes, recordings, and share link.\n"
-                        "- If recordings exist, resolve download URLs if needed.\n"
-                        "- Produce:\n"
-                        "  1) concise summary\n"
-                        "  2) decisions\n"
-                        "  3) action items with owners (if known) and due dates (if mentioned)\n"
-                        "  4) open questions\n"
+                        "カボスMCPツールを使って、会議後の整理をしてください。\n\n"
+                        f"会議: platform={meeting_platform}, id={meeting_id}\n\n"
+                        "手順:\n"
+                        "- `get_meeting_bundle`（segments off）で会議状態、メモ、録画、共有リンクを取得する。\n"
+                        "- 録画がある場合は、必要に応じてダウンロードURLを解決する。\n"
+                        "- 次を日本語で出す:\n"
+                        "  1. 簡潔な要約\n"
+                        "  2. 決定事項\n"
+                        "  3. 担当者（分かる場合）と期限（言及がある場合）つきのアクション項目\n"
+                        "  4. 未解決の質問\n"
                     ),
                 )
             ],
@@ -940,21 +939,21 @@ async def _get_prompt(name: str, arguments: Optional[Dict[str, str]] = None) -> 
     if name == "vexa.teams_link_help":
         meeting_url = (args.get("meeting_url") or "").strip()
         return mcp_types.GetPromptResult(
-            description="Teams link troubleshooting prompt.",
+            description="Teamsリンク確認プロンプト。",
             messages=[
                 mcp_types.PromptMessage(
                     role="user",
                     content=t(
-                        "Help me troubleshoot a Microsoft Teams meeting link for Vexa.\n\n"
-                        f"User link: {meeting_url or '(none provided)'}\n\n"
-                        "Checklist:\n"
-                        "- If link is `teams.live.com/meet/<id>?p=<passcode>`:\n"
-                        "  - native_meeting_id = <id> (10-15 digits)\n"
-                        "  - passcode = value of ?p= (often required)\n"
-                        "  - Prefer using `meeting_url` directly with `request_meeting_bot`.\n"
-                        "- If link is `teams.microsoft.com/l/meetup-join/...`: explain it's not supported yet (issues #105/#110).\n"
-                        "- If passcode fails validation, explain constraints (8-20 alphanumeric) and ask for a corrected link.\n\n"
-                        "If a link is provided, call `parse_meeting_link` and show the extracted fields."
+                        "Microsoft Teams会議リンクをカボスで使えるか確認してください。\n\n"
+                        f"ユーザーのリンク: {meeting_url or '(未指定)'}\n\n"
+                        "確認項目:\n"
+                        "- `teams.live.com/meet/<id>?p=<passcode>` の場合:\n"
+                        "  - native_meeting_id = <id>（10〜15桁）\n"
+                        "  - passcode = ?p= の値（多くの場合必須）\n"
+                        "  - `request_meeting_bot` には `meeting_url` を直接渡すのを優先する。\n"
+                        "- `teams.microsoft.com/l/meetup-join/...` の場合: まだ未対応であることを説明する（issues #105/#110）。\n"
+                        "- passcode検証に失敗する場合は、8〜20文字の英数字制約を説明し、修正版リンクを依頼する。\n\n"
+                        "リンクがある場合は `parse_meeting_link` を呼び、抽出フィールドを日本語で示してください。"
                     ),
                 )
             ],

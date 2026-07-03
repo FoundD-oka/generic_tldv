@@ -1,0 +1,186 @@
+{
+  "schema_version": "1.0",
+  "states": [
+    "inbox",
+    "goal_drafted",
+    "goal_approved",
+    "current_assessed",
+    "checkpoint_drafted",
+    "checkpoint_approved",
+    "planned",
+    "preflight_failed",
+    "build_authorized",
+    "worktree_created",
+    "building",
+    "built",
+    "verifying",
+    "verification_failed",
+    "verified",
+    "evidence_missing",
+    "evidence_ready",
+    "awaiting_approval",
+    "approved",
+    "rejected",
+    "needs_resplit",
+    "scope_change_requested",
+    "blocked",
+    "expired_approval",
+    "superseded",
+    "abandoned",
+    "merged",
+    "reverted",
+    "manual_override",
+    "completed"
+  ],
+  "terminal_states": [
+    "abandoned",
+    "completed"
+  ],
+  "transitions": {
+    "inbox": [
+      "goal_drafted",
+      "abandoned"
+    ],
+    "goal_drafted": [
+      "goal_approved",
+      "rejected",
+      "needs_resplit",
+      "abandoned"
+    ],
+    "goal_approved": [
+      "current_assessed",
+      "scope_change_requested"
+    ],
+    "current_assessed": [
+      "checkpoint_drafted",
+      "needs_resplit"
+    ],
+    "checkpoint_drafted": [
+      "checkpoint_approved",
+      "needs_resplit",
+      "rejected",
+      "abandoned"
+    ],
+    "checkpoint_approved": [
+      "planned",
+      "scope_change_requested"
+    ],
+    "planned": [
+      "build_authorized",
+      "preflight_failed",
+      "needs_resplit"
+    ],
+    "preflight_failed": [
+      "planned",
+      "needs_resplit",
+      "rejected",
+      "abandoned"
+    ],
+    "build_authorized": [
+      "worktree_created"
+    ],
+    "worktree_created": [
+      "building",
+      "blocked"
+    ],
+    "building": [
+      "built",
+      "blocked",
+      "abandoned"
+    ],
+    "built": [
+      "verifying",
+      "scope_change_requested"
+    ],
+    "verifying": [
+      "verified",
+      "verification_failed",
+      "evidence_missing",
+      "building",
+      "needs_resplit"
+    ],
+    "verification_failed": [
+      "building",
+      "needs_resplit",
+      "blocked",
+      "abandoned"
+    ],
+    "verified": [
+      "evidence_ready",
+      "evidence_missing"
+    ],
+    "evidence_missing": [
+      "verifying",
+      "building",
+      "needs_resplit",
+      "rejected"
+    ],
+    "evidence_ready": [
+      "awaiting_approval"
+    ],
+    "awaiting_approval": [
+      "approved",
+      "rejected",
+      "needs_resplit",
+      "scope_change_requested",
+      "expired_approval",
+      "manual_override"
+    ],
+    "approved": [
+      "merged",
+      "checkpoint_drafted",
+      "completed"
+    ],
+    "rejected": [
+      "checkpoint_drafted",
+      "abandoned"
+    ],
+    "needs_resplit": [
+      "checkpoint_drafted",
+      "abandoned"
+    ],
+    "scope_change_requested": [
+      "goal_drafted",
+      "checkpoint_drafted",
+      "abandoned"
+    ],
+    "blocked": [
+      "planned",
+      "needs_resplit",
+      "abandoned",
+      "manual_override"
+    ],
+    "expired_approval": [
+      "awaiting_approval",
+      "needs_resplit",
+      "abandoned"
+    ],
+    "manual_override": [
+      "approved",
+      "rejected",
+      "needs_resplit",
+      "abandoned"
+    ],
+    "superseded": [
+      "abandoned"
+    ],
+    "merged": [
+      "completed",
+      "reverted"
+    ],
+    "reverted": [
+      "needs_resplit",
+      "abandoned"
+    ],
+    "abandoned": [],
+    "completed": []
+  },
+  "invariants": [
+    "all transition states must be declared in states",
+    "terminal states must have no outgoing transitions",
+    "evidence_ready requires a passing evidence manifest",
+    "approved requires an approval decision",
+    "merged requires current HEAD to match the evidence manifest head_sha",
+    "manual_override requires approver, timestamp, and reason"
+  ]
+}

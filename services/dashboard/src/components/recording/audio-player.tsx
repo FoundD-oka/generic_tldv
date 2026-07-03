@@ -430,7 +430,7 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
 
         {isLoading && errorCount > 0 && (
           <span className="text-xs text-muted-foreground whitespace-nowrap">
-            Preparing audio...
+            音声を準備しています...
           </span>
         )}
       </div>

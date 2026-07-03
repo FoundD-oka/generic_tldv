@@ -1,0 +1,32 @@
+{
+  "task_id": "issues-4-19",
+  "review_type": "sidechain-synthesis",
+  "verdict": "pass_with_human_approval_required",
+  "reviewers": [
+    {
+      "name": "implementation-contract",
+      "focus": "Map issues #4-#19 to code paths and docs.",
+      "finding": "All issue categories have corresponding implementation and test/doc evidence."
+    },
+    {
+      "name": "data-preservation",
+      "focus": "Ensure redaction, final transcription, delete cleanup, and assistant context do not lose or leak sensitive meeting state.",
+      "finding": "Final transcription now preserves existing speaker labels when replacement speaker events are missing, assistant contexts are server-side and redacted, delete cleanup handles ambiguous IDs explicitly, and secret redaction is shared across runtime paths."
+    },
+    {
+      "name": "operations-and-ux",
+      "focus": "Check Kabosu defaults, Japanese visible text, wake profile boundaries, and WebSocket contract alignment.",
+      "finding": "Bot defaults now use Kabosu/Japanese, wake-stt and TTS are opt-in profiles, transcript.finalized is documented and consumed as a REST refresh signal, and transcript.mutable is retained only as deprecated inbound compatibility."
+    }
+  ],
+  "blocking_findings": [],
+  "required_follow_up": [
+    "Record hash-bound human approval for the final non-.pipeline diff before opening a PR.",
+    "Run live meeting E2E after deployment with owner-scoped VEXA_API_KEY and real wake credentials."
+  ],
+  "evidence": [
+    ".pipeline/evidence/issues-4-19/test-results.md",
+    ".pipeline/plans/issues-4-19/verification-contract.md",
+    ".pipeline/gates/issues-4-19/pr-ready.json"
+  ]
+}

@@ -99,12 +99,14 @@ export interface BotConfigUpdate {
 // WebSocket Types
 export type WebSocketMessageType =
   | "transcript"
-  | "transcript.mutable"
   | "transcript.finalized"
+  | "chat.new_message"
   | "meeting.status"
   | "subscribed"
   | "pong"
-  | "error";
+  | "error"
+  // Deprecated inbound compatibility only. Producers emit "transcript".
+  | "transcript.mutable";
 
 export interface WebSocketSubscribeMessage {
   action: "subscribe";
@@ -136,11 +138,22 @@ export interface WebSocketSegment {
   updated_at?: string;
 }
 
-export interface WebSocketTranscriptMessage {
-  type: "transcript.mutable" | "transcript.finalized";
+// Deprecated inbound compatibility only. Producers emit WebSocketTranscriptBundleMessage.
+export interface WebSocketTranscriptLegacyMutableMessage {
+  type: "transcript.mutable";
   meeting: { id: number };
   payload: {
     segments: WebSocketSegment[];
+  };
+  ts: string;
+}
+
+export interface WebSocketTranscriptFinalizedMessage {
+  type: "transcript.finalized";
+  meeting: { id: number };
+  payload?: {
+    segment_count?: number;
+    triggered_by?: string;
   };
   ts: string;
 }
@@ -194,7 +207,8 @@ export interface WebSocketChatMessage {
 }
 
 export type WebSocketIncomingMessage =
-  | WebSocketTranscriptMessage
+  | WebSocketTranscriptLegacyMutableMessage
+  | WebSocketTranscriptFinalizedMessage
   | WebSocketTranscriptBundleMessage
   | WebSocketStatusMessage
   | WebSocketChatMessage

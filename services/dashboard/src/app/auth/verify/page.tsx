@@ -20,14 +20,14 @@ interface VerifyError {
 
 // Map error codes to icons and colors
 const errorConfig: Record<string, { icon: React.ElementType; color: string; title: string }> = {
-  TOKEN_EXPIRED: { icon: Clock, color: "text-yellow-500", title: "Link Expired" },
-  INVALID_TOKEN: { icon: ShieldX, color: "text-destructive", title: "Invalid Link" },
-  NOT_CONFIGURED: { icon: AlertTriangle, color: "text-yellow-500", title: "Configuration Error" },
-  TIMEOUT: { icon: WifiOff, color: "text-orange-500", title: "Connection Timeout" },
-  NETWORK_ERROR: { icon: WifiOff, color: "text-orange-500", title: "Network Error" },
-  SERVICE_UNAVAILABLE: { icon: WifiOff, color: "text-orange-500", title: "Service Unavailable" },
-  UNAUTHORIZED: { icon: ShieldX, color: "text-destructive", title: "Access Denied" },
-  default: { icon: XCircle, color: "text-destructive", title: "Verification Failed" },
+  TOKEN_EXPIRED: { icon: Clock, color: "text-yellow-500", title: "リンクの期限が切れています" },
+  INVALID_TOKEN: { icon: ShieldX, color: "text-destructive", title: "リンクが無効です" },
+  NOT_CONFIGURED: { icon: AlertTriangle, color: "text-yellow-500", title: "設定エラー" },
+  TIMEOUT: { icon: WifiOff, color: "text-orange-500", title: "接続がタイムアウトしました" },
+  NETWORK_ERROR: { icon: WifiOff, color: "text-orange-500", title: "ネットワークエラー" },
+  SERVICE_UNAVAILABLE: { icon: WifiOff, color: "text-orange-500", title: "サービスを利用できません" },
+  UNAUTHORIZED: { icon: ShieldX, color: "text-destructive", title: "アクセス権がありません" },
+  default: { icon: XCircle, color: "text-destructive", title: "検証に失敗しました" },
 };
 
 function VerifyContent() {
@@ -45,7 +45,7 @@ function VerifyContent() {
     if (!token) {
       setState("error");
       setError({
-        message: "No verification token provided",
+        message: "検証トークンが指定されていません",
         code: "MISSING_TOKEN",
       });
       return;
@@ -92,7 +92,7 @@ function VerifyContent() {
     } catch {
       setState("error");
       setError({
-        message: "Connection error. Please check your internet connection.",
+        message: "接続エラーが発生しました。ネットワーク接続を確認してください。",
         code: "NETWORK_ERROR",
         canRetry: true,
       });
@@ -118,10 +118,10 @@ function VerifyContent() {
           {state === "verifying" && (
             <>
               <CardTitle className="text-xl">
-                {isRetrying ? "Retrying verification..." : "Verifying your email..."}
+                {isRetrying ? "検証を再試行しています..." : "メールアドレスを検証しています..."}
               </CardTitle>
               <CardDescription>
-                Please wait while we verify your login link
+                ログインリンクを確認しています。しばらくお待ちください。
               </CardDescription>
             </>
           )}
@@ -134,12 +134,12 @@ function VerifyContent() {
                 </div>
               </div>
               <CardTitle className="text-xl text-green-600 dark:text-green-400">
-                {isNewUser ? "Account Created!" : "Welcome Back!"}
+                {isNewUser ? "アカウントを作成しました" : "おかえりなさい"}
               </CardTitle>
               <CardDescription>
                 {isNewUser
-                  ? "Your account has been created. Redirecting..."
-                  : "You have been signed in. Redirecting..."}
+                  ? "アカウント作成が完了しました。移動しています..."
+                  : "ログインしました。移動しています..."}
               </CardDescription>
             </>
           )}
@@ -169,7 +169,7 @@ function VerifyContent() {
           {state === "success" && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
-              <span>Redirecting to dashboard...</span>
+              <span>ダッシュボードへ移動しています...</span>
             </div>
           )}
 
@@ -188,7 +188,7 @@ function VerifyContent() {
               {error.details && (
                 <details className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-3">
                   <summary className="cursor-pointer hover:text-foreground transition-colors">
-                    Technical details
+                    技術詳細
                   </summary>
                   <pre className="mt-2 whitespace-pre-wrap break-all font-mono">
                     {error.details}
@@ -207,12 +207,12 @@ function VerifyContent() {
                     {isRetrying ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Retrying...
+                        再試行中...
                       </>
                     ) : (
                       <>
                         <RefreshCw className="mr-2 h-4 w-4" />
-                        Try Again
+                        もう一度試す
                       </>
                     )}
                   </Button>
@@ -223,7 +223,7 @@ function VerifyContent() {
                   onClick={() => router.push("/login")}
                   className="w-full"
                 >
-                  {error.code === "TOKEN_EXPIRED" ? "Request New Link" : "Back to Login"}
+                  {error.code === "TOKEN_EXPIRED" ? "新しいリンクをリクエスト" : "ログインへ戻る"}
                 </Button>
               </div>
             </div>
@@ -238,8 +238,8 @@ function VerifyLoading() {
   return (
     <Card className="border-0 shadow-xl">
       <CardHeader className="text-center">
-        <CardTitle className="text-xl">Loading...</CardTitle>
-        <CardDescription>Please wait</CardDescription>
+        <CardTitle className="text-xl">読み込み中...</CardTitle>
+        <CardDescription>しばらくお待ちください</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col items-center gap-4">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -255,7 +255,7 @@ export default function VerifyPage() {
         {/* Logo */}
         <div className="flex flex-col items-center justify-center gap-2 mb-8">
           <Logo size="lg" showText={true} />
-          <p className="text-sm text-muted-foreground">Meeting Transcription</p>
+          <p className="text-sm text-muted-foreground">会議文字起こし</p>
         </div>
 
         <Suspense fallback={<VerifyLoading />}>
@@ -263,7 +263,7 @@ export default function VerifyPage() {
         </Suspense>
 
         <p className="text-center text-xs text-muted-foreground mt-6">
-          Vexa Dashboard - Open Source Meeting Transcription
+          カボス ダッシュボード
         </p>
       </div>
     </div>

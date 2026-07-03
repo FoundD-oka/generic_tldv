@@ -965,7 +965,8 @@ class WakeOrchestrator:
                 )
             else:
                 logger.warning(
-                    "Wake reply playback event timed out: wake=%s speaker=%s request_id=%s",
+                    "Wake reply playback event timed out: wake=%s speaker=%s request_id=%s. "
+                    "If the bot was created through API/MCP, confirm voice_agent_enabled=true.",
                     wake,
                     speaker,
                     request_id,

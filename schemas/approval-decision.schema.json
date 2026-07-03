@@ -1,0 +1,78 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://local/approval-decision.schema.json",
+  "title": "Backcast Approval Decision",
+  "type": "object",
+  "required": [
+    "approval_id",
+    "task_id",
+    "checkpoint_id",
+    "decision",
+    "approver",
+    "reviewed_evidence"
+  ],
+  "properties": {
+    "approval_id": {
+      "type": "string"
+    },
+    "task_id": {
+      "type": "string"
+    },
+    "checkpoint_id": {
+      "type": "string"
+    },
+    "decision": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "approved",
+        "rejected",
+        "request_changes",
+        "needs_resplit",
+        "scope_change_requested",
+        "manual_override"
+      ]
+    },
+    "approver": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        },
+        "approved_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "reviewed_evidence": {
+      "type": "object",
+      "required": [
+        "manifest_path",
+        "pack_path"
+      ],
+      "properties": {
+        "manifest_path": {
+          "type": "string"
+        },
+        "pack_path": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "conditions": {
+      "type": "array"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true
+}
