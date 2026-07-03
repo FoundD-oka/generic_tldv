@@ -80,17 +80,17 @@ const TYPE_META: Record<
   { label: string; icon: React.ReactNode; badgeClass: string }
 > = {
   decision: {
-    label: "Decision",
+    label: "決定事項",
     icon: <CheckCircle2 className="h-3.5 w-3.5" />,
     badgeClass: "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300",
   },
   action_item: {
-    label: "Action Item",
+    label: "アクションアイテム",
     icon: <ClipboardList className="h-3.5 w-3.5" />,
     badgeClass: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300",
   },
   architecture_statement: {
-    label: "Architecture",
+    label: "設計",
     icon: <Cpu className="h-3.5 w-3.5" />,
     badgeClass: "bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300",
   },
@@ -225,7 +225,7 @@ function DecisionRow({
               disabled={!draft.trim()}
             >
               <Check className="h-3 w-3" />
-              Save
+              保存
             </Button>
             <Button
               size="sm"
@@ -234,7 +234,7 @@ function DecisionRow({
               onClick={handleEditCancel}
             >
               <X className="h-3 w-3" />
-              Cancel
+              キャンセル
             </Button>
           </div>
         </div>
@@ -303,7 +303,7 @@ function AddManualForm({ onAdd }: { onAdd: (item: Omit<DecisionItem, "id" | "sta
         onClick={() => setOpen(true)}
       >
         <Plus className="h-3.5 w-3.5" />
-        Add manually
+        手動で追加
       </Button>
     );
   }
@@ -331,7 +331,7 @@ function AddManualForm({ onAdd }: { onAdd: (item: Omit<DecisionItem, "id" | "sta
       <Textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder="Describe the decision, action item, or architecture note…"
+        placeholder="決定事項、アクションアイテム、設計メモを入力..."
         className="min-h-[70px] text-sm resize-none"
         autoFocus
         onKeyDown={(e) => {
@@ -341,10 +341,10 @@ function AddManualForm({ onAdd }: { onAdd: (item: Omit<DecisionItem, "id" | "sta
       />
       <div className="flex gap-1.5">
         <Button size="sm" className="h-7 text-xs" onClick={handleSubmit} disabled={!text.trim()}>
-          Add
+          追加
         </Button>
         <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setOpen(false)}>
-          Cancel
+          キャンセル
         </Button>
       </div>
     </div>
@@ -482,7 +482,7 @@ export function DecisionsPanel({ meetingId, isActive, embedded }: DecisionsPanel
     setItems((prev) =>
       prev.map((it) => (it.id === id ? { ...it, status: "approved" } : it))
     );
-    toast.success("Decision approved");
+    toast.success("決定事項を承認しました");
   };
 
   const handleDiscard = (id: string) => {
@@ -526,7 +526,7 @@ export function DecisionsPanel({ meetingId, isActive, embedded }: DecisionsPanel
           connected ? "bg-green-500 animate-pulse" : "bg-muted-foreground"
         )}
       />
-      {connected ? "live" : "connecting…"}
+      {connected ? "接続中" : "接続待ち..."}
     </span>
   );
 
@@ -540,7 +540,7 @@ export function DecisionsPanel({ meetingId, isActive, embedded }: DecisionsPanel
           {statusIndicator}
           {pendingCount > 0 && (
             <span className="inline-flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full bg-amber-500 text-[10px] font-bold text-white">
-              {pendingCount} pending
+              {pendingCount}件 保留
             </span>
           )}
         </div>
@@ -550,8 +550,8 @@ export function DecisionsPanel({ meetingId, isActive, embedded }: DecisionsPanel
           {visibleItems.length === 0 ? (
             <p className="text-xs text-muted-foreground italic">
               {isActive
-                ? "Listening for decisions, action items, and architecture statements…"
-                : "No items detected."}
+                ? "決定事項、アクションアイテム、設計メモを検出しています..."
+                : "項目は検出されていません。"}
             </p>
           ) : (
             visibleItems.map((item) => (
@@ -580,7 +580,7 @@ export function DecisionsPanel({ meetingId, isActive, embedded }: DecisionsPanel
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2 text-sm">
             <Zap className="h-4 w-4 text-amber-500" />
-            Decisions
+            決定事項
             {pendingCount > 0 && (
               <span className="inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-amber-500 text-[9px] font-bold text-white">
                 {pendingCount}
@@ -610,8 +610,8 @@ export function DecisionsPanel({ meetingId, isActive, embedded }: DecisionsPanel
           {visibleItems.length === 0 ? (
             <p className="text-xs text-muted-foreground italic">
               {isActive
-                ? "Listening for decisions, action items, and architecture statements…"
-                : "No items detected."}
+                ? "決定事項、アクションアイテム、設計メモを検出しています..."
+                : "項目は検出されていません。"}
             </p>
           ) : (
             <div className="space-y-2 max-h-[420px] overflow-y-auto pr-0.5">

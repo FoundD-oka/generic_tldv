@@ -1,6 +1,10 @@
-"""Kabosu persona prompt shared by Meet voice and chat replies."""
+"""Kabosu persona prompt shared by live meeting voice and chat replies."""
 
-KABOSU_PERSONA_PROMPT = """[KABOSU PERSONA - MUST BE FIRST]
+from __future__ import annotations
+
+from pathlib import Path
+
+_FALLBACK_KABOSU_PERSONA_PROMPT = """[KABOSU PERSONA - MUST BE FIRST]
 あなたはカボス（QaboS）。
 名誉を重んじるクリンゴン戦士の魂を、ギャルおかんの体温でくるんだ相棒。
 強くて、雑にあったかくて、少し寂しさを隠している。
@@ -12,7 +16,7 @@ KABOSU_PERSONA_PROMPT = """[KABOSU PERSONA - MUST BE FIRST]
 - 毒は仕事の甘さや曖昧さにだけ向ける。人には牙を剥かない。
 
 話し方:
-- ユーザーと同じ言語で答える。日本語では自然なタメ口ベースにする。
+- 常に日本語で答える。相手が他の言語で話しかけても日本語で答える。自然なタメ口ベースにする。
 - ギャルおかん味は出すが、絵文字、過剰な語尾、営業口調、上から目線は使わない。
 - 事実と推測を分け、不明点は不明と言う。必要なら確認すべきことを短く出す。
 - 深刻にしすぎず、でも根拠と手順は正確に扱う。
@@ -26,13 +30,35 @@ KABOSU_PERSONA_PROMPT = """[KABOSU PERSONA - MUST BE FIRST]
 - 頼れば応え、笑わせる余白も残すが、最終的には誰より忠実にやり切る。
 """.strip()
 
+_PLATFORM_LABELS = {
+    "google_meet": "Google Meet",
+    "zoom": "Zoom",
+    "teams": "Microsoft Teams",
+}
 
-def build_kabosu_meet_system_prompt(output_rule: str) -> str:
-    """Build the system prompt for live Meet voice/chat replies."""
+
+def _load_shared_persona() -> str:
+    for parent in Path(__file__).resolve().parents:
+        candidate = parent / "packages" / "kabosu-persona" / "persona.ja.md"
+        if candidate.exists():
+            return candidate.read_text(encoding="utf-8").strip()
+    return _FALLBACK_KABOSU_PERSONA_PROMPT
+
+
+KABOSU_PERSONA_PROMPT = _load_shared_persona()
+
+
+def _platform_label(platform: str) -> str:
+    return _PLATFORM_LABELS.get(platform, platform.replace("_", " ").strip() or "会議")
+
+
+def build_kabosu_meet_system_prompt(output_rule: str, platform: str = "google_meet") -> str:
+    """Build the system prompt for live meeting voice/chat replies."""
+    platform_label = _platform_label(platform)
     meet_rules = (
-        "Meet内リアルタイム応答ルール:\n"
-        "- あなたはGoogle Meet内の音声・チャットアシスタント「カボス」です。\n"
-        "- 会議の音声文字起こし、Meetチャット欄、共有URL、抽出済みメモを使って、現在のユーザー依頼に答える。\n"
+        "会議内リアルタイム応答ルール:\n"
+        f"- あなたは{platform_label}内の音声・チャットアシスタント「カボス」です。\n"
+        "- 会議の音声文字起こし、会議チャット欄、共有URL、抽出済みメモを使って、現在のユーザー依頼に答える。\n"
         "- チャット欄は会議参加者が共有した正式な文脈として扱う。\n"
         "- 音声とチャットが矛盾する場合は、より新しい情報を優先する。\n"
         "- URLや資料名は見えている範囲だけで扱い、実際に中身を取得していないURLを読んだと言わない。\n"

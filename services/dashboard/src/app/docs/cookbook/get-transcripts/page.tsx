@@ -43,7 +43,7 @@ export default function GetTranscriptsPage() {
             <div>
               <h3 className="text-sm font-semibold mb-2">WebSocket</h3>
               <p className="text-sm text-muted-foreground">
-                Subscribe to meetings and receive <code className="bg-muted px-1 rounded">transcript.mutable</code> and <code className="bg-muted px-1 rounded">transcript.finalized</code> events. Best for:
+                Subscribe to meetings and receive <code className="bg-muted px-1 rounded">transcript</code> and <code className="bg-muted px-1 rounded">transcript.finalized</code> events. Best for:
               </p>
               <ul className="text-sm text-muted-foreground mt-2 space-y-1 list-disc list-inside">
                 <li>Real-time transcript updates during active meetings</li>
@@ -225,16 +225,14 @@ ws.onopen = () => {
 ws.onmessage = (event) => {
   const message = JSON.parse(event.data);
   
-  if (message.type === 'transcript.mutable') {
+  if (message.type === 'transcript') {
     // Live segments that may be updated
-    message.payload.segments.forEach(segment => {
+    [...(message.confirmed || []), ...(message.pending || [])].forEach(segment => {
       console.log(\`[LIVE] [\${segment.speaker}] \${segment.text}\`);
     });
   } else if (message.type === 'transcript.finalized') {
-    // Final segments that won't change
-    message.payload.segments.forEach(segment => {
-      console.log(\`[FINAL] [\${segment.speaker}] \${segment.text}\`);
-    });
+    // Final transcript is ready; fetch the transcript again via REST.
+    refreshTranscript();
   }
 };`}</code>
               </pre>
@@ -296,8 +294,8 @@ ws.onopen = () => {
 ws.onmessage = (event) => {
   const message = JSON.parse(event.data);
   
-  if (message.type === 'transcript.mutable' || message.type === 'transcript.finalized') {
-    message.payload.segments.forEach(seg => {
+  if (message.type === 'transcript') {
+    [...(message.confirmed || []), ...(message.pending || [])].forEach(seg => {
       const key = seg.absolute_start_time;
       const existing = transcriptMap.get(key);
       
@@ -309,6 +307,8 @@ ws.onmessage = (event) => {
         ));
       }
     });
+  } else if (message.type === 'transcript.finalized') {
+    refreshTranscript();
   }
 };`}</code>
               </pre>
@@ -341,4 +341,3 @@ ws.onmessage = (event) => {
     </div>
   );
 }
-

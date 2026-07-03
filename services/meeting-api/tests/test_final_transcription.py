@@ -8,6 +8,7 @@ from fastapi import HTTPException
 
 from meeting_api import sweeps
 from meeting_api.final_transcription import (
+    DeferredTranscriptionResult,
     _call_transcription_service,
     _parse_segments,
     find_final_transcription_source,
@@ -74,14 +75,18 @@ async def test_run_deferred_transcription_replace_replaces_existing_rows_after_s
     db.add = MagicMock(side_effect=added.append)
     clear_cache = AsyncMock(return_value=True)
 
+    call_transcription = AsyncMock(return_value={
+        "language": "ja",
+        "segments": [{"start": 0.25, "end": 1.25, "text": "  hello final  "}],
+    })
+    publish_finalized = AsyncMock(return_value=True)
+
     with patch("meeting_api.final_transcription.attributes.flag_modified", new=MagicMock()), \
          patch("meeting_api.final_transcription._download_recording_audio", new=AsyncMock(return_value=b"wav")), \
          patch("meeting_api.final_transcription._convert_audio_to_wav", return_value=(b"wav", "wav")), \
-         patch("meeting_api.final_transcription._call_transcription_service", new=AsyncMock(return_value={
-             "language": "ja",
-             "segments": [{"start": 0.25, "end": 1.25, "text": "  hello final  "}],
-         })), \
-         patch("meeting_api.final_transcription._clear_live_transcript_cache", new=clear_cache):
+         patch("meeting_api.final_transcription._call_transcription_service", new=call_transcription), \
+         patch("meeting_api.final_transcription._clear_live_transcript_cache", new=clear_cache), \
+         patch("meeting_api.final_transcription._publish_transcript_finalized", new=publish_finalized):
         result = await run_deferred_transcription(
             TEST_MEETING_ID,
             db,
@@ -99,7 +104,68 @@ async def test_run_deferred_transcription_replace_replaces_existing_rows_after_s
     assert meeting.data["final_transcription"]["status"] == "succeeded"
     assert meeting.data["final_transcription"]["source_recording_path"].endswith("/audio/master.wav")
     assert meeting.data["final_transcription"]["redis_cache_cleared"] is True
+    assert meeting.data["final_transcription"]["language"] == "ja"
+    call_transcription.assert_awaited_once()
+    assert call_transcription.await_args.kwargs["language"] == "ja"
     clear_cache.assert_awaited_once_with(TEST_MEETING_ID)
+    publish_finalized.assert_awaited_once_with(
+        TEST_MEETING_ID,
+        segment_count=1,
+        triggered_by="final_transcription_sweep",
+    )
+
+
+@pytest.mark.asyncio
+async def test_run_deferred_transcription_replace_skips_when_speaker_events_missing():
+    meeting = _meeting_with_audio_master(data={"speaker_events": []})
+    db = AsyncMock()
+    db.execute = AsyncMock(side_effect=[
+        MockResult([meeting]),
+        MockResult(scalar_value=2),
+        MockResult(scalar_value=1),
+    ])
+    db.commit = AsyncMock()
+    db.add = MagicMock()
+
+    with patch("meeting_api.final_transcription.attributes.flag_modified", new=MagicMock()), \
+         patch("meeting_api.final_transcription._download_recording_audio", new=AsyncMock()) as download_audio:
+        result = await run_deferred_transcription(TEST_MEETING_ID, db, mode="replace")
+
+    assert result.segment_count == 0
+    assert result.replaced_realtime_count == 0
+    assert meeting.data["final_transcription"]["status"] == "skipped_no_speaker_events"
+    assert meeting.data["final_transcription"]["skipped_reason"] == "no_speaker_events"
+    db.add.assert_not_called()
+    download_audio.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_run_deferred_transcription_force_overrides_missing_speaker_events_skip():
+    meeting = _meeting_with_audio_master(data={"speaker_events": []})
+    db = AsyncMock()
+    db.execute = AsyncMock(side_effect=[
+        MockResult([meeting]),
+        MockResult(scalar_value=2),
+        MockResult(scalar_value=1),
+        MockResult(scalar_value=2),
+        MockResult(),
+    ])
+    db.commit = AsyncMock()
+    db.add = MagicMock()
+
+    with patch("meeting_api.final_transcription.attributes.flag_modified", new=MagicMock()), \
+         patch("meeting_api.final_transcription._download_recording_audio", new=AsyncMock(return_value=b"wav")), \
+         patch("meeting_api.final_transcription._convert_audio_to_wav", return_value=(b"wav", "wav")), \
+         patch("meeting_api.final_transcription._call_transcription_service", new=AsyncMock(return_value={
+             "language": "ja",
+             "segments": [{"start": 0.25, "end": 1.25, "text": "  forced final  "}],
+         })), \
+         patch("meeting_api.final_transcription._clear_live_transcript_cache", new=AsyncMock(return_value=True)), \
+         patch("meeting_api.final_transcription._publish_transcript_finalized", new=AsyncMock()):
+        result = await run_deferred_transcription(TEST_MEETING_ID, db, mode="replace", force=True)
+
+    assert result.segment_count == 1
+    assert meeting.data["final_transcription"]["status"] == "succeeded"
 
 
 @pytest.mark.asyncio
@@ -273,7 +339,16 @@ async def test_sweep_final_transcription_jobs_runs_replace_mode():
     async def db_session_factory():
         yield db
 
-    with patch("meeting_api.final_transcription.run_deferred_transcription", new=AsyncMock()) as run:
+    with patch(
+        "meeting_api.final_transcription.run_deferred_transcription",
+        new=AsyncMock(return_value=DeferredTranscriptionResult(
+            meeting_id=TEST_MEETING_ID,
+            segment_count=1,
+            speakers=["Alice"],
+            source_recording_path="recordings/5/1001/sess-1/audio/master.wav",
+            replaced_realtime_count=2,
+        )),
+    ) as run:
         swept = await sweeps._sweep_final_transcription_jobs(db_session_factory)
 
     assert swept == 1

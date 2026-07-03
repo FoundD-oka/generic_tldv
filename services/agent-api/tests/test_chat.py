@@ -3,6 +3,7 @@
 import base64
 import json
 import pytest
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from agent_api.chat import (
@@ -17,6 +18,13 @@ from agent_api.chat import (
     SESSIONS_INDEX,
 )
 from agent_api.kabosu_persona import KABOSU_PERSONA_PROMPT
+
+
+def test_kabosu_persona_matches_shared_source():
+    shared_path = Path(__file__).resolve().parents[3] / "packages" / "kabosu-persona" / "persona.ja.md"
+
+    assert shared_path.exists()
+    assert KABOSU_PERSONA_PROMPT == shared_path.read_text(encoding="utf-8").strip()
 
 
 # ---------------------------------------------------------------------------

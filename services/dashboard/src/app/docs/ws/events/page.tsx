@@ -16,34 +16,34 @@ export default function WebSocketEventsPage() {
         </p>
       </div>
 
-      {/* Transcript Mutable */}
+      {/* Transcript */}
       <Card>
         <CardHeader>
-          <CardTitle>transcript.mutable</CardTitle>
+          <CardTitle>transcript</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm mb-4">
-            Live transcript segments that may be updated as the AI refines its transcription.
+            Live transcript bundle emitted by the bot. Pending segments may change; confirmed segments are stable.
           </p>
           <pre className="bg-muted p-4 rounded-lg text-sm overflow-x-auto">
             <code>{JSON.stringify({
-              type: "transcript.mutable",
+              type: "transcript",
               meeting: { id: 123 },
-              payload: {
-                segments: [
-                  {
-                    text: "Hello everyone",
-                    speaker: "Alice",
-                    language: "en",
-                    start: 0.0,
-                    end_time: 2.5,
-                    absolute_start_time: "2024-01-01T12:00:00Z",
-                    absolute_end_time: "2024-01-01T12:00:02Z",
-                    session_uid: "session-123",
-                    updated_at: "2024-01-01T12:00:02Z",
-                  },
-                ],
-              },
+              speaker: "Alice",
+              confirmed: [
+                {
+                  text: "こんにちは、みなさん",
+                  speaker: "Alice",
+                  language: "ja",
+                  start: 0.0,
+                  end_time: 2.5,
+                  absolute_start_time: "2024-01-01T12:00:00Z",
+                  absolute_end_time: "2024-01-01T12:00:02Z",
+                  session_uid: "session-123",
+                  updated_at: "2024-01-01T12:00:02Z",
+                },
+              ],
+              pending: [],
               ts: "2024-01-01T12:00:02Z",
             }, null, 2)}</code>
           </pre>
@@ -57,26 +57,15 @@ export default function WebSocketEventsPage() {
         </CardHeader>
         <CardContent>
           <p className="text-sm mb-4">
-            Final transcript segments that will not be updated further.
+            Deferred final transcription replaced realtime rows. Fetch the transcript again through REST.
           </p>
           <pre className="bg-muted p-4 rounded-lg text-sm overflow-x-auto">
             <code>{JSON.stringify({
               type: "transcript.finalized",
               meeting: { id: 123 },
               payload: {
-                segments: [
-                  {
-                    text: "Hello everyone, welcome to the meeting.",
-                    speaker: "Alice",
-                    language: "en",
-                    start: 0.0,
-                    end_time: 3.2,
-                    absolute_start_time: "2024-01-01T12:00:00Z",
-                    absolute_end_time: "2024-01-01T12:00:03Z",
-                    session_uid: "session-123",
-                    updated_at: "2024-01-01T12:00:03Z",
-                  },
-                ],
+                segment_count: 42,
+                triggered_by: "final_transcription_sweep",
               },
               ts: "2024-01-01T12:00:03Z",
             }, null, 2)}</code>
@@ -152,7 +141,7 @@ export default function WebSocketEventsPage() {
                 </div>
                 <div>
                   <dt className="font-medium inline">active:</dt>
-                  <dd className="inline text-muted-foreground ml-2">Bot is admitted to the meeting and actively transcribing audio. You will receive <code className="bg-muted px-1 rounded">transcript.mutable</code> and <code className="bg-muted px-1 rounded">transcript.finalized</code> events during this state.</dd>
+                  <dd className="inline text-muted-foreground ml-2">Bot is admitted to the meeting and actively transcribing audio. You will receive <code className="bg-muted px-1 rounded">transcript</code> and <code className="bg-muted px-1 rounded">transcript.finalized</code> events during this state.</dd>
                 </div>
                 <div>
                   <dt className="font-medium inline">completed:</dt>
@@ -263,4 +252,3 @@ export default function WebSocketEventsPage() {
     </div>
   );
 }
-

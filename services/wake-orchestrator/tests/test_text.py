@@ -1,4 +1,6 @@
+import json
 import unittest
+from pathlib import Path
 
 from app.text import (
     clean_for_tts,
@@ -21,6 +23,13 @@ class TextTests(unittest.TestCase):
     def test_normalize_maps_kabosu_variants(self):
         self.assertEqual(normalize_ja("ねえ、かぼす！"), "ねえkabosu")
         self.assertEqual(normalize_ja("かばす？"), "kabosu")
+
+    def test_redact_secrets_matches_shared_contract(self):
+        path = Path(__file__).resolve().parents[3] / "packages" / "redaction-tests" / "secret-redaction-cases.json"
+        cases = json.loads(path.read_text(encoding="utf-8"))
+
+        for case in cases:
+            self.assertEqual(redact_secrets(case["input"]), case["expected"], case["name"])
 
 
     def test_detects_kabosu_wake_word(self):

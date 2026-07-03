@@ -119,15 +119,17 @@ function buildEvents(
   if (currentStep >= 3 && segmentCount > 0) {
     events.push({
       direction: "in",
-      type: "transcript.mutable",
+      type: "transcript",
       payload: {
-        segments: [
+        speaker: "...",
+        confirmed: [
           {
             speaker: "...",
             text: "...",
             absolute_start_time: "...",
           },
         ],
+        pending: [],
       },
       ts: ts(5),
     });
@@ -135,9 +137,11 @@ function buildEvents(
     if (segmentCount > 1) {
       events.push({
         direction: "in",
-        type: "transcript.mutable",
+        type: "transcript",
         payload: {
-          segments: [`... ${segmentCount} segments total`],
+          speaker: "...",
+          confirmed: [`... ${segmentCount} segments total`],
+          pending: [],
         },
         ts: ts(2),
       });

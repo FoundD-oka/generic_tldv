@@ -1,0 +1,10 @@
+{
+  "verdict": "needs_human",
+  "summary": "Local implementation and verification for issues #4-#19 pass the targeted contracts. Because this is an L-size bundle spanning runtime behavior, data preservation, and user-visible contracts, hash-bound human approval remains required before PR readiness.",
+  "residual_risk": [
+    "The bundle changes broad dashboard copy and operational defaults, so product review should confirm final Japanese wording and Kabosu naming before release.",
+    "Wake meeting resolution was covered with unit tests and compose config checks, but a live meeting E2E still requires real owner-scoped credentials and an active meeting.",
+    "Final transcription data preservation is covered by unit tests; production rollout should monitor skipped_no_speaker_events counts after deploy.",
+    "The repository-wide lint command has known broad lint debt outside the targeted verification set, so this pass relies on focused tests plus dashboard build/typecheck."
+  ]
+}

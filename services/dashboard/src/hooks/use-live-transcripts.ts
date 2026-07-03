@@ -75,6 +75,7 @@ export function useLiveTranscripts(
   const upsertTranscriptSegments = useMeetingsStore((state) => state.upsertTranscriptSegments);
   const updateMeetingStatus = useMeetingsStore((state) => state.updateMeetingStatus);
   const addChatMessage = useMeetingsStore((state) => state.addChatMessage);
+  const fetchTranscripts = useMeetingsStore((state) => state.fetchTranscripts);
 
   // Convert WebSocket segment to TranscriptSegment format
   const convertWebSocketSegment = useCallback(
@@ -87,7 +88,7 @@ export function useLiveTranscripts(
       absolute_end_time: seg.absolute_end_time,
       text: seg.text,
       speaker: seg.speaker || "",
-      language: seg.language || "en",
+      language: seg.language || "ja",
       completed: seg.completed,
       session_uid: seg.session_uid || "",
       speaker_mapping_status: seg.speaker_mapping_status,
@@ -253,10 +254,16 @@ export function useLiveTranscripts(
               }
               break;
             }
-            case "transcript.mutable":
+            case "transcript.mutable": {
+              // Deprecated inbound compatibility: producers emit "transcript".
+              console.warn("[LiveTranscripts] Ignoring deprecated message type:", message.type);
+              break;
+            }
+
             case "transcript.finalized": {
-              // Legacy: collector no longer publishes these. Log and ignore.
-              console.warn("[LiveTranscripts] Ignoring legacy message type:", message.type);
+              bootstrappedRef.current = false;
+              void fetchTranscripts(platform, nativeId, meetingId, { silent: true });
+              console.log("[LiveTranscripts] Final transcript available; refreshing from REST");
               break;
             }
 
@@ -404,6 +411,7 @@ export function useLiveTranscripts(
     upsertTranscriptSegments,
     updateMeetingStatus,
     addChatMessage,
+    fetchTranscripts,
     getReconnectDelay,
   ]);
 

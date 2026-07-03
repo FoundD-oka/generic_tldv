@@ -10,10 +10,12 @@ import { useAuthStore } from "@/stores/auth-store";
 import { useLiveStore } from "@/stores/live-store";
 import { useMeetingsStore } from "@/stores/meetings-store";
 import { getUserFriendlyError } from "@/lib/error-messages";
-import { withPostMeetingAutoStop } from "@/lib/bot-create-defaults";
+import { applyBotCreationDefaults, withPostMeetingAutoStop } from "@/lib/bot-create-defaults";
+import { useRuntimeConfig } from "@/hooks/use-runtime-config";
 
 export function usePendingMeeting() {
   const router = useRouter();
+  const { config } = useRuntimeConfig();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const setActiveMeeting = useLiveStore((s) => s.setActiveMeeting);
   const setCurrentMeeting = useMeetingsStore((s) => s.setCurrentMeeting);
@@ -29,21 +31,23 @@ export function usePendingMeeting() {
 
     const parsed = parseMeetingInput(meetingUrl);
     if (!parsed) {
-      toast.error("The saved meeting URL is no longer valid");
+      toast.error("保存されていた会議URLが無効になりました");
       return;
     }
 
-    const request = withPostMeetingAutoStop({
-      platform: parsed.platform,
-      native_meeting_id: parsed.meetingId,
-    });
+    const request = applyBotCreationDefaults(
+      withPostMeetingAutoStop({
+        platform: parsed.platform,
+        native_meeting_id: parsed.meetingId,
+      }),
+      config
+    );
     if (parsed.passcode) {
       request.passcode = parsed.passcode;
     }
     if (parsed.originalUrl) {
       request.meeting_url = parsed.originalUrl;
     }
-    request.bot_name = "Vexa - Open Source Bot";
 
     toast.promise(
       vexaAPI.createBot(request).then((meeting) => {
@@ -53,13 +57,13 @@ export function usePendingMeeting() {
         return meeting;
       }),
       {
-        loading: "Joining your meeting...",
-        success: "Bot is connecting to your meeting!",
+        loading: "会議へ参加しています...",
+        success: "カボスが会議へ接続しています",
         error: (err) => {
           const { title, description } = getUserFriendlyError(err);
           return `${title}${description ? `: ${description}` : ""}`;
         },
       }
     );
-  }, [isAuthenticated, router, setActiveMeeting, setCurrentMeeting]);
+  }, [config, isAuthenticated, router, setActiveMeeting, setCurrentMeeting]);
 }

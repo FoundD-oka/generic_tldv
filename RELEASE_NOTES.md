@@ -1,3 +1,18 @@
+# Unreleased
+
+## Breaking changes
+
+- Meeting deletion now returns `409 Conflict` when `(platform, native_meeting_id)`
+  matches multiple meetings and `meeting_id` is omitted. Pass the specific
+  `meeting_id` query parameter to delete one meeting deterministically.
+
+## Fixes
+
+- Meeting deletion removes both Redis transcript caches and
+  `meeting:{id}:chat_messages`; chat message lists also expire defensively.
+
+---
+
 # Vexa v0.10.6.2 — v0.10.6.1 regression fix
 
 **Release date:** 2026-05-21

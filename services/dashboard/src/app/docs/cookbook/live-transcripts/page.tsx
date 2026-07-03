@@ -57,10 +57,10 @@ export default function LiveTranscriptsPage() {
             </p>
             <ul className="text-sm space-y-2 mb-4">
               <li>
-                <code className="bg-muted px-1 rounded">transcript.mutable</code> - Live segments that may be updated
+                <code className="bg-muted px-1 rounded">transcript</code> - Live transcript bundles with confirmed and pending segments
               </li>
               <li>
-                <code className="bg-muted px-1 rounded">transcript.finalized</code> - Final segments that won't change
+                <code className="bg-muted px-1 rounded">transcript.finalized</code> - Final transcript refresh notification
               </li>
             </ul>
             <Link href="/docs/ws/events" className="text-sm text-primary hover:underline inline-flex items-center gap-1">
@@ -104,4 +104,3 @@ export default function LiveTranscriptsPage() {
     </div>
   );
 }
-

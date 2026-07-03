@@ -51,7 +51,7 @@ export function Header({ onMenuClick }: HeaderProps) {
             <Logo size="md" showText={false} brand={brand} className="group-hover:scale-105 transition-transform" />
             <span className="hidden sm:inline-block text-[15px] font-semibold text-foreground">{brand.shortName}</span>
           </Link>
-          <VersionChip className="hidden sm:inline-flex" />
+          <VersionChip className="hidden sm:inline-flex" brandName={brand.name} />
         </div>
 
         {/* Spacer */}

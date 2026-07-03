@@ -2,15 +2,14 @@ import { describe, expect, it } from "vitest";
 import { normalizeDashboardLocale, resolveDashboardBrand } from "@/lib/dashboard-brand";
 
 describe("resolveDashboardBrand", () => {
-  it("keeps the existing Vexa defaults when no brand env is set", () => {
+  it("uses Japanese Kabosu defaults when no brand env is set", () => {
     expect(resolveDashboardBrand({})).toEqual({
-      name: "Vexa",
-      shortName: "vexa",
-      slug: "vexa",
-      locale: "en",
-      botName: "Vexa - Open Source Bot",
-      issueUrl:
-        "https://github.com/Vexa-ai/vexa/issues/new?labels=bug,hosted&title=[Hosted]%20&body=%23%23%20Environment%0AHosted%20service%20(dashboard.vexa.ai)%0A%0A%23%23%20Description%0A%0A%23%23%20Steps%20to%20reproduce%0A1.%20%0A%0A%23%23%20Expected%20behavior%0A%0A%23%23%20Actual%20behavior%0A",
+      name: "カボス",
+      shortName: "カボス",
+      slug: "kabosu",
+      locale: "ja",
+      botName: "カボス",
+      issueUrl: "https://github.com/FoundD-oka/generic_tldv/issues/new?template=bug_report.md",
       logoDark: undefined,
       logoLight: undefined,
     });
@@ -35,7 +34,7 @@ describe("resolveDashboardBrand", () => {
     });
   });
 
-  it("uses the repository issue form for Kabosu even when no slug is configured", () => {
+  it("uses the repository issue form for Kabosu even when only the name is configured", () => {
     expect(
       resolveDashboardBrand({
         DASHBOARD_BRAND_NAME: "カボス",
@@ -43,7 +42,7 @@ describe("resolveDashboardBrand", () => {
         DEFAULT_BOT_NAME: "カボス",
       })
     ).toMatchObject({
-      slug: "custom-dashboard",
+      slug: "kabosu",
       issueUrl: "https://github.com/FoundD-oka/generic_tldv/issues/new?template=bug_report.md",
     });
   });

@@ -70,17 +70,23 @@ MINIO_SECURE=false
 # Local GPU transcription (uncomment to self-host)
 # LOCAL_TRANSCRIPTION=true
 
-# TTS uses Piper (local, no API key needed)
-# Voice models auto-download from HuggingFace on first use
+# Optional Piper TTS service. Kabosu wake replies use Aivis Cloud audio_base64;
+# enable compose profile `tts` only when you need text /speak through Piper.
+# Voice models auto-download from HuggingFace on first use.
 
 # Kabosu Wake Orchestrator (optional; run compose with profile `wake`)
 # Keeps the visible meeting assistant name aligned with the Kabosu dashboard.
+# Required for wake: VEXA_API_KEY, GROQ_API_KEY, AIVIS_API_KEY,
+# AIVIS_MODEL_UUID. VEXA_API_KEY must belong to the same dashboard user who
+# creates the bots, because /bots/status is user-scoped.
 # By default it discovers dashboard-created running bots through Vexa.
 VEXA_PLATFORM=google_meet
 WAKE_AUTO_DISCOVER_BOTS=true
 WAKE_DISCOVERY_INTERVAL_SECONDS=5
 # Optional low-latency wake transcript lane. Leave WAKE_STT_URL empty to keep
-# Wake Orchestrator on the existing Vexa transcript WebSocket.
+# Wake Orchestrator on the existing Vexa transcript WebSocket. To enable it,
+# set WAKE_STT_URL=http://wake-stt:8058 and start compose with both
+# `--profile wake --profile wake-stt`.
 WAKE_STT_URL=
 WAKE_STT_API_TOKEN=
 WAKE_STT_LANGUAGE=ja

@@ -259,7 +259,7 @@ wscat -c "wss://your-api-url/ws?api_key=your-api-key"
                 <span className="px-2 py-1 bg-green-100 dark:bg-green-900 rounded text-xs">active</span>
               </h3>
               <p className="text-sm text-muted-foreground mb-2">
-                The bot is admitted to the meeting and actively transcribing. You will now receive <code className="bg-muted px-1 rounded">transcript.mutable</code> and <code className="bg-muted px-1 rounded">transcript.finalized</code> events.
+                The bot is admitted to the meeting and actively transcribing. You will now receive <code className="bg-muted px-1 rounded">transcript</code> and <code className="bg-muted px-1 rounded">transcript.finalized</code> events.
               </p>
               <p className="text-xs text-muted-foreground">
                 <strong>What to show:</strong> "Transcribing..." or a recording indicator. Start displaying transcript segments as they arrive.
@@ -362,4 +362,3 @@ wscat -c "wss://your-api-url/ws?api_key=your-api-key"
     </div>
   );
 }
-

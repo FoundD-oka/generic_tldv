@@ -1,0 +1,17 @@
+{
+  "timestamp": "2026-07-03T07:11:34.264062+00:00",
+  "task_id": "issues-4-19",
+  "size": "L",
+  "status": "pass",
+  "mode": "not_configured",
+  "policy": "optional",
+  "required": false,
+  "provider": "chatgpt-pro-web",
+  "errors": [],
+  "warnings": [],
+  "artifacts": {
+    "brief": ".pipeline/plans/issues-4-19/consultation-brief.md",
+    "response": ".pipeline/evidence/issues-4-19/external-consultation/chatgpt-pro.md",
+    "summary": ".pipeline/evidence/issues-4-19/external-consultation/consultation-summary.json"
+  }
+}

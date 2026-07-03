@@ -30,6 +30,7 @@ from meeting_api.schemas import (
     BotStatusResponse,
     SpeakRequest, ChatSendRequest, ChatMessagesResponse, ScreenContentRequest,
 )
+from meeting_api.redaction import redact_secrets
 
 load_dotenv()
 
@@ -1219,6 +1220,28 @@ async def _get_meeting_context(client: httpx.AsyncClient, user_id: str) -> Optio
 
         # Fetch transcript for each active meeting
         for meeting_id, platform in bot_platforms.items():
+            try:
+                c_resp = await client.get(
+                    f"{TRANSCRIPTION_COLLECTOR_URL}/meetings/{platform}/{meeting_id}/assistant-context",
+                    headers=headers,
+                    timeout=5.0,
+                )
+                if c_resp.status_code == 200:
+                    context = c_resp.json()
+                    meeting_context = context.get("meeting", {}) if isinstance(context, dict) else {}
+                    active_meetings.append({
+                        "meeting_id": meeting_id,
+                        "platform": platform,
+                        "status": meeting_context.get("status", "active"),
+                        "participants": meeting_context.get("participants", []),
+                        "latest_segments": context.get("latest_segments", []),
+                        "chat_messages": context.get("chat_messages", []),
+                        "shared_urls": context.get("shared_urls", []),
+                    })
+                    continue
+            except Exception:
+                pass
+
             segments = []
             try:
                 t_resp = await client.get(
@@ -1243,8 +1266,8 @@ async def _get_meeting_context(client: httpx.AsyncClient, user_id: str) -> Optio
                 "participants": participants,
                 "latest_segments": [
                     {
-                        "speaker": s.get("speaker", "Unknown"),
-                        "text": s.get("text", ""),
+                        "speaker": redact_secrets(str(s.get("speaker", "Unknown"))),
+                        "text": redact_secrets(str(s.get("text", ""))),
                         "timestamp": str(s.get("absolute_start_time") or s.get("start_time") or s.get("start", "")),
                     }
                     for s in segments

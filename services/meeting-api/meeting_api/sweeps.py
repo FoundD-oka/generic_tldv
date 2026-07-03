@@ -708,17 +708,23 @@ async def _sweep_final_transcription_jobs(
                 continue
 
             try:
-                await run_deferred_transcription(
+                result = await run_deferred_transcription(
                     meeting_id,
                     db,
                     mode="replace",
                     triggered_by="final_transcription_sweep",
                 )
                 swept += 1
-                logger.info(
-                    "[sweep] final-transcription succeeded meeting_id=%s",
-                    meeting_id,
-                )
+                if result.segment_count == 0 and result.replaced_realtime_count == 0:
+                    logger.info(
+                        "[sweep] final-transcription skipped meeting_id=%s reason=no_speaker_events",
+                        meeting_id,
+                    )
+                else:
+                    logger.info(
+                        "[sweep] final-transcription succeeded meeting_id=%s",
+                        meeting_id,
+                    )
             except HTTPException as exc:
                 if exc.status_code == 404:
                     logger.debug(

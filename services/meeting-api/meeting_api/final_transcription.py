@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import json
 import logging
 import os
 import subprocess
@@ -32,9 +33,10 @@ logger = logging.getLogger("meeting_api.final_transcription")
 
 FinalTranscriptionMode = Literal["reject_if_exists", "replace"]
 
-FINAL_TRANSCRIPTION_STATUSES = {"queued", "running", "succeeded", "failed", "skipped"}
+FINAL_TRANSCRIPTION_STATUSES = {"queued", "running", "succeeded", "failed", "skipped", "skipped_no_speaker_events"}
 FINAL_TRANSCRIPTION_MAX_ATTEMPTS = int(os.getenv("FINAL_TRANSCRIPTION_MAX_ATTEMPTS", "24"))
 FINAL_TRANSCRIPTION_SWEEP_LIMIT = int(os.getenv("FINAL_TRANSCRIPTION_SWEEP_LIMIT", "10"))
+FINAL_TRANSCRIPTION_DEFAULT_LANGUAGE = os.getenv("FINAL_TRANSCRIPTION_DEFAULT_LANGUAGE", "ja")
 
 
 @dataclass(frozen=True)
@@ -380,6 +382,64 @@ async def _clear_live_transcript_cache(meeting_id: int) -> bool:
         return False
 
 
+def _resolve_final_transcription_language(meeting: Meeting, explicit_language: Optional[str]) -> str:
+    if explicit_language:
+        return explicit_language
+
+    data = _meeting_data(meeting)
+    language = data.get("language") or data.get("transcription_language")
+    if isinstance(language, str) and language.strip():
+        return language.strip()
+    return FINAL_TRANSCRIPTION_DEFAULT_LANGUAGE or "ja"
+
+
+async def _has_meaningful_existing_speakers(db: AsyncSession, meeting_id: int) -> bool:
+    count = (await db.execute(
+        select(func.count(Transcription.id)).where(
+            Transcription.meeting_id == meeting_id,
+            Transcription.speaker.isnot(None),
+            Transcription.speaker != "",
+            func.lower(Transcription.speaker) != "unknown",
+        )
+    )).scalar() or 0
+    return count > 0
+
+
+async def _publish_transcript_finalized(
+    meeting_id: int,
+    *,
+    segment_count: int,
+    triggered_by: str,
+) -> bool:
+    try:
+        from .meetings import get_redis
+
+        redis_client = get_redis()
+        if not redis_client:
+            return False
+        payload = {
+            "type": "transcript.finalized",
+            "meeting": {"id": meeting_id},
+            "payload": {
+                "segment_count": segment_count,
+                "triggered_by": triggered_by,
+            },
+            "ts": _utcnow_iso(),
+        }
+        await redis_client.publish(
+            f"tc:meeting:{meeting_id}:mutable",
+            json.dumps(payload, ensure_ascii=False),
+        )
+        return True
+    except Exception as exc:
+        logger.warning(
+            "Failed to publish transcript.finalized for meeting %s: %s",
+            meeting_id,
+            str(exc)[:200],
+        )
+        return False
+
+
 def _is_retryable_http_error(exc: HTTPException) -> bool:
     return exc.status_code in {500, 502, 503, 504}
 
@@ -390,6 +450,7 @@ async def run_deferred_transcription(
     *,
     mode: FinalTranscriptionMode = "reject_if_exists",
     language: Optional[str] = None,
+    force: bool = False,
     triggered_by: str = "manual_api",
 ) -> DeferredTranscriptionResult:
     """Generate a deferred transcript and optionally replace existing rows."""
@@ -419,6 +480,41 @@ async def run_deferred_transcription(
             detail=f"This meeting is already transcribed ({existing_count} segments). Use mode='replace' to regenerate the final transcript.",
         )
 
+    data = _meeting_data(meeting)
+    speaker_events = data.get("speaker_events", [])
+    if not isinstance(speaker_events, list):
+        speaker_events = []
+    if (
+        mode == "replace"
+        and not force
+        and existing_count > 0
+        and not speaker_events
+        and await _has_meaningful_existing_speakers(db, meeting_id)
+    ):
+        _set_final_transcription_state(
+            meeting,
+            status="skipped_no_speaker_events",
+            skipped_at=_utcnow_iso(),
+            updated_at=_utcnow_iso(),
+            skipped_reason="no_speaker_events",
+            segment_count=0,
+            replaced_realtime_count=0,
+            retryable=False,
+            triggered_by=triggered_by,
+        )
+        await db.commit()
+        logger.warning(
+            "Deferred final transcription skipped for meeting %s: no speaker_events; existing speaker labels preserved",
+            meeting_id,
+        )
+        return DeferredTranscriptionResult(
+            meeting_id=meeting_id,
+            segment_count=0,
+            speakers=[],
+            source_recording_path="",
+            replaced_realtime_count=0,
+        )
+
     source = await find_final_transcription_source(meeting, db)
     if source is None:
         _set_final_transcription_state(
@@ -432,6 +528,7 @@ async def run_deferred_transcription(
         await db.commit()
         raise HTTPException(status_code=404, detail="No finalized audio master found for this meeting")
 
+    resolved_language = _resolve_final_transcription_language(meeting, language)
     data = _meeting_data(meeting)
     current_state = dict(data.get("final_transcription") or {})
     attempts = int(current_state.get("attempts") or 0) + 1
@@ -445,6 +542,7 @@ async def run_deferred_transcription(
         retryable=True,
         source_recording_path=source.storage_path,
         source_recording_backend=source.storage_backend,
+        language=resolved_language,
         triggered_by=triggered_by,
     )
     await db.commit()
@@ -457,10 +555,15 @@ async def run_deferred_transcription(
             source.media_format,
         )
         fallback_duration = _audio_duration_seconds(audio_data, media_format)
+        logger.info(
+            "Calling deferred transcription service for meeting %s with language=%s",
+            meeting_id,
+            resolved_language,
+        )
         tx_result = await _call_transcription_service(
             audio_data,
             media_format,
-            language=language,
+            language=resolved_language,
         )
         meeting_data = _meeting_data(meeting)
         speaker_events = meeting_data.get("speaker_events", [])
@@ -468,7 +571,7 @@ async def run_deferred_transcription(
             speaker_events = []
         segments, detected_language = _parse_segments(
             tx_result,
-            language=language,
+            language=resolved_language,
             speaker_events=speaker_events,
             fallback_duration=fallback_duration,
         )
@@ -482,6 +585,7 @@ async def run_deferred_transcription(
             retryable=_is_retryable_http_error(exc),
             source_recording_path=source.storage_path,
             source_recording_backend=source.storage_backend,
+            language=resolved_language,
             triggered_by=triggered_by,
         )
         await db.commit()
@@ -496,6 +600,7 @@ async def run_deferred_transcription(
             retryable=True,
             source_recording_path=source.storage_path,
             source_recording_backend=source.storage_backend,
+            language=resolved_language,
             triggered_by=triggered_by,
         )
         await db.commit()
@@ -551,6 +656,7 @@ async def run_deferred_transcription(
         "segment_count": stored,
         "replaced_realtime_count": replaced_count,
         "detected_language": detected_language,
+        "language": resolved_language,
         "speakers": speakers,
         "redis_cache_cleared": redis_cache_cleared,
         "last_error": None,
@@ -562,6 +668,12 @@ async def run_deferred_transcription(
     meeting.data = meeting_data
     attributes.flag_modified(meeting, "data")
     await db.commit()
+    if mode == "replace":
+        await _publish_transcript_finalized(
+            meeting_id,
+            segment_count=stored,
+            triggered_by=triggered_by,
+        )
 
     logger.info(
         "Deferred final transcription succeeded for meeting %s: stored=%s replaced=%s speakers=%s",

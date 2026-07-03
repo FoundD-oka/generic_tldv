@@ -1929,10 +1929,14 @@ def _map_speakers_to_segments(speaker_events, segments):
 
 
 class TranscribeRequest(BaseModel):
-    language: Optional[str] = Field(None, description="Language code (e.g., 'en'). If omitted, auto-detect.")
+    language: Optional[str] = Field(None, description="Language code (e.g., 'ja'). If omitted, the meeting setting or final-transcription default is used.")
     mode: Literal["reject_if_exists", "replace"] = Field(
         "reject_if_exists",
         description="Existing transcript behavior: reject_if_exists preserves legacy 409 semantics; replace regenerates the final transcript.",
+    )
+    force: bool = Field(
+        False,
+        description="When true, allow replace mode even if speaker_events are missing and existing speaker labels would be lost.",
     )
 
 
@@ -1967,6 +1971,7 @@ async def transcribe_meeting(
         db,
         mode=req.mode,
         language=req.language,
+        force=req.force,
         triggered_by="manual_api",
     )
 

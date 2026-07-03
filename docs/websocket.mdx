@@ -110,29 +110,29 @@ Send subscription message after connecting:
 
 ### Message Types
 
-#### `transcript.mutable`
-Live transcript segments that may be updated.
+#### `transcript`
+Live transcript bundle emitted by the bot. Pending segments may change; confirmed segments are stable.
 
 ```json
 {
-  "type": "transcript.mutable",
+  "type": "transcript",
   "meeting": {"id": 12345},
-  "payload": {
-    "segments": [
-      {
-        "text": "This text may change",
-        "speaker": "John",
-        "language": "en",
-        "session_uid": "abc123-456-def",
-        "speaker_mapping_status": "NO_SPEAKER_EVENTS",
-        "start": 1234.567,
-        "end_time": 1237.890,
-        "absolute_start_time": "2025-01-15T10:30:05Z",
-        "absolute_end_time": "2025-01-15T10:30:08Z",
-        "updated_at": "2025-01-15T10:30:08Z"
-      }
-    ]
-  },
+  "speaker": "John",
+  "confirmed": [
+    {
+      "text": "This text is confirmed",
+      "speaker": "John",
+      "language": "ja",
+      "session_uid": "abc123-456-def",
+      "speaker_mapping_status": "NO_SPEAKER_EVENTS",
+      "start": 1234.567,
+      "end_time": 1237.890,
+      "absolute_start_time": "2025-01-15T10:30:05Z",
+      "absolute_end_time": "2025-01-15T10:30:08Z",
+      "updated_at": "2025-01-15T10:30:08Z"
+    }
+  ],
+  "pending": [],
   "ts": "2025-01-15T10:30:08Z"
 }
 ```
@@ -140,7 +140,7 @@ Live transcript segments that may be updated.
 **Note**: Additional fields like `session_uid`, `speaker_mapping_status`, and relative timing (`start`, `end_time`) may be present but are not required for basic transcript processing.
 
 #### `transcript.finalized`
-**DEPRECATED**: No longer emitted. `transcript.finalized` messages are not used by clients. Only `transcript.mutable` messages are processed for live transcript updates. Use the REST API endpoint to fetch the complete, stable transcript.
+Emitted after deferred final transcription replaces realtime rows. The payload is a refresh notification, not a segment bundle. Clients should fetch the transcript again through the REST API.
 
 #### `meeting.status`
 Meeting status updates.
@@ -234,7 +234,7 @@ for segment in rest_segments:
 
 ### 2. WebSocket Updates
 
-For each `transcript.mutable` message:
+For each `transcript` message:
 
 1. For every segment with `absolute_start_time`:
    - Upsert into map by key
@@ -406,7 +406,7 @@ Use the `--raw` flag to debug WebSocket message flow:
 
 **Example log file line:**
 ```
-2025-10-04T14:50:35.101823 - {"type": "transcript.mutable", "meeting": {"platform": "google_meet", "native_id": "tys-tztv-nrj"}, "payload": {"segments": [...]}, "ts": "2025-10-04T11:50:35.100142+00:00"}
+2025-10-04T14:50:35.101823 - {"type": "transcript", "meeting": {"platform": "google_meet", "native_id": "tys-tztv-nrj"}, "speaker": "John", "confirmed": [...], "pending": [], "ts": "2025-10-04T11:50:35.100142+00:00"}
 ```
 
 Use these logs to verify message structure, timing, and payload formats for your implementation.
