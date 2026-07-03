@@ -63,7 +63,7 @@ References:
 
 ## Deleting / Anonymizing
 
-`DELETE /meetings/{platform}/{native_meeting_id}` is designed to be safe to retry (idempotent) and scrubs meeting data for telemetry/usage tracking.
+`DELETE /meetings/{platform}/{native_meeting_id}` is designed to be safe to retry (idempotent) and scrubs meeting data for telemetry/usage tracking. If multiple meetings share the same `(platform, native_meeting_id)`, the API returns `409 Conflict`; pass the exact `meeting_id` query parameter to delete one deterministic row.
 
 - [Meetings API](api/meetings)
 - [Errors and retries](errors-and-retries)

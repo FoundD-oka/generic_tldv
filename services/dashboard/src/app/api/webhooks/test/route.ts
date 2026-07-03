@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
       api_version: "2026-03-01",
       created_at: new Date().toISOString(),
       data: {
-        message: "This is a test webhook from Vexa",
+        message: "カボスからのテスト配信です",
         meeting_id: "test-meeting-123",
         platform: "test",
       },
@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
     const startTime = Date.now();
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
-      "User-Agent": "Vexa-Webhook/1.0",
+      "User-Agent": "Kabosu-Webhook/1.0",
     };
     if (signature) {
       headers["X-Webhook-Signature"] = `sha256=${signature}`;

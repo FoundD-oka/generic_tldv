@@ -485,23 +485,23 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     try:
         state, chat_id = await _ensure_auth(update)
     except Exception as e:
-        await update.message.reply_text(f"\u26a0\ufe0f Auth failed: {html.escape(str(e))}", parse_mode="HTML")
+        await update.message.reply_text(f"認証に失敗しました: {html.escape(str(e))}", parse_mode="HTML")
         return
 
     await update.message.reply_text(
-        f"Vexa Agent ready.\n\n"
-        f"Your user ID: <code>{html.escape(state.user_id)}</code>\n\n"
-        f"Send me a message and I'll forward it to your AI agent.\n\n"
-        f"<b>Commands:</b>\n"
-        f"/new \u2014 New agent session\n"
-        f"/sessions \u2014 List sessions\n"
-        f"/files \u2014 List workspace files\n"
-        f"/join &lt;url&gt; \u2014 Join a meeting\n"
-        f"/stop \u2014 Stop active meeting\n"
-        f"/speak &lt;text&gt; \u2014 Speak in meeting\n"
-        f"/transcript \u2014 Get meeting transcript\n"
-        f"/reset \u2014 Reset session\n"
-        f"/help \u2014 Show this help",
+        f"カボス、待機中。\n\n"
+        f"ユーザーID: <code>{html.escape(state.user_id)}</code>\n\n"
+        f"メッセージを送るとAIエージェントへ転送します。\n\n"
+        f"<b>コマンド:</b>\n"
+        f"/new \u2014 新しいエージェントセッション\n"
+        f"/sessions \u2014 セッション一覧\n"
+        f"/files \u2014 ワークスペースファイル一覧\n"
+        f"/join &lt;url&gt; \u2014 会議へ参加\n"
+        f"/stop \u2014 会議ボットを停止\n"
+        f"/speak &lt;text&gt; \u2014 会議内で発話\n"
+        f"/transcript \u2014 会議文字起こしを取得\n"
+        f"/reset \u2014 セッションをリセット\n"
+        f"/help \u2014 ヘルプを表示",
         parse_mode="HTML",
     )
 
@@ -572,7 +572,7 @@ async def new_session_command(update: Update, context: ContextTypes.DEFAULT_TYPE
                     parse_mode="HTML",
                 )
             else:
-                await update.message.reply_text(f"\u26a0\ufe0f Failed to create session: {resp.status_code}")
+                await update.message.reply_text(f"セッション作成に失敗しました: {resp.status_code}")
     except Exception as e:
         await update.message.reply_text(f"\u26a0\ufe0f Error: {html.escape(str(e))}", parse_mode="HTML")
 
@@ -581,7 +581,7 @@ async def sessions_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     try:
         state, chat_id = await _ensure_auth(update)
     except Exception as e:
-        await update.message.reply_text(f"\u26a0\ufe0f Auth failed: {html.escape(str(e))}", parse_mode="HTML")
+        await update.message.reply_text(f"認証に失敗しました: {html.escape(str(e))}", parse_mode="HTML")
         return
 
     try:
@@ -594,16 +594,16 @@ async def sessions_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             if resp.status_code == 200:
                 sessions = resp.json().get("sessions", [])
                 if not sessions:
-                    await update.message.reply_text("No sessions found. Use /new to create one.")
+                    await update.message.reply_text("セッションがありません。/new で作成してください。")
                     return
-                lines = ["<b>Your sessions:</b>\n"]
+                lines = ["<b>セッション一覧:</b>\n"]
                 for s in sessions:
                     name = html.escape(s.get("name", "Unnamed"))
                     sid = html.escape(s.get("session_id", s.get("id", "?")))
                     lines.append(f"\u2022 <code>{sid[:8]}</code> \u2014 {name}")
                 await update.message.reply_text("\n".join(lines), parse_mode="HTML")
             else:
-                await update.message.reply_text(f"\u26a0\ufe0f Failed to list sessions: {resp.status_code}")
+                await update.message.reply_text(f"セッション一覧の取得に失敗しました: {resp.status_code}")
     except Exception as e:
         await update.message.reply_text(f"\u26a0\ufe0f Error: {html.escape(str(e))}", parse_mode="HTML")
 
@@ -612,7 +612,7 @@ async def files_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     try:
         state, chat_id = await _ensure_auth(update)
     except Exception as e:
-        await update.message.reply_text(f"\u26a0\ufe0f Auth failed: {html.escape(str(e))}", parse_mode="HTML")
+        await update.message.reply_text(f"認証に失敗しました: {html.escape(str(e))}", parse_mode="HTML")
         return
 
     try:
@@ -625,17 +625,17 @@ async def files_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             if resp.status_code == 200:
                 files = resp.json().get("files", [])
                 if not files:
-                    await update.message.reply_text("Workspace is empty.")
+                    await update.message.reply_text("ワークスペースは空です。")
                     return
                 file_list = "\n".join(files[:50])
-                msg = f"<b>Workspace files:</b>\n<pre>{html.escape(file_list)}</pre>"
+                msg = f"<b>ワークスペースファイル:</b>\n<pre>{html.escape(file_list)}</pre>"
                 if len(files) > 50:
-                    msg += f"\n<i>... and {len(files) - 50} more</i>"
+                    msg += f"\n<i>...ほか {len(files) - 50} 件</i>"
                 await update.message.reply_text(msg, parse_mode="HTML")
             elif resp.status_code == 404:
-                await update.message.reply_text("No active container. Send a message first to start your agent.")
+                await update.message.reply_text("起動中のコンテナがありません。先にメッセージを送ってエージェントを開始してください。")
             else:
-                await update.message.reply_text(f"\u26a0\ufe0f Failed to list files: {resp.status_code}")
+                await update.message.reply_text(f"ファイル一覧の取得に失敗しました: {resp.status_code}")
     except Exception as e:
         await update.message.reply_text(f"\u26a0\ufe0f Error: {html.escape(str(e))}", parse_mode="HTML")
 
@@ -669,11 +669,11 @@ async def join_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     try:
         state, chat_id = await _ensure_auth(update)
     except Exception as e:
-        await update.message.reply_text(f"\u26a0\ufe0f Auth failed: {html.escape(str(e))}", parse_mode="HTML")
+        await update.message.reply_text(f"認証に失敗しました: {html.escape(str(e))}", parse_mode="HTML")
         return
 
     if not context.args:
-        await update.message.reply_text("Usage: /join &lt;meeting_url&gt;", parse_mode="HTML")
+        await update.message.reply_text("使い方: /join &lt;meeting_url&gt;", parse_mode="HTML")
         return
 
     meeting_url = context.args[0]
@@ -708,15 +708,15 @@ async def join_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                     logger.warning(f"Failed to create meeting-aware session: {e}")
 
                 await update.message.reply_text(
-                    f"Bot joining meeting.\n"
-                    f"Platform: <code>{html.escape(platform)}</code>\n"
-                    f"Meeting: <code>{html.escape(str(native_id)[:50])}</code>\n\n"
-                    f"Use /stop to end, /speak to talk, /transcript to read.",
+                    f"カボスが会議へ参加しています。\n"
+                    f"プラットフォーム: <code>{html.escape(platform)}</code>\n"
+                    f"会議: <code>{html.escape(str(native_id)[:50])}</code>\n\n"
+                    f"終了は /stop、発話は /speak、文字起こし確認は /transcript です。",
                     parse_mode="HTML",
                 )
             else:
                 await update.message.reply_text(
-                    f"\u26a0\ufe0f Failed to join: {resp.status_code}\n{html.escape(resp.text[:200])}",
+                    f"会議参加に失敗しました: {resp.status_code}\n{html.escape(resp.text[:200])}",
                     parse_mode="HTML",
                 )
     except Exception as e:
@@ -727,11 +727,11 @@ async def stop_meeting_command(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         state, chat_id = await _ensure_auth(update)
     except Exception as e:
-        await update.message.reply_text(f"\u26a0\ufe0f Auth failed: {html.escape(str(e))}", parse_mode="HTML")
+        await update.message.reply_text(f"認証に失敗しました: {html.escape(str(e))}", parse_mode="HTML")
         return
 
     if not state.active_meeting:
-        await update.message.reply_text("No active meeting. Use /join to start one.")
+        await update.message.reply_text("起動中の会議がありません。/join で開始してください。")
         return
 
     try:
@@ -742,9 +742,9 @@ async def stop_meeting_command(update: Update, context: ContextTypes.DEFAULT_TYP
             state.active_meeting = None
             state.meeting_aware_session_id = None
             if resp.status_code in (200, 202, 204):
-                await update.message.reply_text(f"Meeting bot stopped: <code>{html.escape(meeting_ref)}</code>", parse_mode="HTML")
+                await update.message.reply_text(f"会議ボットを停止しました: <code>{html.escape(meeting_ref)}</code>", parse_mode="HTML")
             else:
-                await update.message.reply_text(f"\u26a0\ufe0f Failed to stop: {resp.status_code}")
+                await update.message.reply_text(f"停止に失敗しました: {resp.status_code}")
     except Exception as e:
         await update.message.reply_text(f"\u26a0\ufe0f Error: {html.escape(str(e))}", parse_mode="HTML")
 
@@ -753,15 +753,15 @@ async def speak_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     try:
         state, chat_id = await _ensure_auth(update)
     except Exception as e:
-        await update.message.reply_text(f"\u26a0\ufe0f Auth failed: {html.escape(str(e))}", parse_mode="HTML")
+        await update.message.reply_text(f"認証に失敗しました: {html.escape(str(e))}", parse_mode="HTML")
         return
 
     if not state.active_meeting:
-        await update.message.reply_text("No active meeting. Use /join first.")
+        await update.message.reply_text("起動中の会議がありません。先に /join を使ってください。")
         return
 
     if not context.args:
-        await update.message.reply_text("Usage: /speak &lt;text to say&gt;", parse_mode="HTML")
+        await update.message.reply_text("使い方: /speak &lt;読み上げるテキスト&gt;", parse_mode="HTML")
         return
 
     text_to_speak = " ".join(context.args)
@@ -774,9 +774,9 @@ async def speak_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 json={"text": text_to_speak},
             )
             if resp.status_code in (200, 202):
-                await update.message.reply_text(f"\U0001f50a Speaking: \"{text_to_speak[:100]}\"")
+                await update.message.reply_text(f"読み上げ中: \"{text_to_speak[:100]}\"")
             else:
-                await update.message.reply_text(f"\u26a0\ufe0f Failed to speak: {resp.status_code}")
+                await update.message.reply_text(f"読み上げに失敗しました: {resp.status_code}")
     except Exception as e:
         await update.message.reply_text(f"\u26a0\ufe0f Error: {html.escape(str(e))}", parse_mode="HTML")
 
@@ -785,7 +785,7 @@ async def transcript_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     try:
         state, chat_id = await _ensure_auth(update)
     except Exception as e:
-        await update.message.reply_text(f"\u26a0\ufe0f Auth failed: {html.escape(str(e))}", parse_mode="HTML")
+        await update.message.reply_text(f"認証に失敗しました: {html.escape(str(e))}", parse_mode="HTML")
         return
 
     if not state.active_meeting:

@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from meeting_api.schemas import MeetingStatus, MeetingResponse, BotStatusResponse, Platform
+from meeting_api.schemas import MeetingStatus, MeetingResponse, BotStatusResponse, Platform, MeetingCreate
 
 from .conftest import (
     TEST_USER_ID,
@@ -55,6 +55,12 @@ def _setup_create_meeting_db(mock_db):
 # ===================================================================
 # POST /bots — create meeting
 # ===================================================================
+
+
+def test_meeting_create_defaults_voice_agent_enabled_true():
+    req = MeetingCreate(platform="google_meet", native_meeting_id="abc-defg-hij")
+
+    assert req.voice_agent_enabled is True
 
 
 class TestCreateMeeting:
@@ -142,6 +148,57 @@ class TestCreateMeeting:
         bot_config = json.loads(kwargs["config"]["env"]["BOT_CONFIG"])
         assert bot_config["captureModes"] == ["audio", "video"]
         assert bot_config["videoReceiveEnabled"] is True
+
+    @pytest.mark.asyncio
+    async def test_create_meeting_defaults_voice_agent_enabled_in_runtime_config(self, client, mock_db, mock_redis):
+        """voice_agent_enabled defaults to true and reaches the bot config."""
+        _setup_create_meeting_db(mock_db)
+
+        runtime_resp = {"container_id": TEST_CONTAINER_ID, "name": TEST_CONTAINER_NAME}
+        with patch("meeting_api.meetings._spawn_via_runtime_api", new_callable=AsyncMock, return_value=runtime_resp) as mock_spawn:
+            with patch("meeting_api.meetings.mint_meeting_token", return_value="fake.jwt.token"):
+                with patch("meeting_api.meetings.async_session_local") as mock_sf:
+                    inner = AsyncMock()
+                    inner.add = MagicMock()
+                    inner.commit = AsyncMock()
+                    mock_sf.return_value.__aenter__ = AsyncMock(return_value=inner)
+                    mock_sf.return_value.__aexit__ = AsyncMock(return_value=False)
+
+                    resp = await client.post("/bots", json={
+                        "platform": "google_meet",
+                        "native_meeting_id": "abc-defg-hij",
+                    })
+
+        assert resp.status_code == 201
+        kwargs = mock_spawn.await_args.kwargs
+        bot_config = json.loads(kwargs["config"]["env"]["BOT_CONFIG"])
+        assert bot_config["voiceAgentEnabled"] is True
+
+    @pytest.mark.asyncio
+    async def test_create_meeting_respects_explicit_voice_agent_disabled(self, client, mock_db, mock_redis):
+        """Explicit voice_agent_enabled=false is preserved for recording-only bots."""
+        _setup_create_meeting_db(mock_db)
+
+        runtime_resp = {"container_id": TEST_CONTAINER_ID, "name": TEST_CONTAINER_NAME}
+        with patch("meeting_api.meetings._spawn_via_runtime_api", new_callable=AsyncMock, return_value=runtime_resp) as mock_spawn:
+            with patch("meeting_api.meetings.mint_meeting_token", return_value="fake.jwt.token"):
+                with patch("meeting_api.meetings.async_session_local") as mock_sf:
+                    inner = AsyncMock()
+                    inner.add = MagicMock()
+                    inner.commit = AsyncMock()
+                    mock_sf.return_value.__aenter__ = AsyncMock(return_value=inner)
+                    mock_sf.return_value.__aexit__ = AsyncMock(return_value=False)
+
+                    resp = await client.post("/bots", json={
+                        "platform": "google_meet",
+                        "native_meeting_id": "abc-defg-hij",
+                        "voice_agent_enabled": False,
+                    })
+
+        assert resp.status_code == 201
+        kwargs = mock_spawn.await_args.kwargs
+        bot_config = json.loads(kwargs["config"]["env"]["BOT_CONFIG"])
+        assert bot_config["voiceAgentEnabled"] is False
 
     @pytest.mark.asyncio
     async def test_create_meeting_runtime_failure(self, client, mock_db, mock_redis):
@@ -268,6 +325,151 @@ class TestDeleteMeetingArtifacts:
         assert "meetings.id = :id_1" in str(first_stmt)
         assert meeting.platform_specific_id is None
         assert meeting.data["redacted"] is True
+
+    @pytest.mark.asyncio
+    async def test_delete_meeting_rejects_ambiguous_native_id_without_meeting_id(self, mock_db):
+        """DELETE /meetings requires meeting_id when the native ID maps to multiple rows."""
+        from fastapi import HTTPException
+        from meeting_api.collector.endpoints import delete_meeting
+
+        meetings = [
+            make_meeting(id=77, status=MeetingStatus.COMPLETED.value),
+            make_meeting(id=88, status=MeetingStatus.COMPLETED.value),
+        ]
+        mock_db.execute = AsyncMock(return_value=MockResult(meetings))
+        request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(redis_client=None)))
+
+        with pytest.raises(HTTPException) as exc_info:
+            await delete_meeting(
+                platform=Platform.GOOGLE_MEET,
+                native_meeting_id=TEST_NATIVE_MEETING_ID,
+                request=request,
+                meeting_id=None,
+                current_user=make_user(),
+                db=mock_db,
+            )
+
+        assert exc_info.value.status_code == 409
+        assert exc_info.value.detail["meeting_ids"] == [77, 88]
+
+    @pytest.mark.asyncio
+    async def test_delete_meeting_removes_segments_and_chat_messages_from_redis(self, mock_db):
+        """DELETE /meetings cleans both transcript and chat Redis keys."""
+        from meeting_api.collector.endpoints import delete_meeting
+
+        class FakePipeline:
+            def __init__(self):
+                self.commands = []
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            def delete(self, key):
+                self.commands.append(("delete", key))
+                return self
+
+            def srem(self, key, value):
+                self.commands.append(("srem", key, value))
+                return self
+
+            async def execute(self):
+                return [1, 1, 1]
+
+        meeting = make_meeting(id=77, status=MeetingStatus.COMPLETED.value)
+        mock_db.execute = AsyncMock(side_effect=[
+            MockResult([meeting]),
+            MockResult([]),
+        ])
+        pipeline = FakePipeline()
+        redis_client = SimpleNamespace(pipeline=lambda transaction=True: pipeline)
+        request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(redis_client=redis_client)))
+
+        with patch(
+            "meeting_api.collector.endpoints._purge_recordings_for_meeting",
+            new_callable=AsyncMock,
+            return_value={
+                "model_recordings_deleted": 0,
+                "storage_files_deleted": 0,
+                "storage_files_targeted": 0,
+            },
+        ):
+            response = await delete_meeting(
+                platform=Platform.GOOGLE_MEET,
+                native_meeting_id=TEST_NATIVE_MEETING_ID,
+                request=request,
+                meeting_id=None,
+                current_user=make_user(),
+                db=mock_db,
+            )
+
+        assert "transcripts and recording artifacts deleted" in response["message"]
+        assert ("delete", "meeting:77:segments") in pipeline.commands
+        assert ("delete", "meeting:77:chat_messages") in pipeline.commands
+        assert ("srem", "active_meetings", "77") in pipeline.commands
+
+
+class TestAssistantContext:
+
+    @pytest.mark.asyncio
+    async def test_assistant_context_includes_redacted_transcript_chat_and_urls(self, mock_db):
+        """Assistant context is shared, redacted, and available for completed meetings."""
+        from meeting_api.collector.endpoints import get_meeting_assistant_context
+
+        meeting = make_meeting(
+            id=77,
+            status=MeetingStatus.COMPLETED.value,
+            data={
+                "title": "api_key=secret",
+                "participants": ["password=hunter2"],
+                "chat_messages": [
+                    {
+                        "sender": "Alice",
+                        "text": "カボス、このURL見て https://example.com/docs token:xyz",
+                        "timestamp": 1760000000000,
+                        "is_from_bot": False,
+                    }
+                ],
+            },
+        )
+        segment = SimpleNamespace(
+            speaker="Bob",
+            text="Authorization: Bearer abc.def-123_token https://user:pass@example.com/db",
+            start_time=0.0,
+            end_time=1.0,
+            absolute_start_time=None,
+            language=None,
+            completed=True,
+            segment_id="seg-1",
+        )
+        mock_db.execute = AsyncMock(return_value=MockResult([meeting]))
+        request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(redis_client=None)))
+
+        with patch(
+            "meeting_api.collector.endpoints._get_full_transcript_segments",
+            new_callable=AsyncMock,
+            return_value=[segment],
+        ):
+            response = await get_meeting_assistant_context(
+                platform=Platform.GOOGLE_MEET,
+                native_meeting_id=TEST_NATIVE_MEETING_ID,
+                request=request,
+                meeting_id=None,
+                limit=50,
+                current_user=make_user(),
+                db=mock_db,
+            )
+
+        assert response["meeting"]["title"] == "api_key=[REDACTED]"
+        assert response["meeting"]["participants"] == ["password=[REDACTED]"]
+        assert response["latest_segments"][0]["text"] == (
+            "Authorization: Bearer [REDACTED] https://[REDACTED]@example.com/db"
+        )
+        assert response["latest_segments"][0]["language"] == "ja"
+        assert response["chat_messages"][0]["text"] == "カボス、このURL見て https://example.com/docs token:[REDACTED]"
+        assert response["shared_urls"] == ["https://[REDACTED]@example.com/db", "https://example.com/docs"]
 
 
 # ===================================================================

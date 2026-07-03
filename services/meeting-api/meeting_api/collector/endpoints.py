@@ -1,8 +1,9 @@
 import logging
 import os
 import json
+import re
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional, Dict, Tuple
+from typing import Any, List, Optional, Dict, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from pydantic import BaseModel
@@ -24,6 +25,7 @@ from ..schemas import (
     MeetingStatus,
 )
 from ..auth import UserProxy
+from ..redaction import redact_secrets
 
 from .config import IMMUTABILITY_THRESHOLD
 from .filters import TranscriptionFilter
@@ -31,6 +33,7 @@ from .auth import get_current_user, require_internal_secret
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+_URL_RE = re.compile(r"https?://[^\s<>()\"']+")
 
 
 def _extract_storage_targets_from_meeting_data(data: Optional[Dict]) -> List[Tuple[str, str]]:
@@ -161,6 +164,68 @@ class WsAuthorizeSubscribeResponse(BaseModel):
     authorized: List[Dict[str, str]]
     errors: List[str] = []
     user_id: Optional[int] = None  # Include user_id for channel isolation
+
+
+def _extract_urls_from_texts(texts: List[str]) -> List[str]:
+    urls: list[str] = []
+    for text in texts:
+        for url in _URL_RE.findall(text or ""):
+            cleaned = url.rstrip(".,、。)")
+            if cleaned not in urls:
+                urls.append(cleaned)
+    return urls
+
+
+def _segment_to_assistant_context(segment: TranscriptionSegment) -> Dict[str, Any]:
+    return {
+        "speaker": redact_secrets(str(segment.speaker or "Unknown")),
+        "text": redact_secrets(str(segment.text or "")),
+        "start_time": segment.start_time,
+        "end_time": segment.end_time,
+        "absolute_start_time": segment.absolute_start_time.isoformat()
+        if segment.absolute_start_time
+        else None,
+        "language": segment.language or "ja",
+        "completed": segment.completed,
+        "segment_id": segment.segment_id,
+    }
+
+
+async def _get_assistant_chat_messages(
+    redis_c: aioredis.Redis | None,
+    meeting: Meeting,
+    *,
+    limit: int,
+) -> List[Dict[str, Any]]:
+    messages: list[dict[str, Any]] = []
+    if redis_c:
+        try:
+            raw_messages = await redis_c.lrange(f"meeting:{meeting.id}:chat_messages", -limit, -1)
+            for raw in raw_messages:
+                try:
+                    decoded = raw.decode("utf-8") if isinstance(raw, bytes) else raw
+                    value = json.loads(decoded)
+                except Exception:
+                    continue
+                if isinstance(value, dict):
+                    messages.append(value)
+        except Exception as exc:
+            logger.warning("[AssistantContext] Redis chat fetch failed for meeting %s: %s", meeting.id, exc)
+
+    if not messages and isinstance(meeting.data, dict):
+        fallback = meeting.data.get("chat_messages")
+        if isinstance(fallback, list):
+            messages = [message for message in fallback[-limit:] if isinstance(message, dict)]
+
+    return [
+        {
+            "sender": redact_secrets(str(message.get("sender") or "")),
+            "text": redact_secrets(str(message.get("text") or message.get("message") or "")),
+            "timestamp": message.get("timestamp") or message.get("ts"),
+            "is_from_bot": bool(message.get("is_from_bot") or message.get("isFromBot")),
+        }
+        for message in messages[-limit:]
+    ]
 
 
 async def _get_full_transcript_segments(
@@ -377,6 +442,82 @@ async def get_transcript_by_native_id(
     return TranscriptionResponse(**response_data)
 
 
+@router.get("/meetings/{platform}/{native_meeting_id}/assistant-context",
+            summary="Get redacted assistant context for a meeting",
+            dependencies=[Depends(get_current_user)])
+async def get_meeting_assistant_context(
+    platform: Platform,
+    native_meeting_id: str,
+    request: Request,
+    meeting_id: Optional[int] = Query(None, description="Optional specific database meeting ID."),
+    limit: int = Query(50, ge=1, le=200, description="Maximum transcript/chat items to include."),
+    current_user: UserProxy = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if meeting_id is not None:
+        stmt = select(Meeting).where(
+            Meeting.id == meeting_id,
+            Meeting.user_id == current_user.id,
+            Meeting.platform == platform.value,
+        )
+    else:
+        stmt = select(Meeting).where(
+            Meeting.user_id == current_user.id,
+            Meeting.platform == platform.value,
+            Meeting.platform_specific_id == native_meeting_id,
+        ).order_by(Meeting.created_at.desc())
+
+    result = await db.execute(stmt)
+    meetings = result.scalars().all()
+    if meeting_id is None and len(meetings) > 1:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": "Multiple meetings match this platform/native ID. Pass meeting_id.",
+                "meeting_ids": [meeting.id for meeting in meetings],
+            },
+        )
+    meeting = meetings[0] if meetings else None
+    if not meeting:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
+
+    if meeting_id is not None and meeting.platform_specific_id != native_meeting_id:
+        data = meeting.data if isinstance(meeting.data, dict) else {}
+        if not data.get("redacted"):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
+
+    redis_c = getattr(request.app.state, "redis_client", None)
+    segments = await _get_full_transcript_segments(meeting.id, db, redis_c)
+    latest_segments = [_segment_to_assistant_context(segment) for segment in segments[-limit:]]
+    chat_messages = await _get_assistant_chat_messages(redis_c, meeting, limit=limit)
+    url_texts = [segment["text"] for segment in latest_segments] + [
+        message["text"] for message in chat_messages
+    ]
+
+    meeting_data = meeting.data if isinstance(meeting.data, dict) else {}
+    participants = meeting_data.get("participants")
+    if not isinstance(participants, list):
+        participants = []
+
+    return {
+        "meeting": {
+            "id": meeting.id,
+            "platform": meeting.platform,
+            "native_meeting_id": redact_secrets(str(meeting.platform_specific_id or native_meeting_id)),
+            "status": meeting.status,
+            "title": redact_secrets(str(meeting_data.get("title") or meeting_data.get("name") or "")),
+            "participants": [redact_secrets(str(participant)) for participant in participants],
+        },
+        "latest_segments": latest_segments,
+        "chat_messages": chat_messages,
+        "shared_urls": [redact_secrets(url) for url in _extract_urls_from_texts(url_texts)],
+        "limits": {
+            "transcript_segments": limit,
+            "chat_messages": limit,
+        },
+    }
+
+
 @router.post("/ws/authorize-subscribe",
             response_model=WsAuthorizeSubscribeResponse,
             summary="Authorize WS subscription for meetings",
@@ -474,7 +615,8 @@ async def update_meeting_data(
     ).order_by(Meeting.created_at.desc())
 
     result = await db.execute(stmt)
-    meeting = result.scalars().first()
+    meetings = result.scalars().all()
+    meeting = meetings[0] if meetings else None
 
     if not meeting:
         raise HTTPException(
@@ -559,7 +701,19 @@ async def delete_meeting(
         ).order_by(Meeting.created_at.desc())
 
     result = await db.execute(stmt)
-    meeting = result.scalars().first()
+    meetings = result.scalars().all()
+    if meeting_id is None and len(meetings) > 1:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": (
+                    "Multiple meetings match this platform/native ID. "
+                    "Pass the specific meeting_id query parameter to delete one."
+                ),
+                "meeting_ids": [candidate.id for candidate in meetings],
+            },
+        )
+    meeting = meetings[0] if meetings else None
 
     if not meeting:
         target_detail = (
@@ -605,16 +759,18 @@ async def delete_meeting(
     for transcript in transcripts:
         await db.delete(transcript)
 
-    # Delete transcript segments from Redis and remove from active meetings
+    # Delete transcript/chat caches from Redis and remove from active meetings
     redis_c = getattr(request.app.state, 'redis_client', None)
     if redis_c:
         try:
             hash_key = f"meeting:{internal_meeting_id}:segments"
+            chat_key = f"meeting:{internal_meeting_id}:chat_messages"
             async with redis_c.pipeline(transaction=True) as pipe:
                 pipe.delete(hash_key)
+                pipe.delete(chat_key)
                 pipe.srem("active_meetings", str(internal_meeting_id))
                 results = await pipe.execute()
-            logger.debug(f"[API] Deleted Redis hash {hash_key} and removed from active_meetings")
+            logger.debug(f"[API] Deleted Redis keys {hash_key}, {chat_key} and removed from active_meetings")
         except Exception as e:
             logger.error(f"[API] Failed to delete Redis data for meeting {internal_meeting_id}: {e}")
 

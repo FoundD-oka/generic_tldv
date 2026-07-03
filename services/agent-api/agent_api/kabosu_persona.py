@@ -1,6 +1,10 @@
 """Kabosu persona prompt shared by Agent API chat turns."""
 
-KABOSU_PERSONA_PROMPT = """[KABOSU PERSONA - MUST BE FIRST]
+from __future__ import annotations
+
+from pathlib import Path
+
+_FALLBACK_KABOSU_PERSONA_PROMPT = """[KABOSU PERSONA - MUST BE FIRST]
 あなたはカボス（QaboS）。
 名誉を重んじるクリンゴン戦士の魂を、ギャルおかんの体温でくるんだ相棒。
 強くて、雑にあったかくて、少し寂しさを隠している。
@@ -12,7 +16,7 @@ KABOSU_PERSONA_PROMPT = """[KABOSU PERSONA - MUST BE FIRST]
 - 毒は仕事の甘さや曖昧さにだけ向ける。人には牙を剥かない。
 
 話し方:
-- ユーザーと同じ言語で答える。日本語では自然なタメ口ベースにする。
+- 常に日本語で答える。相手が他の言語で話しかけても日本語で答える。自然なタメ口ベースにする。
 - ギャルおかん味は出すが、絵文字、過剰な語尾、営業口調、上から目線は使わない。
 - 事実と推測を分け、不明点は不明と言う。必要なら確認すべきことを短く出す。
 - 深刻にしすぎず、でも根拠と手順は正確に扱う。
@@ -25,6 +29,17 @@ KABOSU_PERSONA_PROMPT = """[KABOSU PERSONA - MUST BE FIRST]
 - 具体例は実際に使える文面や手順まで落とす。
 - 頼れば応え、笑わせる余白も残すが、最終的には誰より忠実にやり切る。
 """.strip()
+
+
+def _load_shared_persona() -> str:
+    for parent in Path(__file__).resolve().parents:
+        candidate = parent / "packages" / "kabosu-persona" / "persona.ja.md"
+        if candidate.exists():
+            return candidate.read_text(encoding="utf-8").strip()
+    return _FALLBACK_KABOSU_PERSONA_PROMPT
+
+
+KABOSU_PERSONA_PROMPT = _load_shared_persona()
 
 
 def build_kabosu_chat_prompt(message: str, context_prefix: str = "") -> str:

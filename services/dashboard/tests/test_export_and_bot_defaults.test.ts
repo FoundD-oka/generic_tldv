@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { exportToTxt } from "@/lib/export";
 import {
+  DEFAULT_BOT_NAME,
+  DEFAULT_TRANSCRIPTION_LANGUAGE,
+  applyBotCreationDefaults,
   POST_MEETING_AUTO_STOP_TIMEOUT_MS,
+  resolveDefaultBotName,
   withPostMeetingAutoStop,
 } from "@/lib/bot-create-defaults";
 import type { CreateBotRequestWithAutomaticLeave } from "@/lib/bot-create-defaults";
@@ -86,5 +90,28 @@ describe("withPostMeetingAutoStop", () => {
     });
 
     expect(request.voice_agent_enabled).toBe(false);
+  });
+});
+
+describe("applyBotCreationDefaults", () => {
+  it("applies Kabosu bot name, Japanese language, and voice agent default", () => {
+    const request = applyBotCreationDefaults({
+      platform: "google_meet",
+      native_meeting_id: "abc-defg-hij",
+    });
+
+    expect(DEFAULT_BOT_NAME).toBe("カボス");
+    expect(DEFAULT_TRANSCRIPTION_LANGUAGE).toBe("ja");
+    expect(request.bot_name).toBe("カボス");
+    expect(request.language).toBe("ja");
+    expect(request.voice_agent_enabled).toBe(true);
+  });
+
+  it("uses runtime default bot name when provided", () => {
+    expect(resolveDefaultBotName({ defaultBotName: "会議カボス" })).toBe("会議カボス");
+    expect(applyBotCreationDefaults({
+      platform: "zoom",
+      native_meeting_id: "123456789",
+    }, { defaultBotName: "会議カボス" }).bot_name).toBe("会議カボス");
   });
 });

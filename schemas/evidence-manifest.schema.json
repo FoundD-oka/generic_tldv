@@ -1,0 +1,231 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://local/evidence-manifest.schema.json",
+  "title": "Backcast Evidence Manifest",
+  "type": "object",
+  "required": [
+    "manifest_version",
+    "task_id",
+    "checkpoint_id",
+    "repo",
+    "commands",
+    "artifacts",
+    "scope",
+    "quality_conditions",
+    "acceptance_criteria",
+    "missing_evidence",
+    "approval"
+  ],
+  "properties": {
+    "manifest_version": {
+      "type": "string"
+    },
+    "task_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "goal_id": {
+      "type": "string"
+    },
+    "checkpoint_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "repo": {
+      "type": "object",
+      "required": [
+        "base_sha",
+        "head_sha"
+      ],
+      "properties": {
+        "base_branch": {
+          "type": "string"
+        },
+        "base_sha": {
+          "type": "string"
+        },
+        "head_sha": {
+          "type": "string"
+        },
+        "branch_name": {
+          "type": "string"
+        },
+        "worktree_path": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "command",
+          "required",
+          "exit_code"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "command": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "exit_code": {
+            "type": "integer"
+          },
+          "log_path": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "path",
+          "exists"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "exists": {
+            "type": "boolean"
+          },
+          "required_by": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "scope": {
+      "type": "object",
+      "required": [
+        "changed_files",
+        "forbidden_paths_changed"
+      ],
+      "properties": {
+        "changed_files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "forbidden_paths_changed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "allowed_paths_outside_with_justification": {
+          "type": "array"
+        }
+      },
+      "additionalProperties": true
+    },
+    "acceptance_criteria": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "passed",
+              "failed",
+              "missing",
+              "not_applicable"
+            ]
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "quality_conditions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "condition",
+          "ok_line",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "condition": {
+            "type": "string"
+          },
+          "ok_line": {
+            "type": "string"
+          },
+          "target_state": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "passed",
+              "failed",
+              "missing",
+              "not_applicable"
+            ]
+          },
+          "evidence": {
+            "type": "array"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "missing_evidence": {
+      "type": "array"
+    },
+    "approval": {
+      "type": "object",
+      "required": [
+        "state"
+      ],
+      "properties": {
+        "state": {
+          "type": "string"
+        },
+        "decision_path": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

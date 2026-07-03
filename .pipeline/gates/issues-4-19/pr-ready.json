@@ -1,0 +1,78 @@
+{
+  "timestamp": "2026-07-03T07:11:34.387230+00:00",
+  "task_id": "issues-4-19",
+  "size": "L",
+  "status": "ready",
+  "checks": [
+    {
+      "check": "harness-residency",
+      "ok": true,
+      "detail": "status=pass"
+    },
+    {
+      "check": "preflight",
+      "ok": true,
+      "detail": "status=warn"
+    },
+    {
+      "check": "hd-gate",
+      "ok": true,
+      "detail": "unresolved=[]"
+    },
+    {
+      "check": "doc-staleness",
+      "ok": true,
+      "detail": "status=warn"
+    },
+    {
+      "check": "adapter-contract",
+      "ok": true,
+      "detail": "status=pass count=3"
+    },
+    {
+      "check": "backcast-contracts",
+      "ok": true,
+      "detail": "status=pass mode=not_applicable"
+    },
+    {
+      "check": "external-consultation",
+      "ok": true,
+      "detail": "status=pass mode=not_configured required=False"
+    },
+    {
+      "check": "feedback-prune",
+      "ok": true,
+      "detail": "status=pass required=True"
+    },
+    {
+      "check": "sml-decision",
+      "ok": true,
+      "detail": "size=L"
+    },
+    {
+      "check": "verification-contract",
+      "ok": true,
+      "detail": "/Users/bonginkan-3-gouki/project/generic_tldv/.pipeline/plans/issues-4-19/verification-contract.md"
+    },
+    {
+      "check": "evidence-pack",
+      "ok": true,
+      "detail": "/Users/bonginkan-3-gouki/project/generic_tldv/.pipeline/evidence/issues-4-19"
+    },
+    {
+      "check": "qa-judgment",
+      "ok": true,
+      "detail": "verdict=needs_human"
+    },
+    {
+      "check": "tribunal-or-sidechain",
+      "ok": true,
+      "detail": "sidechain/synthesis.json present"
+    },
+    {
+      "check": "approval-hash",
+      "ok": true,
+      "detail": "approved=sha256:207ccb43bb691f6d2ddc338f82ded4a9b531e8c10e8eee573c5660ba64296f8d current=sha256:207ccb43bb691f6d2ddc338f82ded4a9b531e8c10e8eee573c5660ba64296f8d"
+    }
+  ]
+}

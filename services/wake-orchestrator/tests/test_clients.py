@@ -1,7 +1,10 @@
 import json
+import time
 import unittest
+from pathlib import Path
 
 import httpx
+import pytest
 
 from app.clients import (
     AivisCloudClient,
@@ -18,6 +21,13 @@ from app.config import Settings
 from app.persona import KABOSU_PERSONA_PROMPT
 
 
+def test_kabosu_persona_matches_shared_source():
+    shared_path = Path(__file__).resolve().parents[3] / "packages" / "kabosu-persona" / "persona.ja.md"
+
+    assert shared_path.exists()
+    assert KABOSU_PERSONA_PROMPT == shared_path.read_text(encoding="utf-8").strip()
+
+
 class ClientTests(unittest.IsolatedAsyncioTestCase):
     async def test_groq_client_uses_groq_gpt_oss_and_hidden_reasoning(self):
         async def handler(request: httpx.Request) -> httpx.Response:
@@ -28,7 +38,7 @@ class ClientTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(body["max_completion_tokens"], 768)
             self.assertIn("カボス", body["messages"][0]["content"])
             self.assertTrue(body["messages"][0]["content"].startswith(KABOSU_PERSONA_PROMPT))
-            self.assertIn("Meet内リアルタイム応答ルール", body["messages"][0]["content"])
+            self.assertIn("会議内リアルタイム応答ルール", body["messages"][0]["content"])
             return httpx.Response(
                 200,
                 json={
@@ -269,6 +279,7 @@ class ClientTests(unittest.IsolatedAsyncioTestCase):
                         {
                             "platform": "google_meet",
                             "native_meeting_id": "abc-defg-hij",
+                            "meeting_id": 41,
                             "meeting_id_from_name": "42",
                         },
                         {"platform": "zoom", "native_meeting_id": "123456789", "meeting_id": 43},
@@ -282,10 +293,70 @@ class ClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             await client.list_running_bots(),
             [
-                MeetingRef(platform="google_meet", native_id="abc-defg-hij", meeting_id=42),
+                MeetingRef(platform="google_meet", native_id="abc-defg-hij", meeting_id=41, meeting_id_aliases=(42,)),
                 MeetingRef(platform="zoom", native_id="123456789", meeting_id=43),
             ],
         )
+
+    async def test_transcript_subscriber_registers_meeting_id_aliases(self):
+        class FakeVexa:
+            async def list_running_bots(self):
+                return [
+                    MeetingRef(
+                        platform="google_meet",
+                        native_id="abc-defg-hij",
+                        meeting_id=41,
+                        meeting_id_aliases=(42,),
+                    )
+                ]
+
+        class FakeWebSocket:
+            async def send(self, message):
+                return None
+
+        settings = Settings(vexa_api_key="vexa-key", wake_auto_discover_bots=True)
+        subscriber = VexaTranscriptSubscriber(settings, FakeVexa())
+        await subscriber._subscribe_new(FakeWebSocket(), set())
+
+        self.assertEqual(subscriber._meeting_refs_by_id[41].key, "google_meet:abc-defg-hij")
+        self.assertEqual(subscriber._meeting_refs_by_id[42].key, "google_meet:abc-defg-hij")
+
+    async def test_transcript_subscriber_resolves_buffered_message_after_discovery(self):
+        class FakeVexa:
+            async def list_running_bots(self):
+                return [
+                    MeetingRef(
+                        platform="google_meet",
+                        native_id="abc-defg-hij",
+                        meeting_id=41,
+                        meeting_id_aliases=(42,),
+                    )
+                ]
+
+        class FakeWebSocket:
+            async def send(self, message):
+                return None
+
+        settings = Settings(vexa_api_key="vexa-key", wake_auto_discover_bots=True)
+        subscriber = VexaTranscriptSubscriber(settings, FakeVexa())
+        decoded = {
+            "type": "chat.new_message",
+            "meeting": {"id": 42},
+            "payload": {
+                "sender": "Alice",
+                "text": "カボス、次の予定を確認して",
+                "is_from_bot": False,
+            },
+        }
+        unresolved_buffer = [(time.monotonic(), decoded)]
+
+        await subscriber._subscribe_new(FakeWebSocket(), set())
+        resolved = await subscriber._resolve_unresolved_buffer(unresolved_buffer)
+
+        self.assertEqual(len(resolved), 1)
+        self.assertEqual(resolved[0]["_wake_meeting"]["native_id"], "abc-defg-hij")
+        self.assertEqual(resolved[0]["_wake_meeting"]["meeting_id_aliases"], [42])
+        self.assertEqual(unresolved_buffer, [])
 
     async def test_transcript_subscriber_resubscribes_when_meeting_id_changes(self):
         class FakeVexa:

@@ -13,7 +13,7 @@ import { useLiveStore } from "@/stores/live-store";
 import { useMeetingsStore } from "@/stores/meetings-store";
 import { getUserFriendlyError } from "@/lib/error-messages";
 import { withBasePath } from "@/lib/base-path";
-import { withPostMeetingAutoStop } from "@/lib/bot-create-defaults";
+import { applyBotCreationDefaults, withPostMeetingAutoStop } from "@/lib/bot-create-defaults";
 
 type CallbackState = "loading" | "starting_meeting" | "success" | "error";
 
@@ -39,8 +39,8 @@ function ZoomCallbackContent() {
         setState("error");
         const msg =
           oauthError === "access_denied"
-            ? "Zoom authorization was cancelled or denied."
-            : `Zoom authorization was not completed: ${oauthError}. If you saw \"Application not found\", sign in to Zoom with the account that owns or is allowed to use the Vexa app, then try again.`;
+            ? "Zoom認証がキャンセルまたは拒否されました。"
+            : `Zoom認証が完了しませんでした: ${oauthError}。「Application not found」が表示された場合は、カボスのZoomアプリを利用できるZoomアカウントでログインしてから再試行してください。`;
         setError(msg);
         return;
       }
@@ -48,7 +48,7 @@ function ZoomCallbackContent() {
       if (!code || !stateParam) {
         if (!mounted) return;
         setState("error");
-        setError("Missing OAuth callback parameters");
+        setError("OAuthコールバックに必要なパラメータが不足しています");
         return;
       }
 
@@ -62,7 +62,7 @@ function ZoomCallbackContent() {
       if (!completeResp.ok) {
         if (!mounted) return;
         setState("error");
-        setError(completeData?.error || "Failed to complete Zoom OAuth");
+        setError(completeData?.error || "Zoom OAuthの完了に失敗しました");
         return;
       }
 
@@ -71,12 +71,12 @@ function ZoomCallbackContent() {
         if (!mounted) return;
         setState("starting_meeting");
         try {
-          const meeting = await vexaAPI.createBot(withPostMeetingAutoStop(pendingRequest));
+          const meeting = await vexaAPI.createBot(applyBotCreationDefaults(withPostMeetingAutoStop(pendingRequest)));
           if (!mounted) return;
           setActiveMeeting(meeting);
           setCurrentMeeting(meeting);
-          toast.success("Zoom connected", {
-            description: "Starting your Zoom transcription bot now.",
+          toast.success("Zoomに接続しました", {
+            description: "カボスがZoom会議へ参加しています。",
           });
           router.replace(`/meetings/${meeting.id}`);
           return;
@@ -99,7 +99,7 @@ function ZoomCallbackContent() {
     run().catch((err) => {
       if (!mounted) return;
       setState("error");
-      setError((err as Error).message || "Unexpected error during Zoom callback");
+      setError((err as Error).message || "Zoomコールバック中に予期しないエラーが発生しました");
     });
 
     return () => {
@@ -112,15 +112,15 @@ function ZoomCallbackContent() {
       <CardHeader className="text-center">
         {state === "loading" && (
           <>
-            <CardTitle className="text-xl">Connecting Zoom...</CardTitle>
-            <CardDescription>Finalizing your Zoom authorization</CardDescription>
+            <CardTitle className="text-xl">Zoomへ接続しています...</CardTitle>
+            <CardDescription>Zoom認証を完了しています</CardDescription>
           </>
         )}
 
         {state === "starting_meeting" && (
           <>
-            <CardTitle className="text-xl">Starting Meeting Bot...</CardTitle>
-            <CardDescription>Your Zoom account is connected. Sending bot now.</CardDescription>
+            <CardTitle className="text-xl">会議ボットを起動しています...</CardTitle>
+            <CardDescription>Zoomアカウントに接続しました。カボスを会議へ送っています。</CardDescription>
           </>
         )}
 
@@ -131,8 +131,8 @@ function ZoomCallbackContent() {
                 <CheckCircle2 className="h-8 w-8 text-green-600 dark:text-green-400" />
               </div>
             </div>
-            <CardTitle className="text-xl text-green-600 dark:text-green-400">Zoom Connected</CardTitle>
-            <CardDescription>Redirecting...</CardDescription>
+            <CardTitle className="text-xl text-green-600 dark:text-green-400">Zoomに接続しました</CardTitle>
+            <CardDescription>移動しています...</CardDescription>
           </>
         )}
 
@@ -143,8 +143,8 @@ function ZoomCallbackContent() {
                 <XCircle className="h-8 w-8 text-destructive" />
               </div>
             </div>
-            <CardTitle className="text-xl text-destructive">Zoom Connection Failed</CardTitle>
-            <CardDescription>{error || "Unknown error"}</CardDescription>
+            <CardTitle className="text-xl text-destructive">Zoom接続に失敗しました</CardTitle>
+            <CardDescription>{error || "不明なエラー"}</CardDescription>
           </>
         )}
       </CardHeader>
@@ -154,7 +154,7 @@ function ZoomCallbackContent() {
         )}
         {state === "error" && (
           <Button onClick={() => router.replace("/meetings")} className="w-full">
-            Back to Meetings
+            会議一覧へ戻る
           </Button>
         )}
       </CardContent>
@@ -166,8 +166,8 @@ function ZoomCallbackLoading() {
   return (
     <Card className="border-0 shadow-xl">
       <CardHeader className="text-center">
-        <CardTitle className="text-xl">Loading...</CardTitle>
-        <CardDescription>Please wait</CardDescription>
+        <CardTitle className="text-xl">読み込み中...</CardTitle>
+        <CardDescription>しばらくお待ちください</CardDescription>
       </CardHeader>
       <CardContent className="flex justify-center">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
@@ -182,7 +182,7 @@ export default function ZoomCallbackPage() {
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center justify-center gap-2 mb-8">
           <Logo size="lg" showText />
-          <p className="text-sm text-muted-foreground">Meeting Transcription</p>
+          <p className="text-sm text-muted-foreground">会議文字起こし</p>
         </div>
         <Suspense fallback={<ZoomCallbackLoading />}>
           <ZoomCallbackContent />

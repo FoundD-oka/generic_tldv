@@ -162,7 +162,7 @@ export function MeetingAgentPanel({ meetingId, platform }: MeetingAgentPanelProp
       });
 
       if (!resp.ok || !resp.body) {
-        updateLastAssistant(`Error: ${resp.status} ${resp.statusText}`);
+        updateLastAssistant(`エラー: ${resp.status} ${resp.statusText}`);
         setIsStreaming(false);
         return;
       }
@@ -184,11 +184,11 @@ export function MeetingAgentPanel({ meetingId, platform }: MeetingAgentPanelProp
             if (event.type === "session_reset") {
               // Keep only the last exchange so context resets gracefully
               setMessages((prev) => prev.slice(-2));
-              accumulated = "*Session restarted — previous context cleared.*\n\n";
+              accumulated = "*セッションを再開始しました。以前の文脈はクリアされています。*\n\n";
               updateLastAssistant(accumulated, tools);
             } else if (event.type === "reconnecting") {
               if (accumulated) {
-                updateLastAssistant(accumulated + "\n\n---\n*Reconnecting...*", tools);
+                updateLastAssistant(accumulated + "\n\n---\n*再接続しています...*", tools);
               }
               accumulated = "";
               tools = [];
@@ -224,7 +224,7 @@ export function MeetingAgentPanel({ meetingId, platform }: MeetingAgentPanelProp
       }
     } catch (err: unknown) {
       if (err instanceof Error && err.name !== "AbortError") {
-        updateLastAssistant(`Error: ${err.message}`);
+        updateLastAssistant(`エラー: ${err.message}`);
       }
     } finally {
       setIsStreaming(false);

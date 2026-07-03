@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0",
+  "task_id": "issues-4-19",
+  "runtime_profile": "codex-app",
+  "size": "L",
+  "result": {
+    "at_pass": true,
+    "fp_pass": true,
+    "nft_pass": true,
+    "hd_resolved": true,
+    "blocking_findings": 0
+  },
+  "evidence": {
+    "session_ledger": ".pipeline/sessions/issues-4-19/events.jsonl",
+    "verification": [
+      ".pipeline/evidence/issues-4-19/test-results.md",
+      ".pipeline/gates/issues-4-19/pr-ready.json"
+    ],
+    "review": [
+      ".pipeline/evidence/issues-4-19/qa-judgment.json"
+    ],
+    "sidechain_synthesis": ".pipeline/evidence/issues-4-19/sidechain/synthesis.json"
+  },
+  "notes": [
+    "Issues #4-#19 were handled as one L-size harness bundle because they share runtime and user-visible contracts.",
+    "Local targeted tests, dashboard build/typecheck, Python compile checks, compose profile checks, and contract greps passed.",
+    "PR readiness still requires hash-bound human approval for the final non-.pipeline diff."
+  ]
+}
