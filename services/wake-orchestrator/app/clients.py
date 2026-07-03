@@ -20,6 +20,10 @@ from .text import add_safe_ssml_breaks, clean_for_tts
 
 logger = logging.getLogger(__name__)
 
+UNRESOLVED_MEETING_BUFFER_SECONDS = 10.0
+UNRESOLVED_MEETING_BUFFER_MAX = 50
+ZERO_DISCOVERY_OWNER_HINT_SECONDS = 600.0
+
 
 @dataclass(frozen=True)
 class TtsResult:
@@ -40,6 +44,7 @@ class MeetingRef:
     platform: str
     native_id: str
     meeting_id: int | None = None
+    meeting_id_aliases: tuple[int, ...] = ()
 
     @property
     def key(self) -> str:
@@ -48,14 +53,23 @@ class MeetingRef:
     def as_subscribe_item(self) -> dict[str, str]:
         return {"platform": self.platform, "native_id": self.native_id}
 
-    def as_message_value(self) -> dict[str, str | int]:
-        value: dict[str, str | int] = {
+    def as_message_value(self) -> dict[str, str | int | list[int]]:
+        value: dict[str, str | int | list[int]] = {
             "platform": self.platform,
             "native_id": self.native_id,
         }
         if self.meeting_id is not None:
             value["meeting_id"] = self.meeting_id
+        if self.meeting_id_aliases:
+            value["meeting_id_aliases"] = list(self.meeting_id_aliases)
         return value
+
+    def all_meeting_ids(self) -> tuple[int, ...]:
+        ids: list[int] = []
+        for value in (self.meeting_id, *self.meeting_id_aliases):
+            if value is not None and value not in ids:
+                ids.append(value)
+        return tuple(ids)
 
     @classmethod
     def from_message(cls, value: Any) -> "MeetingRef | None":
@@ -66,7 +80,20 @@ class MeetingRef:
         if not platform or not native_id:
             return None
         meeting_id = _to_int(value.get("meeting_id"))
-        return cls(platform=str(platform), native_id=str(native_id), meeting_id=meeting_id)
+        raw_aliases = value.get("meeting_id_aliases")
+        aliases: list[int] = []
+        if isinstance(raw_aliases, list):
+            aliases.extend(alias for alias in (_to_int(item) for item in raw_aliases) if alias is not None)
+        from_name = _to_int(value.get("meeting_id_from_name"))
+        if from_name is not None:
+            aliases.append(from_name)
+        aliases = [alias for alias in aliases if alias != meeting_id]
+        return cls(
+            platform=str(platform),
+            native_id=str(native_id),
+            meeting_id=meeting_id,
+            meeting_id_aliases=tuple(dict.fromkeys(aliases)),
+        )
 
 
 def _to_int(value: Any) -> int | None:
@@ -140,7 +167,10 @@ class GroqClient:
             "messages": [
                 {
                     "role": "system",
-                    "content": build_kabosu_meet_system_prompt(output_rule),
+                    "content": build_kabosu_meet_system_prompt(
+                        output_rule,
+                        platform=self._settings.vexa_platform,
+                    ),
                 },
                 {
                     "role": "user",
@@ -472,8 +502,22 @@ class VexaClient:
             native_id = bot.get("native_meeting_id") or bot.get("native_id")
             if not platform or not native_id:
                 continue
-            meeting_id = _to_int(bot.get("meeting_id") or bot.get("meeting_id_from_name"))
-            ref = MeetingRef(str(platform), str(native_id), meeting_id=meeting_id)
+            primary_meeting_id = _to_int(bot.get("meeting_id"))
+            name_meeting_id = _to_int(bot.get("meeting_id_from_name"))
+            meeting_id = primary_meeting_id or name_meeting_id
+            aliases = tuple(
+                dict.fromkeys(
+                    value
+                    for value in (primary_meeting_id, name_meeting_id)
+                    if value is not None and value != meeting_id
+                )
+            )
+            ref = MeetingRef(
+                str(platform),
+                str(native_id),
+                meeting_id=meeting_id,
+                meeting_id_aliases=aliases,
+            )
             refs[ref.key] = ref
         return list(refs.values())
 
@@ -486,6 +530,8 @@ class VexaTranscriptSubscriber:
         self._vexa = vexa or VexaClient(settings)
         self._meeting_refs_by_id: dict[int, MeetingRef] = {}
         self._meeting_refs_by_key: dict[str, MeetingRef] = {}
+        self._zero_discovery_started_at: float | None = None
+        self._zero_discovery_hint_logged = False
 
     def _configured_meeting(self) -> MeetingRef | None:
         if not self._settings.vexa_native_meeting_id:
@@ -506,6 +552,23 @@ class VexaTranscriptSubscriber:
         except httpx.HTTPError as exc:
             logger.warning("Could not discover running Vexa bots: %s", exc)
             return []
+        if refs:
+            self._zero_discovery_started_at = None
+            self._zero_discovery_hint_logged = False
+            return refs
+        now = time.monotonic()
+        if self._zero_discovery_started_at is None:
+            self._zero_discovery_started_at = now
+        elif (
+            not self._zero_discovery_hint_logged
+            and now - self._zero_discovery_started_at >= ZERO_DISCOVERY_OWNER_HINT_SECONDS
+        ):
+            logger.info(
+                "No running bots have been discovered for %.0fs. Confirm VEXA_API_KEY "
+                "belongs to the same dashboard user that creates the meeting bots.",
+                now - self._zero_discovery_started_at,
+            )
+            self._zero_discovery_hint_logged = True
         return refs
 
     async def _subscribe_new(self, ws: Any, subscribed_keys: set[str]) -> None:
@@ -521,7 +584,8 @@ class VexaTranscriptSubscriber:
             ):
                 stale_refs.append(previous)
                 subscribed_keys.discard(ref.key)
-                self._meeting_refs_by_id.pop(previous.meeting_id, None)
+                for old_id in previous.all_meeting_ids():
+                    self._meeting_refs_by_id.pop(old_id, None)
 
         new_refs = [ref for ref in refs if ref.key not in subscribed_keys]
         if not new_refs and not stale_refs:
@@ -529,8 +593,8 @@ class VexaTranscriptSubscriber:
 
         for ref in refs:
             self._meeting_refs_by_key[ref.key] = ref
-            if ref.meeting_id is not None:
-                self._meeting_refs_by_id[ref.meeting_id] = ref
+            for meeting_id in ref.all_meeting_ids():
+                self._meeting_refs_by_id[meeting_id] = ref
 
         if stale_refs:
             await ws.send(
@@ -567,7 +631,9 @@ class VexaTranscriptSubscriber:
         meeting = message.get("meeting")
         meeting_id = _to_int(message.get("meeting_id"))
         if meeting_id is None and isinstance(meeting, dict):
-            meeting_id = _to_int(meeting.get("id"))
+            meeting_id = _to_int(meeting.get("id")) or _to_int(meeting.get("meeting_id"))
+            if meeting_id is None:
+                meeting_id = _to_int(meeting.get("meeting_id_from_name"))
         ref = self._meeting_refs_by_id.get(meeting_id) if meeting_id is not None else None
         if not ref and isinstance(meeting, dict):
             ref = MeetingRef.from_message(meeting)
@@ -583,6 +649,73 @@ class VexaTranscriptSubscriber:
         enriched = dict(message)
         enriched["_wake_meeting"] = ref.as_message_value()
         return enriched
+
+    def _message_requires_meeting(self, message: dict[str, Any]) -> bool:
+        message_type = str(message.get("type") or message.get("event") or "")
+        return message_type in {
+            "transcript",
+            # Deprecated inbound compatibility. Bot-side producers emit "transcript".
+            "transcript.mutable",
+            "transcript.finalized",
+            "chat.new_message",
+            "chat_message",
+            "chat.received",
+            "chat.sent",
+            "chat.messages",
+        }
+
+    def _buffer_unresolved_message(
+        self,
+        buffer: list[tuple[float, dict[str, Any]]],
+        decoded: dict[str, Any],
+        message: dict[str, Any],
+    ) -> None:
+        now = time.monotonic()
+        buffer[:] = [
+            (created_at, item)
+            for created_at, item in buffer
+            if now - created_at <= UNRESOLVED_MEETING_BUFFER_SECONDS
+        ]
+        if len(buffer) >= UNRESOLVED_MEETING_BUFFER_MAX:
+            buffer.pop(0)
+            logger.warning(
+                "Dropping oldest unresolved wake message because buffer reached %d entries",
+                UNRESOLVED_MEETING_BUFFER_MAX,
+            )
+        buffer.append((now, decoded))
+        logger.info(
+            "Buffered unresolved wake message type=%s for %.0fs while waiting for bot discovery",
+            message.get("type") or message.get("event"),
+            UNRESOLVED_MEETING_BUFFER_SECONDS,
+        )
+
+    async def _resolve_unresolved_buffer(
+        self,
+        buffer: list[tuple[float, dict[str, Any]]],
+    ) -> list[dict[str, Any]]:
+        now = time.monotonic()
+        remaining: list[tuple[float, dict[str, Any]]] = []
+        resolved: list[dict[str, Any]] = []
+        for created_at, decoded in buffer:
+            age = now - created_at
+            if age > UNRESOLVED_MEETING_BUFFER_SECONDS:
+                logger.warning(
+                    "Dropping unresolved wake message after %.1fs with %d known meetings",
+                    age,
+                    len(self._meeting_refs_by_key),
+                )
+                continue
+            message = self._enrich_message(decoded)
+            if (
+                self._message_requires_meeting(message)
+                and not MeetingRef.from_message(message.get("_wake_meeting"))
+            ):
+                remaining.append((created_at, decoded))
+                continue
+            message["_wake_websocket_received_ts_ms"] = int(time.time() * 1000)
+            resolved.append(message)
+        buffer[:] = remaining
+        return resolved
 
     def _normalize_chat_event(self, message: dict[str, Any]) -> dict[str, Any]:
         message_type = str(message.get("type") or message.get("event") or "")
@@ -616,6 +749,8 @@ class VexaTranscriptSubscriber:
                 logger.info("Connecting to Vexa transcript WebSocket: %s", url.split("api_key=")[0] + "api_key=***")
                 async with websockets.connect(url, ping_interval=20, ping_timeout=20) as ws:
                     subscribed_keys: set[str] = set()
+                    unresolved_buffer: list[tuple[float, dict[str, Any]]] = []
+                    resolved_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
                     await self._subscribe_new(ws, subscribed_keys)
 
                     async def discovery_loop() -> None:
@@ -624,19 +759,56 @@ class VexaTranscriptSubscriber:
                                 max(self._settings.wake_discovery_interval_seconds, 1.0)
                             )
                             await self._subscribe_new(ws, subscribed_keys)
+                            for resolved in await self._resolve_unresolved_buffer(unresolved_buffer):
+                                await resolved_queue.put(resolved)
 
                     discovery_task = asyncio.create_task(discovery_loop())
+                    recv_task: asyncio.Task[Any] | None = asyncio.create_task(ws.recv())
+                    queue_task: asyncio.Task[dict[str, Any]] | None = asyncio.create_task(resolved_queue.get())
                     try:
-                        async for raw in ws:
+                        while True:
+                            active_tasks = {task for task in (recv_task, queue_task) if task is not None}
+                            done, pending = await asyncio.wait(
+                                active_tasks,
+                                return_when=asyncio.FIRST_COMPLETED,
+                            )
+                            if queue_task in done:
+                                queued_message = queue_task.result()
+                                queue_task = asyncio.create_task(resolved_queue.get())
+                                yield queued_message
+                                continue
+                            if recv_task not in done:
+                                continue
+                            raw = recv_task.result()
+                            recv_task = asyncio.create_task(ws.recv())
                             try:
-                                message = self._enrich_message(json.loads(raw))
+                                decoded = json.loads(raw)
+                                message = self._enrich_message(decoded)
+                                if (
+                                    self._message_requires_meeting(message)
+                                    and not MeetingRef.from_message(message.get("_wake_meeting"))
+                                ):
+                                    await self._subscribe_new(ws, subscribed_keys)
+                                    message = self._enrich_message(decoded)
+                                    if not MeetingRef.from_message(message.get("_wake_meeting")):
+                                        self._buffer_unresolved_message(unresolved_buffer, decoded, message)
+                                        continue
+                                for resolved in await self._resolve_unresolved_buffer(unresolved_buffer):
+                                    await resolved_queue.put(resolved)
                                 message["_wake_websocket_received_ts_ms"] = int(time.time() * 1000)
                                 yield message
                             except json.JSONDecodeError:
                                 logger.warning("Ignoring invalid WebSocket JSON: %r", raw[:200])
                     finally:
+                        for task in (recv_task, queue_task):
+                            if task is not None:
+                                task.cancel()
                         discovery_task.cancel()
-                        await asyncio.gather(discovery_task, return_exceptions=True)
+                        await asyncio.gather(
+                            discovery_task,
+                            *(task for task in (recv_task, queue_task) if task is not None),
+                            return_exceptions=True,
+                        )
             except asyncio.CancelledError:
                 raise
             except Exception as exc:

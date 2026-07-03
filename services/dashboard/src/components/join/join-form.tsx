@@ -18,7 +18,12 @@ import { cn } from "@/lib/utils";
 import { DocsLink } from "@/components/docs/docs-link";
 import { useAuthStore } from "@/stores/auth-store";
 import { shouldTriggerZoomOAuth, startZoomOAuth } from "@/lib/zoom-oauth-client";
-import { withPostMeetingAutoStop } from "@/lib/bot-create-defaults";
+import {
+  DEFAULT_BOT_NAME,
+  DEFAULT_TRANSCRIPTION_LANGUAGE,
+  applyBotCreationDefaults,
+  withPostMeetingAutoStop,
+} from "@/lib/bot-create-defaults";
 
 interface JoinFormProps {
   onSuccess?: (meetingId: string, platform: Platform, nativeId: string) => void;
@@ -43,11 +48,11 @@ export function JoinForm({ onSuccess }: JoinFormProps) {
   const [passcode, setPasscode] = useState("");
   const [botName, setBotName] = useState(() => {
     if (typeof window !== "undefined") {
-      return localStorage.getItem("vexa-join-bot-name") || "カボス";
+      return localStorage.getItem("vexa-join-bot-name") || DEFAULT_BOT_NAME;
     }
-    return "カボス";
+    return DEFAULT_BOT_NAME;
   });
-  const [language, setLanguage] = useState("auto");
+  const [language, setLanguage] = useState(DEFAULT_TRANSCRIPTION_LANGUAGE);
   const [transcribeEnabled, setTranscribeEnabled] = useState(true);
   const [videoRecordingEnabled, setVideoRecordingEnabled] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
@@ -101,24 +106,29 @@ export function JoinForm({ onSuccess }: JoinFormProps) {
 
     setIsSubmitting(true);
 
-    const request: CreateBotRequestWithVideo = withPostMeetingAutoStop({
-      platform,
-      native_meeting_id: cleanMeetingId,
-    });
+    const request: CreateBotRequestWithVideo = applyBotCreationDefaults(
+      withPostMeetingAutoStop({
+        platform,
+        native_meeting_id: cleanMeetingId,
+      }),
+      config
+    );
 
     if ((platform === "teams" || platform === "zoom") && passcode) {
       request.passcode = passcode.trim();
     }
 
     // Set bot name - use custom name or configured default
-    request.bot_name = botName.trim() || config?.defaultBotName || "カボス";
+    request.bot_name = botName.trim() || request.bot_name || DEFAULT_BOT_NAME;
 
     // Persist to localStorage
     if (typeof window !== "undefined") {
       localStorage.setItem("vexa-join-bot-name", request.bot_name);
     }
 
-    if (language && language !== "auto") {
+    if (language === "auto") {
+      delete request.language;
+    } else if (language) {
       request.language = language;
     }
 

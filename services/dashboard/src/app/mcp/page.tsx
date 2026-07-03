@@ -40,7 +40,7 @@ export default function MCPPage() {
   const getMCPUrl = () => {
     const base = config?.apiUrl;
     if (!base) {
-      return "https://api.cloud.vexa.ai/mcp";
+      return "http://localhost:8056/mcp";
     }
     return `${base.replace(/\/$/, "")}/mcp`;
   };
@@ -57,7 +57,7 @@ export default function MCPPage() {
 
     return JSON.stringify({
       mcpServers: {
-        Vexa: {
+        kabosu: {
           command: "npx",
           args: [
             "-y",
@@ -103,14 +103,14 @@ export default function MCPPage() {
       env: { VEXA_API_KEY: apiKey },
     };
 
-    const fullMCPConfig = { mcpServers: { Vexa: mcpServerConfig } };
+    const fullMCPConfig = { mcpServers: { kabosu: mcpServerConfig } };
     const configJson = JSON.stringify(fullMCPConfig, null, 2);
     copyToClipboard(configJson);
 
     try {
       const configBase64 = btoa(JSON.stringify(mcpServerConfig));
       const configEncoded = encodeURIComponent(configBase64);
-      const deepLink = `cursor://anysphere.cursor-deeplink/mcp/install?name=Vexa&config=${configEncoded}`;
+      const deepLink = `cursor://anysphere.cursor-deeplink/mcp/install?name=kabosu&config=${configEncoded}`;
 
       const link = document.createElement("a");
       link.href = deepLink;
@@ -258,7 +258,7 @@ export default function MCPPage() {
               <code className="bg-background px-1.5 py-0.5 rounded text-xs">~/.claude/mcp.json</code>
             </p>
             <p className="text-xs pt-2">
-              すでに mcp.json がある場合は、Vexa の項目を既存の{" "}
+              すでに mcp.json がある場合は、kabosu の項目を既存の{" "}
               <code className="bg-background px-1.5 py-0.5 rounded text-xs">mcpServers</code>
               に統合してください。
             </p>

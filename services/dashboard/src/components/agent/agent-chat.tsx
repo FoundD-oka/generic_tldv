@@ -97,7 +97,7 @@ function SessionSidebar() {
           <Input
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            placeholder="New session..."
+            placeholder="新しいセッション..."
             className="h-8 text-xs"
             onKeyDown={(e) => e.key === "Enter" && handleCreate()}
           />
@@ -109,7 +109,7 @@ function SessionSidebar() {
       <div className="flex-1 overflow-y-auto">
         {sessions.length === 0 && (
           <p className="text-xs text-muted-foreground p-3">
-            No sessions yet. Create one to start.
+            まだセッションがありません。作成すると開始できます。
           </p>
         )}
         {sessions.map((session) => (
@@ -232,7 +232,7 @@ export function AgentChat() {
       });
 
       if (!resp.ok || !resp.body) {
-        updateLastAssistant(`Error: ${resp.status} ${resp.statusText}`);
+        updateLastAssistant(`エラー: ${resp.status} ${resp.statusText}`);
         setStreaming(false);
         return;
       }
@@ -255,11 +255,11 @@ export function AgentChat() {
               const currentMessages = useAgentStore.getState().messages;
               const lastTwo = currentMessages.slice(-2);
               useAgentStore.setState({ messages: lastTwo });
-              accumulated = "*Session restarted — previous context is no longer available.*\n\n";
+              accumulated = "*セッションを再開始しました。以前の文脈は利用できません。*\n\n";
               updateLastAssistant(accumulated, tools);
             } else if (event.type === "reconnecting") {
               if (accumulated) {
-                updateLastAssistant(accumulated + "\n\n---\n*Reconnecting...*", tools);
+                updateLastAssistant(accumulated + "\n\n---\n*再接続しています...*", tools);
               }
               accumulated = "";
               tools = [];
@@ -283,10 +283,10 @@ export function AgentChat() {
               // Update session ID if returned
               if (event.session_id && !activeSessionId) {
                 // Auto-create session entry for new sessions
-                useAgentStore.getState().createSession("New session");
+                useAgentStore.getState().createSession("新しいセッション");
               }
             } else if (event.type === "error") {
-              accumulated += `\n\n⚠️ ${event.message}`;
+              accumulated += `\n\n${event.message}`;
               updateLastAssistant(accumulated, tools);
             }
           } catch {}
@@ -294,7 +294,7 @@ export function AgentChat() {
       }
     } catch (err: any) {
       if (err.name !== "AbortError") {
-        updateLastAssistant(`Error: ${err.message}`);
+        updateLastAssistant(`エラー: ${err.message}`);
       }
     } finally {
       setStreaming(false);
@@ -342,18 +342,18 @@ export function AgentChat() {
           <div className="flex items-center gap-2">
             <Bot className="h-5 w-5 text-primary" />
             <h2 className="font-semibold text-sm">
-              {useAgentStore.getState().sessions.find(s => s.id === activeSessionId)?.name || "Vexa Agent"}
+              {useAgentStore.getState().sessions.find(s => s.id === activeSessionId)?.name || "カボス エージェント"}
             </h2>
             {isStreaming && (
               <Badge variant="secondary" className="text-xs">
                 <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                Thinking...
+                考え中...
               </Badge>
             )}
           </div>
           <Button variant="ghost" size="sm" onClick={handleReset}>
             <RotateCcw className="h-4 w-4 mr-1" />
-            Reset
+            リセット
           </Button>
         </div>
 
@@ -362,8 +362,8 @@ export function AgentChat() {
           {!activeSessionId && messages.length === 0 && (
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-2">
               <Bot className="h-10 w-10" />
-              <p>Create a session to start chatting.</p>
-              <p className="text-xs">Or just type — a default session will be created.</p>
+              <p>セッションを作成するとチャットを開始できます。</p>
+              <p className="text-xs">このまま入力すると既定のセッションを作成します。</p>
             </div>
           )}
           {messages.map((msg) => (
@@ -378,7 +378,7 @@ export function AgentChat() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Message your agent..."
+              placeholder="エージェントへメッセージ..."
               disabled={isStreaming}
               className="flex-1"
             />

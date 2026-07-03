@@ -153,7 +153,7 @@ export function useVexaWebSocket(
                 absolute_end_time: absoluteEnd,
                 text: seg.text,
                 speaker: seg.speaker || speaker,
-                language: seg.language || "en",
+                language: seg.language || "ja",
                 completed: seg.completed ?? false,
                 session_uid: seg.session_uid || "",
                 speaker_mapping_status: seg.speaker_mapping_status,
@@ -169,7 +169,7 @@ export function useVexaWebSocket(
             break;
           }
           case "transcript.mutable":
-            // Legacy format: segments array in payload
+            // Deprecated inbound compatibility: producers emit "transcript".
             if (message.payload?.segments) {
               for (const seg of message.payload.segments) {
                 if (!seg.text?.trim() || !seg.absolute_start_time) continue;
@@ -182,7 +182,7 @@ export function useVexaWebSocket(
                   absolute_end_time: seg.absolute_end_time,
                   text: seg.text,
                   speaker: seg.speaker || "",
-                  language: seg.language || "en",
+                  language: seg.language || "ja",
                   completed: seg.completed,
                   session_uid: seg.session_uid || "",
                   speaker_mapping_status: seg.speaker_mapping_status,

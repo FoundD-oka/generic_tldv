@@ -198,3 +198,4 @@ tests3/.state-*
 .claude/hooks
 .claude/rules
 .claude/skills
+.pipeline/worktrees/

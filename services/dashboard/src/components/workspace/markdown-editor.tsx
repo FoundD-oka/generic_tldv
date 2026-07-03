@@ -128,7 +128,7 @@ export function MarkdownEditor({ content, onChange }: MarkdownEditorProps) {
         heading: { levels: [1, 2, 3] },
       }),
       Placeholder.configure({
-        placeholder: "Start writing...",
+        placeholder: "ここに入力...",
       }),
     ],
     content: markdownToHtml(content),
@@ -162,21 +162,21 @@ export function MarkdownEditor({ content, onChange }: MarkdownEditorProps) {
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
           active={editor.isActive("heading", { level: 1 })}
-          title="Heading 1"
+          title="見出し1"
         >
           <Heading1 className="h-3.5 w-3.5" />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
           active={editor.isActive("heading", { level: 2 })}
-          title="Heading 2"
+          title="見出し2"
         >
           <Heading2 className="h-3.5 w-3.5" />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
           active={editor.isActive("heading", { level: 3 })}
-          title="Heading 3"
+          title="見出し3"
         >
           <Heading3 className="h-3.5 w-3.5" />
         </ToolbarButton>
@@ -184,28 +184,28 @@ export function MarkdownEditor({ content, onChange }: MarkdownEditorProps) {
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleBold().run()}
           active={editor.isActive("bold")}
-          title="Bold"
+          title="太字"
         >
           <Bold className="h-3.5 w-3.5" />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleItalic().run()}
           active={editor.isActive("italic")}
-          title="Italic"
+          title="斜体"
         >
           <Italic className="h-3.5 w-3.5" />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleStrike().run()}
           active={editor.isActive("strike")}
-          title="Strikethrough"
+          title="取り消し線"
         >
           <Strikethrough className="h-3.5 w-3.5" />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleCode().run()}
           active={editor.isActive("code")}
-          title="Inline code"
+          title="インラインコード"
         >
           <Code className="h-3.5 w-3.5" />
         </ToolbarButton>
@@ -213,40 +213,40 @@ export function MarkdownEditor({ content, onChange }: MarkdownEditorProps) {
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleBulletList().run()}
           active={editor.isActive("bulletList")}
-          title="Bullet list"
+          title="箇条書き"
         >
           <List className="h-3.5 w-3.5" />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleOrderedList().run()}
           active={editor.isActive("orderedList")}
-          title="Ordered list"
+          title="番号付きリスト"
         >
           <ListOrdered className="h-3.5 w-3.5" />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleBlockquote().run()}
           active={editor.isActive("blockquote")}
-          title="Blockquote"
+          title="引用"
         >
           <Quote className="h-3.5 w-3.5" />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().setHorizontalRule().run()}
-          title="Horizontal rule"
+          title="区切り線"
         >
           <Minus className="h-3.5 w-3.5" />
         </ToolbarButton>
         <div className="w-px h-5 bg-border mx-1" />
         <ToolbarButton
           onClick={() => editor.chain().focus().undo().run()}
-          title="Undo"
+          title="元に戻す"
         >
           <Undo className="h-3.5 w-3.5" />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().redo().run()}
-          title="Redo"
+          title="やり直す"
         >
           <Redo className="h-3.5 w-3.5" />
         </ToolbarButton>

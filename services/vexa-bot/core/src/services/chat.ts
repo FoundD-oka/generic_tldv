@@ -200,15 +200,18 @@ export class MeetingChatService {
       ).catch(err => log(`[Chat] Redis publish failed: ${err.message}`));
 
       // Also store in Redis list for GET retrieval (use snake_case to match Dashboard types)
+      const chatMessagesKey = `meeting:${this.meetingId}:chat_messages`;
       this.redisPublisher.rPush(
-        `meeting:${this.meetingId}:chat_messages`,
+        chatMessagesKey,
         JSON.stringify({
           sender: msg.sender,
           text: msg.text,
           timestamp: msg.timestamp,
           is_from_bot: msg.isFromBot,
         })
-      ).catch(err => log(`[Chat] Redis store failed: ${err.message}`));
+      )
+        .then(() => this.redisPublisher?.expire(chatMessagesKey, 60 * 60 * 24 * 30))
+        .catch(err => log(`[Chat] Redis store failed: ${err.message}`));
     }
 
     // Chat messages are rendered inline with the transcript in the Dashboard

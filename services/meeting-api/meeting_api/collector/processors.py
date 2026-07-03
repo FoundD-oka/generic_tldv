@@ -323,7 +323,9 @@ async def process_stream_message(message_id: str, message_data: Dict[str, Any], 
 
 async def process_transcript_bundle(message_id: str, stream_data: Dict[str, Any], meeting_id: int, redis_c: aioredis.Redis) -> bool:
     """Process new-format transcript bundle: confirmed + pending per speaker.
-    Stores confirmed in Redis Hash (by segment_id), publishes to WS as atomic bundle.
+
+    This collector persists segment state only. The bot-side SegmentPublisher is
+    the WebSocket producer for live `transcript` bundles.
     """
     try:
         speaker = stream_data.get('speaker', '')

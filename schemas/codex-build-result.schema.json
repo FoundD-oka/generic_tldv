@@ -1,0 +1,67 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://local/codex-build-result.schema.json",
+  "title": "Codex Build Result",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "task_id",
+    "status",
+    "summary",
+    "changed_files",
+    "verification",
+    "notes"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string"
+    },
+    "task_id": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "passed",
+        "failed",
+        "blocked",
+        "needs_human"
+      ]
+    },
+    "summary": {
+      "type": "string"
+    },
+    "changed_files": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "verification": {
+      "type": "object",
+      "required": [
+        "commands_run",
+        "known_gaps"
+      ],
+      "properties": {
+        "commands_run": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "known_gaps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}

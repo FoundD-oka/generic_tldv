@@ -1,0 +1,1260 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>harness-init 処理ロードマップ</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #142026;
+      --soft-ink: #34434a;
+      --muted: #65747c;
+      --paper: #f5f7f2;
+      --surface: #ffffff;
+      --surface-warm: #fbfcf8;
+      --line: rgba(20, 32, 38, 0.15);
+      --shadow: 0 18px 44px rgba(20, 32, 38, 0.12);
+      --blue: #2d6cdf;
+      --teal: #168c96;
+      --green: #21936d;
+      --amber: #bd7618;
+      --red: #c84848;
+      --violet: #6658d3;
+      --active: var(--blue);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      letter-spacing: 0;
+    }
+
+    body {
+      overflow-x: hidden;
+    }
+
+    button {
+      font: inherit;
+      letter-spacing: 0;
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.91em;
+    }
+
+    #flowCanvas {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+      opacity: 0.72;
+    }
+
+    .app {
+      position: relative;
+      z-index: 1;
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 14px;
+      padding: 16px;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 18px;
+      align-items: end;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 8px;
+      color: var(--teal);
+      font-size: 12px;
+      font-weight: 850;
+      text-transform: uppercase;
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--teal);
+      box-shadow: 0 0 0 5px rgba(22, 140, 150, 0.13);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(30px, 4vw, 54px);
+      line-height: 1.02;
+      font-weight: 880;
+    }
+
+    h1 span {
+      display: block;
+    }
+
+    .lead {
+      max-width: 920px;
+      margin: 10px 0 0;
+      color: var(--soft-ink);
+      font-size: clamp(14px, 1.35vw, 16px);
+      line-height: 1.68;
+    }
+
+    .summary-strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(110px, 1fr));
+      gap: 8px;
+      width: min(520px, 38vw);
+    }
+
+    .summary-chip {
+      display: grid;
+      gap: 3px;
+      min-height: 58px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.9);
+      box-shadow: 0 10px 24px rgba(20, 32, 38, 0.08);
+      padding: 9px 10px;
+    }
+
+    .summary-chip strong {
+      color: var(--ink);
+      font-size: 12px;
+      line-height: 1.18;
+    }
+
+    .summary-chip span {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.22;
+    }
+
+    .workspace {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(330px, 420px);
+      gap: 14px;
+      align-items: stretch;
+    }
+
+    .roadmap,
+    .inspector {
+      min-height: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.9);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(16px);
+    }
+
+    .roadmap {
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr);
+      overflow: hidden;
+    }
+
+    .stage-tabs {
+      display: flex;
+      gap: 7px;
+      padding: 10px;
+      border-bottom: 1px solid var(--line);
+      overflow-x: auto;
+    }
+
+    .stage-tabs button,
+    .icon-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      min-height: 38px;
+      border: 1px solid rgba(20, 32, 38, 0.16);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--ink);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .stage-tabs button {
+      padding: 0 12px;
+      font-size: 12px;
+      font-weight: 780;
+    }
+
+    .stage-tabs button[aria-pressed="true"],
+    .icon-button.primary {
+      border-color: transparent;
+      background: var(--ink);
+      color: #fff;
+    }
+
+    .stage-tabs svg,
+    .icon-button svg,
+    .step-card svg {
+      width: 17px;
+      height: 17px;
+      stroke-width: 2.35;
+    }
+
+    .handoff {
+      display: grid;
+      grid-template-columns: repeat(8, minmax(96px, 1fr));
+      gap: 14px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(246, 248, 244, 0.74);
+      overflow-x: auto;
+    }
+
+    .handoff-item {
+      position: relative;
+      display: grid;
+      gap: 2px;
+      min-width: 96px;
+      color: var(--soft-ink);
+      font-size: 11px;
+      line-height: 1.2;
+    }
+
+    .handoff-item::before {
+      content: "";
+      width: 100%;
+      height: 4px;
+      border-radius: 999px;
+      background: var(--tone);
+    }
+
+    .handoff-item:not(:last-child)::after {
+      content: "→";
+      position: absolute;
+      top: 12px;
+      right: -12px;
+      color: rgba(20, 32, 38, 0.38);
+      font-weight: 850;
+    }
+
+    .handoff-item strong {
+      color: var(--ink);
+      font-size: 12px;
+      line-height: 1.2;
+    }
+
+    .board {
+      min-height: 0;
+      overflow: auto;
+      padding: 12px;
+    }
+
+    .step-list {
+      display: grid;
+      gap: 10px;
+      max-width: 1180px;
+      margin: 0 auto;
+    }
+
+    .step-card {
+      position: relative;
+      display: grid;
+      grid-template-columns: 150px minmax(0, 1fr);
+      gap: 12px;
+      border: 1px solid rgba(20, 32, 38, 0.13);
+      border-radius: 8px;
+      background: var(--surface);
+      padding: 10px;
+      color: var(--soft-ink);
+      text-align: left;
+      cursor: pointer;
+      box-shadow: 0 8px 22px rgba(20, 32, 38, 0.06);
+      transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+    }
+
+    .step-card:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 12px 28px rgba(20, 32, 38, 0.09);
+    }
+
+    .step-card[aria-current="step"] {
+      border-color: color-mix(in srgb, var(--tone) 58%, rgba(20, 32, 38, 0.12));
+      background: color-mix(in srgb, var(--tone) 7%, #ffffff);
+      box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--tone) 23%, white), 0 15px 32px rgba(20, 32, 38, 0.11);
+    }
+
+    .step-id {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .step-topline {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 auto;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--tone);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 860;
+    }
+
+    .step-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 auto;
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--tone) 12%, #ffffff);
+      color: var(--tone);
+    }
+
+    .step-card h2 {
+      margin: 0;
+      color: var(--ink);
+      font-size: 18px;
+      line-height: 1.12;
+    }
+
+    .step-card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.42;
+    }
+
+    .pipeline {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .pipe-cell {
+      display: grid;
+      gap: 4px;
+      min-height: 84px;
+      border: 1px solid rgba(20, 32, 38, 0.11);
+      border-radius: 8px;
+      background: var(--surface-warm);
+      padding: 8px;
+    }
+
+    .pipe-cell strong {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--ink);
+      font-size: 11px;
+      line-height: 1.2;
+      text-transform: uppercase;
+    }
+
+    .pipe-cell strong::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--tone);
+    }
+
+    .pipe-cell span {
+      color: var(--soft-ink);
+      font-size: 12px;
+      line-height: 1.38;
+      overflow-wrap: anywhere;
+    }
+
+    .inspector {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .inspector-head {
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(255, 255, 255, 0.82));
+      padding: 16px;
+    }
+
+    .meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .number {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: var(--active);
+      color: #fff;
+      font-weight: 860;
+      box-shadow: 0 10px 24px rgba(20, 32, 38, 0.18);
+    }
+
+    .kind {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 820;
+      text-transform: uppercase;
+    }
+
+    .inspector h2 {
+      margin: 0;
+      color: var(--ink);
+      font-size: 27px;
+      line-height: 1.1;
+    }
+
+    .summary {
+      margin: 10px 0 0;
+      color: var(--soft-ink);
+      font-size: 14px;
+      line-height: 1.58;
+    }
+
+    .detail {
+      min-height: 0;
+      overflow: auto;
+      padding: 13px 14px;
+    }
+
+    .callout {
+      border-left: 5px solid var(--active);
+      margin: 0 0 12px;
+      border-radius: 0 8px 8px 0;
+      background: rgba(246, 248, 244, 0.86);
+      padding: 10px;
+      color: var(--soft-ink);
+      font-size: 13px;
+      line-height: 1.54;
+    }
+
+    .callout strong,
+    .section-title {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 850;
+    }
+
+    .section-title {
+      margin: 13px 0 7px;
+    }
+
+    .list,
+    .roles {
+      display: grid;
+      gap: 7px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .list li,
+    .role {
+      position: relative;
+      color: #2d3b43;
+      font-size: 13px;
+      line-height: 1.42;
+    }
+
+    .list li {
+      padding-left: 17px;
+    }
+
+    .list li::before {
+      content: "";
+      position: absolute;
+      top: 0.6em;
+      left: 0;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--active);
+    }
+
+    .role {
+      display: grid;
+      grid-template-columns: 86px minmax(0, 1fr);
+      gap: 8px;
+      border: 1px solid rgba(20, 32, 38, 0.12);
+      border-radius: 8px;
+      background: rgba(246, 248, 244, 0.82);
+      padding: 8px;
+    }
+
+    .role strong {
+      color: var(--ink);
+      font-size: 12px;
+    }
+
+    .artifact-grid {
+      display: grid;
+      gap: 6px;
+    }
+
+    .artifact {
+      display: grid;
+      grid-template-columns: 10px minmax(0, 1fr);
+      gap: 8px;
+      align-items: center;
+      border: 1px solid rgba(20, 32, 38, 0.12);
+      border-radius: 8px;
+      background: rgba(246, 248, 244, 0.82);
+      padding: 7px 8px;
+      color: #2d3b43;
+      font-size: 12px;
+      line-height: 1.32;
+    }
+
+    .artifact::before {
+      content: "";
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--active);
+    }
+
+    .artifact code {
+      overflow-wrap: anywhere;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: 42px minmax(0, 1fr) 42px;
+      gap: 8px;
+      align-items: center;
+      border-top: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.82);
+      padding: 10px;
+    }
+
+    .progress-wrap {
+      display: grid;
+      gap: 7px;
+      min-width: 0;
+    }
+
+    .progress-text {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.25;
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .progress-track {
+      height: 5px;
+      border-radius: 999px;
+      background: rgba(20, 32, 38, 0.13);
+      overflow: hidden;
+    }
+
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: var(--active);
+      transition: width 180ms ease;
+    }
+
+    .hidden-by-filter {
+      display: none;
+    }
+
+    @media (max-width: 1180px) {
+      .topbar,
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+
+      .summary-strip {
+        width: 100%;
+      }
+
+      .inspector {
+        min-height: 560px;
+      }
+    }
+
+    @media (max-width: 840px) {
+      .app {
+        padding: 12px;
+      }
+
+      .summary-strip {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .step-card {
+        grid-template-columns: 1fr;
+      }
+
+      .pipeline {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 520px) {
+      .app {
+        padding: 10px;
+      }
+
+      h1 {
+        font-size: 30px;
+      }
+
+      .summary-strip,
+      .pipeline {
+        grid-template-columns: 1fr;
+      }
+
+      .stage-tabs {
+        flex-wrap: wrap;
+      }
+
+      .stage-tabs button {
+        flex: 1 1 calc(50% - 7px);
+      }
+
+      .role {
+        grid-template-columns: 1fr;
+      }
+
+      .inspector h2 {
+        font-size: 24px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="flowCanvas" aria-hidden="true"></canvas>
+
+  <main class="app">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Process Roadmap</p>
+        <h1><span>harness-init は何を、</span><span>どの順番で処理するか</span></h1>
+        <p class="lead">
+          Issueを受け取ってからPRを作れる状態になるまで、harness-initは「調べる」「計画する」「危なさで分ける」「範囲を囲う」「証拠にする」「改札で止める」を順番に通します。中央の工程表は、各段階の入力、処理、生成物、次に渡すものを並べた機能ロードマップです。
+        </p>
+      </div>
+      <div class="summary-strip" aria-label="harness-initの要点">
+        <div class="summary-chip"><strong>Issue → task-id</strong><span>依頼を追跡単位へ変える</span></div>
+        <div class="summary-chip"><strong>Plan → S/M/L</strong><span>作る前に危なさを決める</span></div>
+        <div class="summary-chip"><strong>Build → Evidence</strong><span>実装結果を証拠へ変換する</span></div>
+        <div class="summary-chip"><strong>Gate → PR</strong><span>ready/blockを機械的に判定する</span></div>
+      </div>
+    </header>
+
+    <section class="workspace">
+      <section class="roadmap" aria-label="harness-init処理ロードマップ">
+        <nav class="stage-tabs" aria-label="表示範囲">
+          <button type="button" data-view-filter="all" aria-pressed="true"><i data-lucide="map"></i>全工程</button>
+          <button type="button" data-view-filter="planning" aria-pressed="false"><i data-lucide="list-checks"></i>計画</button>
+          <button type="button" data-view-filter="build" aria-pressed="false"><i data-lucide="wrench"></i>実装</button>
+          <button type="button" data-view-filter="proof" aria-pressed="false"><i data-lucide="clipboard-check"></i>証拠</button>
+          <button type="button" data-view-filter="gate" aria-pressed="false"><i data-lucide="shield-check"></i>改札</button>
+        </nav>
+
+        <div class="handoff" id="handoff" aria-label="成果物の受け渡し"></div>
+
+        <div class="board">
+          <div class="step-list" id="stepList"></div>
+        </div>
+      </section>
+
+      <aside class="inspector" aria-labelledby="stepTitle">
+        <div class="inspector-head">
+          <div class="meta">
+            <span class="number" id="stepNumber">1</span>
+            <span class="kind" id="stepKind">入口</span>
+          </div>
+          <h2 id="stepTitle">依頼をtask-idにする</h2>
+          <p class="summary" id="stepSummary">曖昧なお願いを、後で追える作業単位に変える。</p>
+        </div>
+        <div class="detail" id="detail"></div>
+        <div class="controls">
+          <button type="button" class="icon-button" id="prevStep" aria-label="前の工程" title="前の工程"><i data-lucide="arrow-left"></i></button>
+          <div class="progress-wrap">
+            <div class="progress-text" id="progressText">1 / 10  依頼</div>
+            <div class="progress-track"><div class="progress-bar" id="progressBar"></div></div>
+          </div>
+          <button type="button" class="icon-button primary" id="nextStep" aria-label="次の工程" title="次の工程"><i data-lucide="arrow-right"></i></button>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script>
+    const palette = {
+      request: "#2d6cdf",
+      research: "#168c96",
+      kpi: "#6b7f22",
+      plan: "#315f9f",
+      sml: "#946b1d",
+      checkpoint: "#6658d3",
+      build: "#21936d",
+      proof: "#bd7618",
+      consultation: "#7c5cc9",
+      approval: "#8b6f18",
+      current: "#1b7f64",
+      next: "#4f6fb8",
+      gate: "#c84848"
+    };
+
+    const steps = [
+      {
+        id: "request",
+        filter: "planning",
+        label: "依頼",
+        kind: "入口",
+        icon: "inbox",
+        color: palette.request,
+        title: "依頼をtask-idにする",
+        summary: "曖昧なお願いを、後で追える作業単位に変える。",
+        input: "GitHub Issue、会議メモ、口頭の要望",
+        process: "まだ実装せず、目的・制約・成功条件の種を分ける",
+        output: "HARNESS_TASK_ID、request note",
+        handoff: "調査すべき問い",
+        plain: "harness-initでは、依頼はまだ仕様ではありません。最初に作業単位へ名前を付け、あとで計画、証拠、approval記録、PR gateが同じtask-idを参照できるようにします。",
+        method: "Issue本文、既存docs、差分対象を読み、目的、制約、成功条件、未確認点に分解します。実装に入る前にtask-idを払い出し、以降のplan、evidence、gateが同じIDへ書き込める状態にします。",
+        stop: "目的やNG条件が分からないまま実装へ進むと、作業後に「そこではない」が起きます。",
+        roles: {
+          source: "Issueや既存docsから目的、優先順位、OK/NG条件を読む",
+          agent: "実装せずに読み、曖昧さと確認事項を分ける",
+          gate: "task-idで後続成果物を束ねる"
+        },
+        tools: ["GitHub Issue / task brief", "HARNESS_TASK_ID", "AGENTS.md / CLAUDE.md"],
+        artifacts: ["GitHub Issue", ".pipeline/plans/<task>/request.md", "HARNESS_TASK_ID"]
+      },
+      {
+        id: "research",
+        filter: "planning",
+        label: "調査",
+        kind: "Context + Research Scout",
+        icon: "search-check",
+        color: palette.research,
+        title: "作る前に現在地を調べる",
+        summary: "repo文脈、変わり得る前提、問いのズレを先に確認する。",
+        input: "task-id、元の依頼、再定義した問い、判断基準、repo状態",
+        process: "GitNexusまたはRead/Grepでrepo文脈を作り、仮説を置いて反証から確認し、一次情報と候補を比較する",
+        output: "context-pack.md、research-brief.md、option-matrix.md",
+        handoff: "repo文脈、検証済み仮説、採用方針",
+        plain: "調査は二層です。Context Scoutがrepo内の文脈を集め、Research Scoutが依頼を必要なら問い直し、仮説を先に置いて、反証や例外から確認します。そのうえでAPI、AI tool、ライブラリ、UX、セキュリティなど変化する外部前提を見ます。",
+        method: ".gitnexus/ があればContext ScoutはGitNexusを先に使います。なければRead/Grep/Globでcontext-pack.mdを作ります。その上でResearch Scoutがクリティカル・クエスチョン、事前仮説、反証確認、信頼度、覆る条件をresearch briefへ残し、公式情報や候補案を照合してoption matrixへ採用理由と捨てた理由を残します。",
+        stop: "古い常識で計画を作ると、あとから設計全体を戻すことになります。",
+        roles: {
+          source: "Issue、AGENTS.md、既存コード、.gitnexus/、公式情報、反証材料を入力にする",
+          agent: "GitNexusまたはRead/Grepでrepo文脈を集め、問いを再定義し、仮説と反証から外部前提と候補案を確認する",
+          gate: "調査結果がplanに反映されるかを見る"
+        },
+        tools: ["GitNexus", "Read / Grep / Glob fallback", "browser/source check", "research-brief-template.md", "option-matrix-template.md"],
+        artifacts: [".gitnexus/ または Read/Grep/Glob", ".pipeline/plans/<task>/context-pack.md", ".pipeline/plans/<task>/research-brief.md", ".pipeline/plans/<task>/option-matrix.md"]
+      },
+      {
+        id: "kpi",
+        filter: "planning",
+        label: "KPI逆算",
+        kind: "KPI Backcast Roadmap",
+        icon: "git-branch",
+        color: palette.kpi,
+        title: "未来KPIをcheckpointへ変換する",
+        summary: "カテゴリ別KPI、成果物、依存関係、スケジュールを固定する。",
+        input: "現在地、未来KPI、カテゴリ、成果物提出先、検証方法",
+        process: "未来KPIを現実性チェックし、quality condition、成果物別タスク、git graph風ロードマップへ分解する",
+        output: "kpi-backcast-roadmap.md、checkpoint候補、schedule",
+        handoff: "quality conditionsと依存関係",
+        plain: "KPI Backcastは、理想を盛るためではなく、何をクリアすれば前に進めるかをぶらさないための工程です。未来のKPIをカテゴリ別に置き、現在地、測定方法、証拠、提出先を付けて、checkpointのquality conditionsへ変換します。",
+        method: "docs/kpi-backcast-roadmap-template.mdを使い、Future KPI By Category、KPI Reality Check、Roadmap Graph、Checkpoint Conversion、Task Breakdown、Scheduleを作ります。スケジュールは証拠ではなく、依存関係と順序を固定する計画入力として扱います。",
+        stop: "KPIが曖昧なまま実装すると、checkpointが途中で動き、作業がゴールへ一直線に進まなくなります。",
+        roles: {
+          source: "現在のrepo状態、ユーザーの未来像、測定可能な証拠、提出先を入力にする",
+          agent: "カテゴリ別KPIを現実性チェックし、quality conditionと成果物タスクへ変換する",
+          gate: "KPIが検証契約とcheckpoint条件に落ちているかを見る"
+        },
+        tools: ["kpi-backcast-roadmap-template.md", "backcast-contracts.md", "verification-contract-template.md"],
+        artifacts: [".pipeline/plans/<task>/kpi-backcast-roadmap.md", ".pipeline/plans/<task>/checkpoint-contract.json", ".pipeline/plans/<task>/verification-contract.md"]
+      },
+      {
+        id: "plan",
+        filter: "planning",
+        label: "計画",
+        kind: "Plan Relay",
+        icon: "list-checks",
+        color: palette.plan,
+        title: "作戦と検証方法を固定する",
+        summary: "何を作るか、何を作らないか、どう確認するかを紙にする。",
+        input: "request note、context pack、research brief、option matrix、kpi roadmap",
+        process: "Context Scout → Planner → Critic → Refiner → Plan Gate",
+        output: "plan.md、verification-contract.md",
+        handoff: "検証契約",
+        plain: "Plan Relayは、AIの頭の中にある作戦を読める成果物へ変える工程です。ここで範囲、non-goal、確認方法を決めます。",
+        method: "調査結果、KPI roadmap、repo規約を材料に、Context Scoutが現状を集め、Plannerが案を作り、Criticが抜けを指摘し、Refinerが修正します。最後にPlan Gateが、目的、範囲、non-goal、検証方法が揃っているかを見ます。",
+        stop: "計画が曖昧だと、実装後に証拠の意味が揺れます。",
+        roles: {
+          source: "依頼、調査結果、repo規約をplanの制約として渡す",
+          agent: "planとverification contractを書く",
+          gate: "Plan Gateが不足や矛盾を止める"
+        },
+        tools: ["Context Scout", "Planner", "Critic", "Refiner", "Plan Gate", "plan-template.md", "verification-contract-template.md"],
+        artifacts: [".pipeline/plans/<task>/plan.md", ".pipeline/plans/<task>/verification-contract.md", "docs/plan-template.md"]
+      },
+      {
+        id: "sml",
+        filter: "planning",
+        label: "S/M/L判定",
+        kind: "Risk Route",
+        icon: "ruler",
+        color: palette.sml,
+        title: "残る不確実性でルートを分ける",
+        summary: "作業量ではなく、必要な守りの厚さを決める。",
+        input: "plan.md、verification-contract.md、未解決リスク",
+        process: "S/M/Lを判定し、必須gateとレビュー深度を決める",
+        output: "sml-decision.json、required-gates.json",
+        handoff: "必要な守り",
+        plain: "S/M/Lは行数や気分ではなく、計画を書いたあとに残る不確実性で決めます。M以上では証拠パックが厚くなり、Lでは外部相談やBug Tribunalが必須になります。",
+        method: "plan.mdとverification-contract.mdを読み、影響範囲、外部依存、失敗時の被害、未検証の仮説を数えます。残る不確実性が小さければS、複数面にまたがればM、実装者視点だけでは危ないならLとしてrequired-gatesへ落とします。",
+        stop: "軽い修正のふりをした危険な変更が、証拠や外部視点なしでPRへ流れます。",
+        roles: {
+          source: "planとverification contractからリスク条件を供給する",
+          agent: "残る不確実性とrequired gatesを記録する",
+          gate: "pr-readyが必要gateの未実施を止める"
+        },
+        tools: ["scripts/harness/sml-decision.sh", "required-gates.json", "S/M/L routing rules"],
+        artifacts: [".pipeline/plans/<task>/sml-decision.json", ".pipeline/gates/<task>/required-gates.json", "scripts/harness/sml-decision.sh"]
+      },
+      {
+        id: "checkpoint",
+        filter: "build",
+        label: "チェックポイント",
+        kind: "Backcast",
+        icon: "flag",
+        color: palette.checkpoint,
+        title: "条件ごとのOKラインを置く",
+        summary: "複数条件を持つ実装で、次へ進むための最低品質を保証する。",
+        input: "issue goal、必要条件、current、quality_conditions、verification contract、S/M/L判定",
+        process: "条件ごとのtarget_state、品質ライン、検証条件を契約化する",
+        output: "goal-contract、checkpoint-contract",
+        handoff: "次へ進むための品質保証",
+        plain: "checkpointは中間ゴールではなく、『この条件はここまで満たせば次へ進んでよい』という最低限の品質保証です。1つの単純な機能だけなら不要なこともありますが、実装に必要な条件が複数ある場合は、条件ごとに状態保証を置きます。",
+        method: "issue内に必要条件が5つある場合、issue goalは5条件すべてが揃ってユーザー価値になる状態です。checkpointは各条件に対して、次へ進める最小のtarget_stateと検証方法を決めます。例えば、主要API契約が固定された、データ往復が証明された、認可境界が破れていない、などです。ここで過剰な完成形を設計せず、『この品質をクリアしたら次へ行く』というガイドにして、ループ実装が明後日の方向へ育つのを止めます。",
+        stop: "checkpointがないと、条件の未達や前提崩れに気づかないまま作業が膨らみ、過剰設計や範囲外実装へ流れやすくなります。",
+        roles: {
+          source: "issue goal、必要条件、risk、quality conditions、non-goalを入力にする",
+          agent: "条件ごとのtarget_state、AC、allowed_paths、forbidden_pathsへ翻訳する",
+          gate: "品質ライン未達、範囲外変更、契約不足を検出する"
+        },
+        tools: ["scripts/harness/backcast-checkpoint.sh", "checkpoint-contract.schema.json", "quality_conditions", "acceptance_criteria compatibility", "state-machine.schema.json", "allowed_paths / forbidden_paths"],
+        artifacts: [".pipeline/plans/<task>/goal-contract.json", ".pipeline/plans/<task>/checkpoint-contract.json", "scripts/harness/backcast-checkpoint.sh"]
+      },
+      {
+        id: "build",
+        filter: "build",
+        label: "実装",
+        kind: "Implementation",
+        icon: "wrench",
+        color: palette.build,
+        title: "決めた範囲だけを実装する",
+        summary: "worktreeで隔離し、検証コマンドまで一続きにする。",
+        input: "checkpoint contract、allowed_paths、required gates",
+        process: "worktreeで実装し、build runnerで検証を走らせる",
+        output: "差分、test logs、session events",
+        handoff: "検証結果",
+        plain: "作業は専用worktreeに隔離します。build.shやcodex-build.shは、実装、検証、manifest生成、pack化を一つの流れに寄せます。",
+        method: "checkpoint contractのallowed_pathsだけを対象にworktreeで変更します。実装後はverification contractで指定されたコマンドを走らせ、session ledgerへ実行過程を残しながらbuild resultを作ります。",
+        stop: "実装と検証が分かれると、AIが実行していない確認を完了扱いにしやすくなります。",
+        roles: {
+          source: "checkpoint contractで作業範囲と禁止範囲を固定する",
+          agent: "差分を小さく保ち、指定された検証を実行する",
+          gate: "session ledgerとbuild resultを残す"
+        },
+        tools: ["scripts/harness/worktree.sh", "scripts/harness/build.sh", "scripts/harness/codex-build.sh", "Codex CLI / Codex App runtime profile", "git worktree"],
+        artifacts: ["scripts/harness/worktree.sh", "scripts/harness/build.sh", "scripts/harness/codex-build.sh", ".pipeline/sessions/<task>/events.jsonl"]
+      },
+      {
+        id: "proof",
+        filter: "proof",
+        label: "証拠化",
+        kind: "Evidence",
+        icon: "clipboard-check",
+        color: palette.proof,
+        title: "できた、を機械が読める証拠へ変える",
+        summary: "何を、どのコマンドで、どの結果として確認したかを残す。",
+        input: "git diff、test logs、build result、base/head sha",
+        process: "manifestを生成し、missing_evidenceを潰す",
+        output: "evidence-manifest.json、evidence-pack.md",
+        handoff: "確認レシート",
+        plain: "Evidence Manifestは、AI作業のレシートです。差分、実行コマンド、exit code、ログ、未確認事項を、後続gateが読める形にします。",
+        method: "base_shaとhead_shaで対象差分を固定し、実行した検証コマンド、exit code、ログ、未実施項目をmanifestへ写します。missing_evidenceが残る場合は、PR改札で止められる形にします。",
+        stop: "文章だけの完了報告では、実行していないテストも通ったように書けます。",
+        roles: {
+          source: "diff、test log、base/head shaを証拠材料として渡す",
+          agent: "manifestとevidence packを生成する",
+          gate: "missing_evidenceが残っていないか見る"
+        },
+        tools: ["scripts/harness/backcast-manifest.sh", "scripts/harness/backcast-evidence-pack.sh", "evidence-manifest.schema.json", "git diff / test logs"],
+        artifacts: [".pipeline/evidence/<task>/evidence-manifest.json", ".pipeline/evidence/<task>/evidence-pack.md", "scripts/harness/backcast-manifest.sh"]
+      },
+      {
+        id: "consultation",
+        filter: "proof",
+        label: "外部相談",
+        kind: "Review Fortress",
+        icon: "messages-square",
+        color: palette.consultation,
+        title: "必要なら別視点で崩す",
+        summary: "Lや不安が残る変更は、実装者だけで判断しない。",
+        input: "plan、diff、evidence pack、未解決リスク",
+        process: "GPT-Pro Web、Sidechain、Bug Tribunalでレビューする",
+        output: "consultation-summary、synthesis、tribunal report",
+        handoff: "採用/却下/要検証",
+        plain: "外部相談は、AI作業を強くするための第二視点です。相談結果は、採用、却下、要検証に分けて証拠へ入れます。",
+        method: "plan、diff、evidence pack、未解決リスクを相談入力にまとめます。返ってきた指摘は、採用、却下、要検証に分類し、未検証の主張はgateが読める証跡として残します。",
+        stop: "相談しただけで記録しないと、PR前に何を信じてよいか分からなくなります。",
+        roles: {
+          source: "plan、diff、evidence pack、未解決リスクを相談入力にする",
+          agent: "回答を分類し、未検証の主張を残す",
+          gate: "L workで相談証跡がない場合に止める"
+        },
+        tools: ["GPT-Pro Web consultation", "Computer Use / existing browser session", "Bug Tribunal", "Sidechain Review", "external-consultation.schema.json"],
+        artifacts: [".pipeline/evidence/<task>/external-consultation/consultation-summary.json", ".pipeline/evidence/<task>/sidechain/synthesis.json", ".pipeline/evidence/<task>/tribunal-report.json"]
+      },
+      {
+        id: "approval",
+        filter: "gate",
+        label: "承認",
+        kind: "Decision",
+        icon: "badge-check",
+        color: palette.approval,
+        title: "証拠をapproval記録に固定する",
+        summary: "Doneは、AIの自己申告ではなく、契約と証拠に結び付いた記録で決まる。",
+        input: "checkpoint contract、evidence pack、未解決事項",
+        process: "hash-bound approvalとoutcome judgmentを生成する",
+        output: "approval-decision.json、outcome-card.json",
+        handoff: "判定記録",
+        plain: "approvalは、対象sha、checkpoint、証拠、結果を束ねる記録です。PR改札はこの記録を読んで、自己申告ではなく証跡で判定します。",
+        method: "checkpoint contract、evidence manifest、outcome resultを読み、どのshaに対してどの証拠でpass/blockしたかをapproval-decisionへ固定します。overrideがある場合も理由を構造化して残します。",
+        stop: "approval記録がないと、あとでどの差分とどの証拠に対してready判定したのか追えません。",
+        roles: {
+          source: "checkpoint、evidence manifest、outcome resultを入力にする",
+          agent: "対象shaと判定理由を構造化して残す",
+          gate: "override記録には理由を要求する"
+        },
+        tools: ["scripts/harness/outcome-judge.sh", "scripts/harness/backcast-approval.sh", "approval-decision.schema.json", "outcome-card.schema.json"],
+        artifacts: [".pipeline/approvals/<task>/approval-decision.json", ".pipeline/outcomes/<task>/outcome-card.json", "scripts/harness/outcome-judge.sh"]
+      },
+      {
+        id: "current",
+        filter: "gate",
+        label: "Current更新",
+        kind: "State",
+        icon: "refresh-cw",
+        color: palette.current,
+        title: "承認済みcheckpointを現在地にする",
+        summary: "approval後の状態を、次の計画が読めるCurrentとして固定する。",
+        input: "checkpoint contract、evidence manifest、approval decision",
+        process: "approved / manual_overrideだけを.pipeline/currentへ昇格する",
+        output: "current/<goal-id>.json、current/latest.json",
+        handoff: "更新された現在地",
+        plain: "承認で終わらせず、合意済みのcheckpointを新しいCurrentにします。これで次のcheckpointは、古い前提ではなく承認済みの状態から切れます。",
+        method: "backcast-current.sh updateがcheckpoint、manifest、approvalを照合し、approvedまたはmanual_overrideだけをCurrentへ反映します。head sha、branch、満たしたquality condition、参照した証跡も一緒に残します。",
+        stop: "Current更新がないと、次のcheckpointがどの合意済み状態から始まるのか曖昧になります。",
+        roles: {
+          source: "承認済みcheckpointと証跡を入力にする",
+          agent: "Current recordを生成し、source artifactを紐づける",
+          gate: "未承認checkpointの昇格を止める"
+        },
+        tools: ["scripts/harness/backcast-current.sh", "approval-decision.json", "evidence-manifest.json"],
+        artifacts: [".pipeline/current/<goal-id>.json", ".pipeline/current/latest.json", ".pipeline/sessions/<task>/current-events.jsonl"]
+      },
+      {
+        id: "next",
+        filter: "planning",
+        label: "次Checkpoint",
+        kind: "Spiral",
+        icon: "git-branch-plus",
+        color: palette.next,
+        title: "次のOKラインをdraftする",
+        summary: "更新されたCurrentから、次に検証するcheckpointを切る。",
+        input: "current/latest.json、前回goal contract、次のtarget/condition",
+        process: "Currentを起点にbackcast-checkpointで次checkpoint draftを作る",
+        output: "次taskのgoal/current/checkpoint artifact",
+        handoff: "次の実装境界",
+        plain: "Full-loop MVPはapprovalで止まりません。Currentを更新したあと、次のcheckpoint draftを作って、連続したスパイラルにします。",
+        method: "backcast-next-checkpoint.shがlatest Currentと前回Goalを読み、次taskのgoal-contract、current-state、checkpoint-contractを生成します。Current側にも次checkpointのpathを記録します。",
+        stop: "次checkpoint draftがないと、複数checkpointの実案件運用に進めません。",
+        roles: {
+          source: "更新済みCurrentと次に確認したい品質条件を渡す",
+          agent: "次taskのcheckpoint contractへ翻訳する",
+          gate: "次checkpoint pathをCurrentに記録する"
+        },
+        tools: ["scripts/harness/backcast-next-checkpoint.sh", "scripts/harness/backcast-checkpoint.sh", "current/latest.json"],
+        artifacts: [".pipeline/plans/<next-task>/goal-contract.json", ".pipeline/plans/<next-task>/current-state.md", ".pipeline/plans/<next-task>/checkpoint-contract.json"]
+      },
+      {
+        id: "gate",
+        filter: "gate",
+        label: "PR改札",
+        kind: "Gate",
+        icon: "shield-check",
+        color: palette.gate,
+        title: "PRへ出してよいかを集約判定する",
+        summary: "Residency、Preflight、HD、Doc、Adapter、Backcastをまとめてready/blockにする。",
+        input: "plan、required gates、evidence、approval、outcome",
+        process: "pr-ready-gateが全ゲートを集約し、gh pr create前に止める",
+        output: "pr-ready.json、ready / block",
+        handoff: "PR作成可否",
+        plain: "最後は自己申告ではなく改札です。証拠不足、範囲外変更、doc未更新、adapter契約違反、HD再発などを集めて、PRへ出せるかを決めます。",
+        method: "plan、required gates、evidence、approval、outcomeを読み、Residency、Preflight、HD、Doc、Adapter、Backcastの結果を集約します。どれかがblockなら理由をpr-ready.jsonへ残し、readyの時だけPR作成へ進めます。",
+        stop: "ここがないと、レビュー側が証拠不足やスコープ逸脱を拾う役になってしまいます。",
+        roles: {
+          source: "plan、required gates、evidence、approval、outcomeを集約する",
+          agent: "全gateを実行し、結果をJSONへ残す",
+          gate: "gh pr create前にready/blockを確定する"
+        },
+        tools: [".claude/hooks/pr-ready-gate.sh", ".claude/hooks/backcast-validate.sh", "harness-doctor", "residency / preflight / HD / doc / adapter gates", "gh pr create interceptor"],
+        artifacts: [".claude/hooks/pr-ready-gate.sh", ".claude/hooks/backcast-validate.sh", ".pipeline/gates/<task>/pr-ready.json"]
+      }
+    ];
+
+    const handoffs = [
+      ["Issue", "依頼", palette.request],
+      ["task-id", "追跡単位", palette.request],
+      ["KPI", "未来のOK", palette.kpi],
+      ["plan", "範囲と検証", palette.plan],
+      ["S/M/L", "守りの厚さ", palette.sml],
+      ["checkpoint", "品質保証", palette.checkpoint],
+      ["evidence", "確認レシート", palette.proof],
+      ["approval", "判定記録", palette.approval],
+      ["current", "更新済み現在地", palette.current],
+      ["next CP", "次の境界", palette.next],
+      ["PR ready", "改札結果", palette.gate]
+    ];
+
+    const root = document.documentElement;
+    const stepList = document.getElementById("stepList");
+    const handoff = document.getElementById("handoff");
+    const stepNumber = document.getElementById("stepNumber");
+    const stepKind = document.getElementById("stepKind");
+    const stepTitle = document.getElementById("stepTitle");
+    const stepSummary = document.getElementById("stepSummary");
+    const detail = document.getElementById("detail");
+    const progressText = document.getElementById("progressText");
+    const progressBar = document.getElementById("progressBar");
+    let activeIndex = 0;
+    let currentFilter = "all";
+
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function renderHandoff() {
+      handoff.innerHTML = handoffs.map(([label, caption, color]) => `
+        <div class="handoff-item" style="--tone: ${color}">
+          <strong>${label}</strong>
+          <span>${caption}</span>
+        </div>
+      `).join("");
+    }
+
+    function renderSteps() {
+      stepList.innerHTML = steps.map((step, index) => `
+        <button class="step-card" type="button" data-id="${step.id}" data-stage="${step.filter}" aria-current="${index === activeIndex ? "step" : "false"}" style="--tone: ${step.color}">
+          <span class="step-id">
+            <span class="step-topline">
+              <span class="num">${index + 1}</span>
+              <span class="step-icon"><i data-lucide="${step.icon}"></i></span>
+            </span>
+            <span>
+              <h2>${step.label}</h2>
+              <p>${step.summary}</p>
+            </span>
+          </span>
+          <span class="pipeline" aria-label="${step.label}の処理">
+            <span class="pipe-cell"><strong>入力</strong><span>${escapeHtml(step.input)}</span></span>
+            <span class="pipe-cell"><strong>処理</strong><span>${escapeHtml(step.process)}</span></span>
+            <span class="pipe-cell"><strong>生成物</strong><span>${escapeHtml(step.output)}</span></span>
+            <span class="pipe-cell"><strong>次へ</strong><span>${escapeHtml(step.handoff)}</span></span>
+          </span>
+        </button>
+      `).join("");
+
+      stepList.querySelectorAll("[data-id]").forEach((button) => {
+        button.addEventListener("click", () => setActive(button.dataset.id));
+      });
+      applyFilter();
+      if (window.lucide) window.lucide.createIcons();
+    }
+
+    function renderDetail(step) {
+      detail.innerHTML = `
+        <p class="callout"><strong>この工程でやること</strong>${escapeHtml(step.process)}。${escapeHtml(step.plain)}</p>
+        <p class="callout"><strong>どう処理するか</strong>${escapeHtml(step.method)}</p>
+        <p class="callout"><strong>ここを飛ばすと起きること</strong>${escapeHtml(step.stop)}</p>
+        <p class="section-title">自動処理の分担</p>
+        <div class="roles">
+          <div class="role"><strong>入力/契約</strong><span>${escapeHtml(step.roles.source)}</span></div>
+          <div class="role"><strong>AI/Agent</strong><span>${escapeHtml(step.roles.agent)}</span></div>
+          <div class="role"><strong>Gate</strong><span>${escapeHtml(step.roles.gate)}</span></div>
+        </div>
+        <p class="section-title">使用機能・ライブラリ</p>
+        <div class="artifact-grid">
+          ${step.tools.map((item) => `<div class="artifact"><code>${escapeHtml(item)}</code></div>`).join("")}
+        </div>
+        <p class="section-title">残る証拠・触る場所</p>
+        <div class="artifact-grid">
+          ${step.artifacts.map((item) => `<div class="artifact"><code>${escapeHtml(item)}</code></div>`).join("")}
+        </div>
+        <p class="section-title">処理の受け渡し</p>
+        <ul class="list">
+          <li>受け取るもの: ${escapeHtml(step.input)}</li>
+          <li>この段階の処理: ${escapeHtml(step.process)}</li>
+          <li>次へ渡すもの: ${escapeHtml(step.handoff)}</li>
+        </ul>
+      `;
+    }
+
+    function setActive(id) {
+      const index = steps.findIndex((step) => step.id === id);
+      if (index < 0) return;
+      activeIndex = index;
+      const step = steps[index];
+      root.style.setProperty("--active", step.color);
+      stepNumber.textContent = String(index + 1);
+      stepKind.textContent = step.kind;
+      stepTitle.textContent = step.title;
+      stepSummary.textContent = step.summary;
+      progressText.textContent = `${index + 1} / ${steps.length}  ${step.label}`;
+      progressBar.style.width = `${((index + 1) / steps.length) * 100}%`;
+      document.querySelectorAll(".step-card").forEach((card) => {
+        card.setAttribute("aria-current", card.dataset.id === id ? "step" : "false");
+      });
+      renderDetail(step);
+      drawCanvas();
+    }
+
+    function applyFilter() {
+      document.querySelectorAll(".step-card").forEach((card) => {
+        const visible = currentFilter === "all" || card.dataset.stage === currentFilter;
+        card.classList.toggle("hidden-by-filter", !visible);
+      });
+    }
+
+    document.querySelectorAll("[data-view-filter]").forEach((button) => {
+      button.addEventListener("click", () => {
+        currentFilter = button.dataset.viewFilter;
+        document.querySelectorAll("[data-view-filter]").forEach((item) => {
+          item.setAttribute("aria-pressed", String(item.dataset.viewFilter === currentFilter));
+        });
+        applyFilter();
+        const first = currentFilter === "all" ? steps[0] : steps.find((step) => step.filter === currentFilter);
+        if (first) setActive(first.id);
+      });
+    });
+
+    document.getElementById("prevStep").addEventListener("click", () => {
+      setActive(steps[(activeIndex - 1 + steps.length) % steps.length].id);
+    });
+
+    document.getElementById("nextStep").addEventListener("click", () => {
+      setActive(steps[(activeIndex + 1) % steps.length].id);
+    });
+
+    const canvas = document.getElementById("flowCanvas");
+    const ctx = canvas.getContext("2d");
+
+    function drawCanvas() {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      canvas.width = Math.floor(width * dpr);
+      canvas.height = Math.floor(height * dpr);
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, width, height);
+
+      const y = Math.max(180, height * 0.34);
+      const start = Math.max(24, width * 0.06);
+      const end = Math.min(width - 24, width * 0.7);
+      const count = steps.length;
+
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "rgba(20, 32, 38, 0.12)";
+      ctx.beginPath();
+      ctx.moveTo(start, y);
+      for (let i = 1; i < count; i += 1) {
+        const x = start + ((end - start) * i) / (count - 1);
+        const prevX = start + ((end - start) * (i - 1)) / (count - 1);
+        const mid = (x + prevX) / 2;
+        ctx.bezierCurveTo(mid, y - 32, mid, y + 32, x, y);
+      }
+      ctx.stroke();
+
+      steps.forEach((step, index) => {
+        const x = start + ((end - start) * index) / (count - 1);
+        const selected = index === activeIndex;
+        ctx.beginPath();
+        ctx.fillStyle = selected ? step.color : "rgba(255, 255, 255, 0.92)";
+        ctx.strokeStyle = step.color;
+        ctx.lineWidth = selected ? 4 : 2;
+        ctx.arc(x, y, selected ? 10 : 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      });
+    }
+
+    window.addEventListener("resize", drawCanvas);
+    renderHandoff();
+    renderSteps();
+    setActive("request");
+    if (window.lucide) window.lucide.createIcons();
+  </script>
+</body>
+</html>

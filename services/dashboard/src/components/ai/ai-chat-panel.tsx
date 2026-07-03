@@ -101,14 +101,22 @@ export function AIChatPanel({ meeting, transcripts = [], trigger }: AIChatPanelP
 
   // Build context from transcripts
   const context = buildTranscriptContext(transcripts, meeting);
+  const meetingContextRef = useMemo(() => {
+    if (!meeting) return undefined;
+    return {
+      platform: meeting.platform,
+      nativeId: meeting.platform_specific_id,
+      meetingId: meeting.id,
+    };
+  }, [meeting]);
 
   // Memoize the transport - no settings needed anymore
   const transport = useMemo(() => {
     return new DefaultChatTransport({
       api: "/api/ai/chat",
-      body: { context },
+      body: { context, meeting: meetingContextRef },
     });
-  }, [context]);
+  }, [context, meetingContextRef]);
 
   const {
     messages,

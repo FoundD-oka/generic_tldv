@@ -62,13 +62,13 @@ export function ChatPanel({ platform, nativeId, isActive }: ChatPanelProps) {
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2">
           <MessageSquare className="h-4 w-4" />
-          Chat{chatMessages.length > 0 ? ` (${chatMessages.length})` : ""}
+          チャット{chatMessages.length > 0 ? ` (${chatMessages.length})` : ""}
         </CardTitle>
       </CardHeader>
       <CardContent>
         {chatMessages.length === 0 ? (
           <p className="text-sm text-muted-foreground italic text-center py-4">
-            No chat messages yet
+            まだチャットはありません
           </p>
         ) : (
           <div
@@ -82,7 +82,7 @@ export function ChatPanel({ platform, nativeId, isActive }: ChatPanelProps) {
         )}
         {isActive && (
           <p className="text-[10px] text-muted-foreground mt-2 text-center">
-            Live &mdash; messages appear in real time
+            ライブ - メッセージはリアルタイムで表示されます
           </p>
         )}
       </CardContent>

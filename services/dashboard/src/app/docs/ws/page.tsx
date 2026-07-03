@@ -79,8 +79,8 @@ export default function WebSocketPage() {
         <div>
           <h2>Message Types</h2>
           <ul>
-            <li><code>transcript.mutable</code> - Live transcript segments that may be updated</li>
-            <li><code>transcript.finalized</code> - Final transcript segments</li>
+            <li><code>transcript</code> - Live transcript bundles with confirmed and pending segments</li>
+            <li><code>transcript.finalized</code> - Final transcript refresh notification</li>
             <li><code>meeting.status</code> - Meeting status updates</li>
             <li><code>subscribed</code> - Confirmation of successful subscription</li>
             <li><code>pong</code> - Response to ping messages</li>
@@ -119,12 +119,15 @@ ws.onmessage = (event) => {
   const message = JSON.parse(event.data);
   
   switch (message.type) {
-    case 'transcript.mutable':
-    case 'transcript.finalized':
+    case 'transcript':
       // Process transcript segments
-      message.payload.segments.forEach(segment => {
+      [...(message.confirmed || []), ...(message.pending || [])].forEach(segment => {
         console.log(\`[\${segment.speaker}] \${segment.text}\`);
       });
+      break;
+    case 'transcript.finalized':
+      // Final transcript is ready; fetch the transcript again via REST.
+      refreshTranscript();
       break;
     case 'meeting.status':
       console.log('Status:', message.payload.status);
@@ -159,9 +162,11 @@ async def connect_vexa():
         async for message in websocket:
             data = json.loads(message)
             
-            if data["type"] in ["transcript.mutable", "transcript.finalized"]:
-                for segment in data["payload"]["segments"]:
+            if data["type"] == "transcript":
+                for segment in data.get("confirmed", []) + data.get("pending", []):
                     print(f"[{segment['speaker']}] {segment['text']}")
+            elif data["type"] == "transcript.finalized":
+                print("Final transcript is ready; fetch transcript again via REST")
             elif data["type"] == "meeting.status":
                 print(f"Status: {data['payload']['status']}")
 
@@ -173,4 +178,3 @@ asyncio.run(connect_vexa())`}</code>
     </div>
   );
 }
-

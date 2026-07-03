@@ -18,6 +18,10 @@ Vexa /bots/status
 
 ## Required Environment
 
+`VEXA_API_KEY` must belong to the same dashboard user who creates the meeting
+bots. Bot discovery uses the user-scoped `/bots/status` endpoint, so a key from
+another user cannot see those bots.
+
 ```env
 VEXA_API_URL=http://localhost:8056
 VEXA_API_KEY=replace_me
@@ -99,3 +103,17 @@ deduplication across different wake attempts.
 
 Dashboard-created bots must be created with `voice_agent_enabled: true` so Vexa
 has a playback microphone path for `/speak`.
+
+## Optional Low-Latency Lane
+
+By default the orchestrator reads the existing Vexa transcript WebSocket. To use
+the separate wake-stt lane, set `WAKE_STT_URL=http://wake-stt:8058`, configure
+the wake-stt transcription URL/token, and start compose with both profiles:
+
+```bash
+docker compose --profile wake --profile wake-stt up -d wake-stt wake-orchestrator
+```
+
+Piper `tts-service` is not needed for the Kabosu wake path because replies are
+synthesized with Aivis Cloud and sent as `audio_base64`. Enable the compose
+profile `tts` only when you explicitly need text `/speak` through Piper.

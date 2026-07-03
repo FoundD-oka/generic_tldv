@@ -1,0 +1,35 @@
+{
+  "timestamp": "2026-07-03T07:11:34.130009+00:00",
+  "status": "warn",
+  "documents": [
+    {
+      "doc": ".ai/BUILD.md",
+      "status": "pass",
+      "issues": []
+    },
+    {
+      "doc": ".ai/DOCS.md",
+      "status": "warn",
+      "issues": [
+        "watch-path drift: current diff touches AGENTS.md, CLAUDE.md, docs/QUICKSTART.md, docs/agent-coding-best-practices.md, docs/backcast-contracts.md but doc was not updated"
+      ]
+    },
+    {
+      "doc": ".ai/HARNESS.md",
+      "status": "warn",
+      "issues": [
+        "watch-path drift: current diff touches .pipeline/adapters/chatgpt-pro-web.adapter.json, .pipeline/feedback/ledger.jsonl, schemas/approval-decision.schema.json, schemas/checkpoint-contract.schema.json, schemas/codex-build-result.schema.json but doc was not updated"
+      ]
+    },
+    {
+      "doc": ".ai/INTENT.md",
+      "status": "pass",
+      "issues": []
+    },
+    {
+      "doc": ".ai/META.md",
+      "status": "pass",
+      "issues": []
+    }
+  ]
+}

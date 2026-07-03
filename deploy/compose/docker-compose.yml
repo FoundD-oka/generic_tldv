@@ -402,6 +402,11 @@ services:
       - VEXA_ALLOW_DIRECT_LOGIN=${VEXA_ALLOW_DIRECT_LOGIN:-true}
       - MINIO_INTERNAL_ENDPOINT=${MINIO_INTERNAL_ENDPOINT:-http://minio:9000}
       - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-}
+      - DASHBOARD_BRAND_NAME=${DASHBOARD_BRAND_NAME:-カボス}
+      - DASHBOARD_BRAND_SHORT_NAME=${DASHBOARD_BRAND_SHORT_NAME:-カボス}
+      - DASHBOARD_BRAND_SLUG=${DASHBOARD_BRAND_SLUG:-kabosu}
+      - DASHBOARD_LOCALE=${DASHBOARD_LOCALE:-ja}
+      - DEFAULT_BOT_NAME=${DEFAULT_BOT_NAME:-カボス}
     init: true
     depends_on:
       - api-gateway
@@ -453,6 +458,7 @@ services:
     restart: unless-stopped
 
   tts-service:
+    profiles: ["tts"]
     build:
       context: ../..
       dockerfile: services/tts-service/Dockerfile
@@ -480,7 +486,7 @@ services:
     restart: unless-stopped
 
   wake-stt:
-    profiles: ["wake"]
+    profiles: ["wake-stt"]
     build:
       context: ../..
       dockerfile: services/wake-stt/Dockerfile
@@ -575,10 +581,9 @@ services:
     init: true
     depends_on:
       - api-gateway
-      - wake-stt
     networks:
       - vexa
-    restart: unless-stopped
+    restart: "no"
 
   # calendar-service: NO-SHIP for 0.10 — not included in release
   # calendar-service:

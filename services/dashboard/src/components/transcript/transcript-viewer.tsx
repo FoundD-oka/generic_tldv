@@ -929,7 +929,7 @@ export function TranscriptViewer({
                   absolute_end_time: group.endTime,
                   text: group.combinedText,
                   speaker: group.key.startsWith("__unmapped_") ? (group.segments[0]?.speaker || "") : group.key,
-                  language: group.segments[0]?.language || "en",
+                  language: group.segments[0]?.language || "ja",
                   completed: group.segments.every(s => s.completed !== false),
                   session_uid: group.segments[0]?.session_uid || "",
                   created_at: group.startTime,

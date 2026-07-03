@@ -1,0 +1,2 @@
+{"type":"thread.started","task_id":"issues-4-19","runtime_profile":"codex-app","timestamp":"2026-07-03T05:00:00Z","summary":"Started L-size implementation bundle for GitHub issues #4-#19 using harness-init."}
+{"type":"turn.completed","task_id":"issues-4-19","runtime_profile":"codex-app","timestamp":"2026-07-03T06:20:00Z","summary":"Implemented redaction, final transcription preservation, Kabosu defaults/persona/branding, wake operations, WebSocket finalization refresh, delete cleanup, assistant context, Japanese docs/tests, and harness evidence."}

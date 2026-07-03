@@ -12,8 +12,16 @@ _MARKDOWN_RE = re.compile(r"[*#`>\-•]+")
 _LINK_RE = re.compile(r"\[(.*?)\]\(.*?\)")
 _CHAT_WAKE_RE = re.compile(r"@?(?:カボス|かぼす|kabosu)", re.IGNORECASE)
 _SECRET_PATTERNS = (
+    (
+        re.compile(r"([a-z][a-z0-9+.-]*://)[^/\s:@]+:[^/\s@]+@", re.IGNORECASE),
+        r"\1[REDACTED]@",
+    ),
     (re.compile(r"Bearer\s+[A-Za-z0-9._~+/=-]+", re.IGNORECASE), "Bearer [REDACTED]"),
     (re.compile(r"sk-[A-Za-z0-9_-]+"), "[REDACTED_API_KEY]"),
+    (
+        re.compile(r"(?i)\b(api[_-]?key|token|secret|password|passwd|pwd)\b\s*([:=])\s*([^\s,;]+)"),
+        r"\1\2[REDACTED]",
+    ),
     (
         re.compile(
             r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----",
@@ -21,6 +29,7 @@ _SECRET_PATTERNS = (
         ),
         "[REDACTED_PRIVATE_KEY]",
     ),
+    (re.compile(r"\b[A-Za-z0-9_-]{48,}\b"), "[REDACTED_TOKEN]"),
 )
 _KABOSU_VARIANT_RE = (
     r"(?:(?:カ|か|コ|こ)[ーｰ]?(?:ボ|ぼ|ポ|ぽ|ホ|ほ|バ|ば)[ーｰ]?(?:ス|す|ズ|ず|酢)"
