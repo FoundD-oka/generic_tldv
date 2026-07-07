@@ -40,6 +40,11 @@ import { ja } from "date-fns/locale";
 // Linkify URLs in chat message text — splits text into plain strings and clickable <a> elements
 const URL_REGEX = /(https?:\/\/[^\s<>"')\]]+)/gi;
 
+// When two consecutive segments from the same speaker are separated by a
+// silence gap at least this long, treat them as separate blocks (re-show the
+// speaker header and add extra spacing) instead of merging them visually.
+const SPEAKER_BLOCK_GAP_MS = 3 * 60 * 1000;
+
 function linkifyText(text: string, searchQuery?: string): React.ReactNode[] {
   const parts = text.split(URL_REGEX);
   return parts.map((part, i) => {
@@ -868,7 +873,7 @@ export function TranscriptViewer({
               )}
             </div>
           ) : (
-            <div className="space-y-1">
+            <div>
               {timelineItems.map((item, idx) => {
                 // ---- Chat message item ----
                 if (item.type === "chat") {
@@ -888,7 +893,10 @@ export function TranscriptViewer({
                   return (
                     <div
                       key={`chat-${msg.timestamp}-${idx}`}
-                      className="animate-fade-in flex gap-3 p-3 rounded-lg bg-sky-50/60 dark:bg-sky-950/20 border border-sky-200/50 dark:border-sky-800/30"
+                      className={cn(
+                        "animate-fade-in flex gap-3 p-3 rounded-lg bg-sky-50/60 dark:bg-sky-950/20 border border-sky-200/50 dark:border-sky-800/30",
+                        idx > 0 && "mt-4"
+                      )}
                     >
                       {/* Chat icon instead of avatar */}
                       <div className="h-8 w-8 flex-shrink-0 rounded-full bg-sky-500 flex items-center justify-center">
@@ -938,7 +946,11 @@ export function TranscriptViewer({
                 const isActivePlayback = activePlaybackIndex === index;
 
                 // Determine if this is a continuation from the same speaker
-                // by looking at the previous timeline item
+                // by looking at the previous timeline item. A same-speaker run
+                // is only merged into one tight visual block when the silence
+                // gap between the two segments is small — a long pause (e.g.
+                // the speaker went quiet for a while and picked back up) still
+                // starts a new block so the timeline reads correctly.
                 let showSpeakerHeader = true;
                 if (idx > 0) {
                   const prevItem = timelineItems[idx - 1];
@@ -947,17 +959,29 @@ export function TranscriptViewer({
                       ? (prevItem.group.segments[0]?.speaker || "")
                       : prevItem.group.key;
                     const currSpeaker = syntheticSegment.speaker;
-                    if (prevSpeaker === currSpeaker) {
+                    const sameSpeaker = prevSpeaker === currSpeaker;
+                    const prevEndMs = new Date(prevItem.group.endTime).getTime();
+                    const currStartMs = new Date(group.startTime).getTime();
+                    const gapMs = Number.isFinite(prevEndMs) && Number.isFinite(currStartMs)
+                      ? currStartMs - prevEndMs
+                      : 0;
+                    const isLargeGap = gapMs >= SPEAKER_BLOCK_GAP_MS;
+                    if (sameSpeaker && !isLargeGap) {
                       showSpeakerHeader = false;
                     }
                   }
                 }
 
+                // New blocks (speaker change, or a long silence gap even for
+                // the same speaker) get a larger top margin so they read as
+                // separate turns; continuations within the same block stay tight.
+                const isNewBlock = showSpeakerHeader;
+
                 return (
                   <div
                     key={`${group.startTime}-${index}`}
                     ref={isActivePlayback ? activeSegmentRef : undefined}
-                    className={cn("animate-fade-in", showSpeakerHeader && idx > 0 && "mt-1")}
+                    className={cn("animate-fade-in", idx > 0 && (isNewBlock ? "mt-4" : "mt-0.5"))}
                     style={{
                       animationDelay: isLive ? "0ms" : `${Math.min(index * 20, 200)}ms`,
                       animationFillMode: "backwards",

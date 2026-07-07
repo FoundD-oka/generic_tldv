@@ -234,14 +234,15 @@ export default function LoginPage() {
             {parsedInput && isSupportedPlatform && (
               <div className="absolute left-4 top-1/2 -translate-y-1/2 z-10">
                 <Image
-                  src={parsedInput.platform === "google_meet"
+                  src={withBasePath(parsedInput.platform === "google_meet"
                     ? "/icons/icons8-google-meet-96.png"
                     : "/icons/icons8-teams-96.png"
-                  }
+                  )}
                   alt={parsedInput.platform === "google_meet" ? "Google Meet" : "Microsoft Teams"}
                   width={24}
                   height={24}
                   className="rounded"
+                  unoptimized
                 />
               </div>
             )}
@@ -286,21 +287,23 @@ export default function LoginPage() {
         <div className="flex flex-wrap items-center justify-center gap-3 mt-8">
           <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-full border border-border bg-card text-sm text-muted-foreground">
             <Image
-              src="/icons/icons8-google-meet-96.png"
+              src={withBasePath("/icons/icons8-google-meet-96.png")}
               alt="Google Meet"
               width={20}
               height={20}
               className="rounded-sm"
+              unoptimized
             />
             Google Meet
           </div>
           <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-full border border-border bg-card text-sm text-muted-foreground">
             <Image
-              src="/icons/icons8-teams-96.png"
+              src={withBasePath("/icons/icons8-teams-96.png")}
               alt="Microsoft Teams"
               width={20}
               height={20}
               className="rounded-sm"
+              unoptimized
             />
             Microsoft Teams
           </div>

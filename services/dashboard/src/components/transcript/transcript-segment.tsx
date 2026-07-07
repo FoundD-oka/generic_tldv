@@ -116,10 +116,10 @@ export function TranscriptSegment({
             {onClickSegment && (
               <span
                 className={cn(
-                  "ml-auto inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground transition-all",
+                  "ml-auto inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground transition-opacity",
                   isActivePlayback
                     ? "opacity-100 border-primary/40 bg-primary/10 text-primary"
-                    : "opacity-80 group-hover:opacity-100 group-hover:border-primary/40 group-hover:bg-primary/10 group-hover:text-primary"
+                    : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 group-hover:border-primary/40 group-hover:bg-primary/10 group-hover:text-primary"
                 )}
                 aria-label="この時刻から再生"
                 title="この発話から再生"
