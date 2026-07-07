@@ -105,6 +105,7 @@ async def test_run_deferred_transcription_replace_replaces_existing_rows_after_s
     assert meeting.data["final_transcription"]["source_recording_path"].endswith("/audio/master.wav")
     assert meeting.data["final_transcription"]["redis_cache_cleared"] is True
     assert meeting.data["final_transcription"]["language"] == "ja"
+    assert meeting.data["drive_export"]["status"] == "queued"
     call_transcription.assert_awaited_once()
     assert call_transcription.await_args.kwargs["language"] == "ja"
     clear_cache.assert_awaited_once_with(TEST_MEETING_ID)
@@ -135,6 +136,86 @@ async def test_run_deferred_transcription_replace_skips_when_speaker_events_miss
     assert result.replaced_realtime_count == 0
     assert meeting.data["final_transcription"]["status"] == "skipped_no_speaker_events"
     assert meeting.data["final_transcription"]["skipped_reason"] == "no_speaker_events"
+    assert meeting.data["drive_export"]["status"] == "queued"
+    db.add.assert_not_called()
+    download_audio.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_run_deferred_transcription_calendar_success_queues_drive_export():
+    meeting = _meeting_with_audio_master(data={
+        "calendar_event": {
+            "source": "google_calendar",
+            "title": "週次定例",
+            "start_time": "2026-07-03T10:00:00+09:00",
+            "meeting_url": "https://meet.google.com/abc-defg-hij",
+            "platform": "google_meet",
+        },
+    })
+    db = AsyncMock()
+    db.execute = AsyncMock(side_effect=[
+        MockResult([meeting]),
+        MockResult(scalar_value=2),
+        MockResult(scalar_value=2),
+        MockResult(),
+    ])
+    db.commit = AsyncMock()
+    db.add = MagicMock()
+
+    with patch("meeting_api.final_transcription.attributes.flag_modified", new=MagicMock()), \
+         patch("meeting_api.final_transcription._download_recording_audio", new=AsyncMock(return_value=b"wav")), \
+         patch("meeting_api.final_transcription._convert_audio_to_wav", return_value=(b"wav", "wav")), \
+         patch("meeting_api.final_transcription._call_transcription_service", new=AsyncMock(return_value={
+             "language": "ja",
+             "segments": [{"start": 0.25, "end": 1.25, "text": "  final  "}],
+         })), \
+         patch("meeting_api.final_transcription._clear_live_transcript_cache", new=AsyncMock(return_value=True)), \
+         patch("meeting_api.final_transcription._publish_transcript_finalized", new=AsyncMock()):
+        await run_deferred_transcription(
+            TEST_MEETING_ID,
+            db,
+            mode="replace",
+            triggered_by="final_transcription_sweep",
+        )
+
+    assert meeting.data["final_transcription"]["status"] == "succeeded"
+    assert meeting.data["drive_export"]["status"] == "queued"
+    assert meeting.data["drive_export"]["triggered_by"] == "final_transcription_sweep"
+
+
+@pytest.mark.asyncio
+async def test_run_deferred_transcription_calendar_skip_queues_drive_export():
+    meeting = _meeting_with_audio_master(data={
+        "speaker_events": [],
+        "calendar_event": {
+            "source": "google_calendar",
+            "title": "週次定例",
+            "start_time": "2026-07-03T10:00:00+09:00",
+            "meeting_url": "https://meet.google.com/abc-defg-hij",
+            "platform": "google_meet",
+        },
+    })
+    db = AsyncMock()
+    db.execute = AsyncMock(side_effect=[
+        MockResult([meeting]),
+        MockResult(scalar_value=2),
+        MockResult(scalar_value=1),
+    ])
+    db.commit = AsyncMock()
+    db.add = MagicMock()
+
+    with patch("meeting_api.final_transcription.attributes.flag_modified", new=MagicMock()), \
+         patch("meeting_api.final_transcription._download_recording_audio", new=AsyncMock()) as download_audio:
+        result = await run_deferred_transcription(
+            TEST_MEETING_ID,
+            db,
+            mode="replace",
+            triggered_by="final_transcription_sweep",
+        )
+
+    assert result.segment_count == 0
+    assert meeting.data["final_transcription"]["status"] == "skipped_no_speaker_events"
+    assert meeting.data["drive_export"]["status"] == "queued"
     db.add.assert_not_called()
     download_audio.assert_not_awaited()
 

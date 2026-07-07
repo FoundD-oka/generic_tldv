@@ -12,7 +12,12 @@ from sqlalchemy import select
 from meeting_api.database import get_db, init_db
 from meeting_api.models import CalendarEvent
 from admin_models.models import User
-from app.sync import sync_user_calendar, schedule_upcoming_bots
+from app.sync import (
+    schedule_upcoming_bots,
+    single_account_mode_enabled,
+    sync_single_account_calendar,
+    sync_user_calendar,
+)
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 SYNC_INTERVAL_SECONDS = int(os.getenv("SYNC_INTERVAL_SECONDS", "300"))
@@ -43,16 +48,22 @@ async def sync_loop():
         try:
             from meeting_api.database import async_session_local
             async with async_session_local() as db:
-                # Find all users with google_calendar oauth configured
-                result = await db.execute(select(User))
-                users = result.scalars().all()
-                for user in users:
-                    gc = (user.data or {}).get("google_calendar", {})
-                    if gc.get("oauth", {}).get("refresh_token"):
-                        try:
-                            await sync_user_calendar(user.id, db)
-                        except Exception as e:
-                            logger.error(f"Sync failed for user {user.id}: {e}")
+                if single_account_mode_enabled():
+                    try:
+                        await sync_single_account_calendar(db)
+                    except Exception as e:
+                        logger.error(f"Kabosu single-account sync failed: {e}")
+                else:
+                    # Find all users with google_calendar oauth configured
+                    result = await db.execute(select(User))
+                    users = result.scalars().all()
+                    for user in users:
+                        gc = (user.data or {}).get("google_calendar", {})
+                        if gc.get("oauth", {}).get("refresh_token"):
+                            try:
+                                await sync_user_calendar(user.id, db)
+                            except Exception as e:
+                                logger.error(f"Sync failed for user {user.id}: {e}")
 
                 # Schedule bots for upcoming events
                 await schedule_upcoming_bots(db)
@@ -64,7 +75,11 @@ async def sync_loop():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "calendar-service"}
+    return {
+        "status": "ok",
+        "service": "calendar-service",
+        "mode": "single_account" if single_account_mode_enabled() else "per_user",
+    }
 
 
 @app.post("/calendar/connect")

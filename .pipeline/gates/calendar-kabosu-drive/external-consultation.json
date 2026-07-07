@@ -1,0 +1,17 @@
+{
+  "timestamp": "2026-07-07T05:21:02.268362+00:00",
+  "task_id": "calendar-kabosu-drive",
+  "size": "L",
+  "status": "pass",
+  "mode": "not_configured",
+  "policy": "optional",
+  "required": false,
+  "provider": "chatgpt-pro-web",
+  "errors": [],
+  "warnings": [],
+  "artifacts": {
+    "brief": ".pipeline/plans/calendar-kabosu-drive/consultation-brief.md",
+    "response": ".pipeline/evidence/calendar-kabosu-drive/external-consultation/chatgpt-pro.md",
+    "summary": ".pipeline/evidence/calendar-kabosu-drive/external-consultation/consultation-summary.json"
+  }
+}
