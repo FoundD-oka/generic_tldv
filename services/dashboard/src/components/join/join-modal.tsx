@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Video, Loader2, Sparkles, Monitor, UserCheck } from "lucide-react";
+import { Video, Loader2, Sparkles, Monitor, UserCheck, Info } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -318,6 +318,9 @@ export function JoinModal() {
             {copy.modeBrowser}
           </button>
         </div>
+        <p className="px-1 text-xs text-muted-foreground">
+          {mode === "meeting" ? copy.modeMeetingDescription : copy.modeBrowserDescription}
+        </p>
 
         {mode === "browser" ? (
           <div className="space-y-4">
@@ -520,17 +523,25 @@ export function JoinModal() {
           </div>
 
           {/* Authenticated Toggle — coming soon */}
-          <div className="flex items-center justify-between opacity-50">
-            <Label htmlFor="authenticated" className="text-sm flex items-center gap-2 cursor-not-allowed">
-              <UserCheck className="h-3.5 w-3.5" />
-              {copy.authenticated}
-              <span className="text-[10px] font-medium bg-muted px-1.5 py-0.5 rounded">{copy.soon}</span>
-            </Label>
-            <Switch
-              id="authenticated"
-              checked={false}
-              disabled
-            />
+          <div className="space-y-1.5 opacity-50">
+            <div className="flex items-center justify-between gap-4">
+              <Label htmlFor="authenticated" className="text-sm flex items-center gap-2 cursor-not-allowed">
+                <UserCheck className="h-3.5 w-3.5" />
+                {copy.authenticated}
+                <span className="text-[10px] font-medium bg-muted px-1.5 py-0.5 rounded">{copy.soon}</span>
+                <span title={copy.authenticatedHelp}>
+                  <Info className="h-3 w-3" />
+                </span>
+              </Label>
+              <Switch
+                id="authenticated"
+                checked={false}
+                disabled
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {copy.authenticatedHelp}
+            </p>
           </div>
 
           {/* Passcode for Teams and Zoom */}
