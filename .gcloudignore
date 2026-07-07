@@ -1,0 +1,25 @@
+# .gcloudignore — controls what `gcloud builds submit` / `gcloud run deploy --source`
+# uploads as the Cloud Build source context.
+#
+# WHY THIS FILE EXISTS:
+# When absent, gcloud falls back to .gitignore. Our .gitignore has a blanket
+# `*.png` rule (for screenshots/figures), which silently excludes the dashboard's
+# committed platform icons (services/dashboard/public/icons/*.png) from the upload
+# tarball. The resulting Cloud Run image ships without those PNGs, so every PNG
+# icon 404s in production while SVGs render fine. Local `docker build` uses
+# .dockerignore (no *.png rule), so the breakage does not reproduce locally.
+#
+# This file inherits .gitignore's excludes, then rescues the committed binary
+# assets the app needs baked into the image.
+
+# gcloud's implicit excludes (only automatic when NO .gcloudignore exists — once
+# this file is present we must restate them, or the whole .git/ tree gets uploaded).
+.git
+.gitignore
+.gcloudignore
+
+#!include:.gitignore
+
+# Rescue committed PNG assets that .gitignore's blanket `*.png` would exclude.
+!services/dashboard/public/**/*.png
+!**/public/**/*.png

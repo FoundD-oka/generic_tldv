@@ -151,6 +151,52 @@ All backend calls validated from inside the dashboard container:
 - POST: /api/vexa/bots (browser_session) → 201, /api/vexa/bots (meeting join) → 201
 - Dashboard serving on port 3001 (dev) / 3000 (production Docker)
 
+## GCP Deployment
+
+The production frontend (as observed by end users) is built and hosted on Google Cloud.
+
+| Item | Value |
+|---|---|
+| Project name | PM-QE Management System |
+| Project ID | `pm-qe-mgmt-20260624` |
+| Billing | Enabled |
+| Status | ACTIVE |
+
+> Local Docker (`vexa-dashboard-1` :3001 / `vexa-kabosu-dashboard-1` :3002) and the GCP build
+> are separate deploy targets. UI changes committed to this repo do **not** appear on the GCP
+> frontend until that project is rebuilt and redeployed from the updated source.
+
+### Broken-icons gotcha (GCP-specific) — ROOT CAUSE
+
+Symptom: **every PNG platform icon 404s** on the Cloud Run dashboard
+(`kabosu-dashboard`, https://kabosu-dashboard-yye63pfv3a-an.a.run.app) while SVG icons and
+lucide (inline SVG) render fine. Reproduced 2026-07-07 by hitting the live URL:
+`/icons/*.png` → 404 (served by Next.js as its prerendered 404 page), `/icons/*.svg` → 200.
+
+Root cause is the **deploy build context, not the app code**:
+
+- Repo-root `.gitignore` has a blanket `*.png` rule (line ~146, for screenshots/figures).
+- The Cloud Build source is an uploaded tarball (`gcloud builds submit` / `run deploy --source`
+  → `storageSource`). When no `.gcloudignore` exists, gcloud **inherits `.gitignore`**, so every
+  committed `services/dashboard/public/icons/*.png` was silently excluded from the upload —
+  even though the files are tracked in git.
+- The built image therefore ships without the PNGs → 404 in production. SVGs aren't ignored, so
+  they make it in → 200. Local `docker build` uses `.dockerignore` (no `*.png` rule), so the
+  breakage never reproduces locally — which is why it went unnoticed.
+
+Proven deterministically with `gcloud meta list-files-for-upload .`: 0 PNG icons in the upload
+context before the fix, 6 after.
+
+**Fix:** a repo-root `.gcloudignore` that inherits `.gitignore` but re-includes the committed
+PNG assets (`!services/dashboard/public/**/*.png`) and restates gcloud's implicit `.git` excludes.
+
+Complementary code hardening already committed (helps subpath deploys / optimizer edge cases but
+was NOT the actual blocker): platform PNGs use `next/image` with `unoptimized`; all `/icons/...`
+`src` values are wrapped in `withBasePath()`; the MCP icon was renamed from `icons8-mcp-96 (1).png`
+to `icons8-mcp-96.png`.
+
+The fix lands on GCP only after the `pm-qe-mgmt-20260624` project rebuilds/redeploys from this source.
+
 ## Screenshots
 
 ![Dashboard](docs/screenshots/01-dashboard.png)
