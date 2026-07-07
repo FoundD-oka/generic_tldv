@@ -1,1 +1,2 @@
 date	task_id	category	source	severity	note
+2026-07-07	dashboard-uiux-memo	deploy-context-drift	human	high	gcloud builds submit inherits .gitignore when no .gcloudignore exists; blanket *.png silently dropped committed dashboard PNG icons from the Cloud Build upload, 404 in prod but fine locally (docker uses .dockerignore). Fixed via repo-root .gcloudignore.
