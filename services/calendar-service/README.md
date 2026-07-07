@@ -25,9 +25,18 @@ All endpoints accept `user_id` as a query parameter.
 
 ## How It Works
 
-1. Users connect their Google Calendar via OAuth (refresh token stored in the `users.data` JSONB column).
-2. A background loop syncs calendar events for all connected users at a regular interval.
-3. For events with meeting URLs (Zoom, Teams, Meet), bots are scheduled to join automatically based on user preferences (auto-join enabled, lead time in minutes).
+Two sync modes are supported:
+
+1. `per_user` (legacy): users connect their Google Calendar via OAuth and the refresh token is stored in `users.data.google_calendar.oauth`.
+2. `single_account`: the dedicated Kabosu account (`e@bonginkan.ai`) is synced from `KABOSU_GOOGLE_REFRESH_TOKEN`. Inviting that account to an event is enough to schedule Kabosu.
+
+In `single_account` mode, upcoming events with meeting URLs are scheduled with:
+
+- `bot_name=カボス`
+- `language=ja`
+- `voice_agent_enabled=true`
+
+After bot creation, the service stores `meeting.data.calendar_event` so meeting-api can export only calendar-origin meetings to Google Drive after final transcription finishes.
 
 ## How
 
@@ -38,6 +47,13 @@ All endpoints accept `user_id` as a query parameter.
 | `LOG_LEVEL` | `INFO` | Log level |
 | `SYNC_INTERVAL_SECONDS` | `300` | Seconds between calendar sync cycles |
 | `DATABASE_URL` | — | PostgreSQL connection string (via admin-models/meeting-api) |
+| `KABOSU_CALENDAR_MODE` | `per_user` | Set `single_account` for invite-only Kabosu calendar sync |
+| `KABOSU_CALENDAR_ACCOUNT_EMAIL` | — | Dedicated Kabosu Google account to invite to calendar events |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | — | OAuth client used to refresh the Kabosu Google token |
+| `KABOSU_GOOGLE_REFRESH_TOKEN` | — | Refresh token with `calendar.events`, `calendar.readonly`, and `drive.file` scopes. `calendar.events` is needed when Kabosu/Codex creates test meetings; invite-only auto-join reads events. |
+| `KABOSU_BOT_OWNER_USER_ID` | — | Vexa user ID that owns calendar-created bots; must match the wake orchestrator API key owner |
+| `KABOSU_DRIVE_FOLDER_ID` | — | Drive folder used by meeting-api for Markdown transcript export |
+| `BOT_API_TOKEN` | — | API token for the owner user; used to call meeting-api `/bots` |
 
 ### Run
 
@@ -48,6 +64,12 @@ uvicorn app.main:app --host 0.0.0.0 --port 8050 --reload
 ```
 
 Requires PostgreSQL with the shared database schema initialized.
+
+In Compose:
+
+```bash
+docker compose --profile calendar up -d calendar-service
+```
 
 ## DoD
 

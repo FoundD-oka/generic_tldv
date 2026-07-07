@@ -28,6 +28,7 @@ from sqlalchemy.orm import attributes
 from .models import MediaFile, Meeting, Recording, Transcription
 from .schemas import MeetingStatus
 from .storage import create_storage_client
+from .drive_export import queue_drive_export_if_needed
 
 logger = logging.getLogger("meeting_api.final_transcription")
 
@@ -502,6 +503,7 @@ async def run_deferred_transcription(
             retryable=False,
             triggered_by=triggered_by,
         )
+        queue_drive_export_if_needed(meeting, triggered_by=triggered_by)
         await db.commit()
         logger.warning(
             "Deferred final transcription skipped for meeting %s: no speaker_events; existing speaker labels preserved",
@@ -667,6 +669,7 @@ async def run_deferred_transcription(
     meeting_data["final_transcription_status"] = "succeeded"
     meeting.data = meeting_data
     attributes.flag_modified(meeting, "data")
+    queue_drive_export_if_needed(meeting, triggered_by=triggered_by)
     await db.commit()
     if mode == "replace":
         await _publish_transcript_finalized(

@@ -1,0 +1,19 @@
+{
+  "timestamp": "2026-07-07T05:21:02.071537+00:00",
+  "status": "pass",
+  "diff_hash": "sha256:c797f7f8ed03fe365fc61ece7eec7c0a5aea9d54a12de16fbbc480a5b94d28c5",
+  "changed_files": [
+    "deploy/compose/README.md",
+    "deploy/compose/docker-compose.yml",
+    "deploy/env-example",
+    "services/calendar-service/Dockerfile",
+    "services/calendar-service/README.md",
+    "services/calendar-service/app/main.py",
+    "services/calendar-service/app/sync.py",
+    "services/meeting-api/meeting_api/final_transcription.py",
+    "services/meeting-api/meeting_api/sweeps.py",
+    "services/meeting-api/tests/test_final_transcription.py"
+  ],
+  "flags": [],
+  "blocks": []
+}

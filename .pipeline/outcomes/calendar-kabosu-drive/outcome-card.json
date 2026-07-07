@@ -1,0 +1,38 @@
+{
+  "schema_version": "1.0",
+  "task_id": "calendar-kabosu-drive",
+  "runtime_profile": "codex-app",
+  "size": "L",
+  "result": {
+    "at_pass": true,
+    "fp_pass": true,
+    "nft_pass": true,
+    "hd_resolved": true,
+    "blocking_findings": 0
+  },
+  "evidence": {
+    "session_ledger": ".pipeline/sessions/calendar-kabosu-drive/events.jsonl",
+    "sidechain_synthesis": ".pipeline/evidence/calendar-kabosu-drive/sidechain-synthesis.md",
+    "verification": [
+      "py_compile changed Python modules and scripts",
+      "PYTHONPATH=/tmp/generic_tldv_testdeps:services/meeting-api:libs/admin-models python -m pytest -q services/meeting-api/tests/test_drive_export.py services/meeting-api/tests/test_final_transcription.py",
+      "PYTHONPATH=/tmp/generic_tldv_testdeps:services/calendar-service:services/meeting-api:libs/admin-models python -m pytest -q services/calendar-service/tests/test_sync.py",
+      "docker compose -f deploy/compose/docker-compose.yml config",
+      "docker compose -f deploy/compose/docker-compose.yml --profile calendar config",
+      "node .gitnexus/run.cjs detect-changes --repo generic_tldv",
+      "scripts/harness/validate-runtime-profile.sh",
+      "git diff --check",
+      ".claude/hooks/harness-residency.sh",
+      ".claude/hooks/preflight.sh --full",
+      ".claude/hooks/hd-gate.sh",
+      ".claude/hooks/adapter-validate.sh"
+    ],
+    "review": [
+      ".pipeline/evidence/calendar-kabosu-drive/qa-judgment.json",
+      ".pipeline/evidence/calendar-kabosu-drive/sidechain-synthesis.md"
+    ]
+  },
+  "notes": [
+        "Live Google OAuth, Drive folder permission, and Meet admission are configured for e@bonginkan.ai. Calendar event creation requires a refresh token with calendar.events scope."
+  ]
+}

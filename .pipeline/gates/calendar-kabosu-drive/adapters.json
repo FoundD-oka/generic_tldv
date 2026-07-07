@@ -1,0 +1,22 @@
+{
+  "timestamp": "2026-07-07T05:21:02.185291+00:00",
+  "status": "pass",
+  "adapter_count": 3,
+  "adapters": [
+    {
+      "path": ".pipeline/adapters/chatgpt-pro-web.adapter.json",
+      "status": "pass",
+      "errors": []
+    },
+    {
+      "path": ".pipeline/adapters/codex-cli.adapter.json",
+      "status": "pass",
+      "errors": []
+    },
+    {
+      "path": ".pipeline/adapters/github.adapter.json",
+      "status": "pass",
+      "errors": []
+    }
+  ]
+}

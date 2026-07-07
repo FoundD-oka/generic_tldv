@@ -176,6 +176,18 @@ Everything else has working defaults for local dev.
 | ADMIN_API_PORT        | 8057                | Admin API port                                                                       |
 | ADMIN_TOKEN           | changeme            | Admin API authentication token                                                       |
 
+**Kabosu calendar / Drive export (optional, profile `calendar`):**
+
+| Variable | Description |
+| --- | --- |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | OAuth client for the dedicated Kabosu Google account. |
+| `KABOSU_GOOGLE_REFRESH_TOKEN` | Refresh token for `calendar.readonly` + `drive.file`. Use `scripts/google-oauth-refresh-token.py`. |
+| `KABOSU_BOT_OWNER_USER_ID` | Vexa user ID that owns calendar-created bots; use the same owner as `VEXA_API_KEY` for wake replies. |
+| `KABOSU_DRIVE_FOLDER_ID` | Google Drive folder ID for Markdown transcript exports. |
+| `CALENDAR_LEAD_TIME` | Minutes before the event start to create the bot. Default: `2`. |
+
+Start it with `docker compose --profile calendar up -d calendar-service`.
+
 
 Full env reference: [deploy/env-example](../env-example)
 
