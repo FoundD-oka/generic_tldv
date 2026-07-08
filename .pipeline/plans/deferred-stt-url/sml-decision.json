@@ -1,0 +1,10 @@
+{
+  "task": "deferred-stt-url",
+  "size": "S",
+  "decided_after": "s_fast_path_check",
+  "rationale": "Single env-resolution helper in final_transcription.py plus compose/env plumbing; no new dependencies; no schema/auth/PII; unambiguous implementation. Needed so the Soniox deferred route can use the containerized transcription-service while realtime stays on host whisper-server.",
+  "plan": ".pipeline/plans/deferred-stt-url/plan.md",
+  "human_gate_required": false,
+  "tribunal_required": false,
+  "pii_path": false
+}

@@ -1,0 +1,53 @@
+{
+  "timestamp": "2026-07-08T03:18:01.673926+00:00",
+  "task_id": "deferred-stt-url",
+  "size": "S",
+  "status": "ready",
+  "checks": [
+    {
+      "check": "harness-residency",
+      "ok": true,
+      "detail": "status=pass"
+    },
+    {
+      "check": "preflight",
+      "ok": true,
+      "detail": "status=pass"
+    },
+    {
+      "check": "hd-gate",
+      "ok": true,
+      "detail": "unresolved=[]"
+    },
+    {
+      "check": "doc-staleness",
+      "ok": true,
+      "detail": "status=warn"
+    },
+    {
+      "check": "adapter-contract",
+      "ok": true,
+      "detail": "status=pass count=4"
+    },
+    {
+      "check": "backcast-contracts",
+      "ok": true,
+      "detail": "status=pass mode=not_applicable"
+    },
+    {
+      "check": "external-consultation",
+      "ok": true,
+      "detail": "status=pass mode=not_configured required=False"
+    },
+    {
+      "check": "feedback-prune",
+      "ok": true,
+      "detail": "status=pass required=True"
+    },
+    {
+      "check": "sml-decision",
+      "ok": true,
+      "detail": "size=S"
+    }
+  ]
+}

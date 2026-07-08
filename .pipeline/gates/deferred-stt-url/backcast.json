@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-07-08T03:18:01.534338+00:00",
+  "task_id": "deferred-stt-url",
+  "status": "pass",
+  "mode": "not_applicable",
+  "details": {
+    "checkpoint_contract": ".pipeline/plans/deferred-stt-url/checkpoint-contract.json",
+    "evidence_manifest": ".pipeline/evidence/deferred-stt-url/evidence-manifest.json",
+    "approval_decision": ".pipeline/approvals/deferred-stt-url/approval-decision.json",
+    "state_machine": ".pipeline/rules/backcast-state-machine.json",
+    "mode": "optional"
+  },
+  "errors": [],
+  "warnings": []
+}

@@ -17,6 +17,11 @@ TRANSCRIPTION_SERVICE_TOKEN=your-token
 # transcription-service the API key. Leave unset to keep Whisper (DOM mapping).
 #DEFERRED_TRANSCRIPTION_MODEL=stt-async-v5
 #SONIOX_API_KEY=your-soniox-key
+# Deferred-only STT endpoint override (realtime keeps TRANSCRIPTION_SERVICE_URL).
+# Use when realtime runs on a different backend (e.g. host whisper-server)
+# than the Soniox-capable transcription-service.
+#DEFERRED_TRANSCRIPTION_SERVICE_URL=http://docker.for.mac.localhost:8092/v1/audio/transcriptions
+#DEFERRED_TRANSCRIPTION_SERVICE_TOKEN=
 
 # ============================================================================
 # Ports — change these to avoid conflicts with other stacks
