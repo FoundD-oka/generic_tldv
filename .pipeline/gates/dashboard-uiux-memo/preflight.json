@@ -1,0 +1,31 @@
+{
+  "timestamp": "2026-07-06T23:38:42.164639+00:00",
+  "status": "pass",
+  "diff_hash": "sha256:20288a921c9372027932bfef5f4a9014818e95fa7d4335af48d32cd8a13e0f29",
+  "changed_files": [
+    "deploy/compose/README.md",
+    "deploy/compose/docker-compose.yml",
+    "deploy/env-example",
+    "services/calendar-service/Dockerfile",
+    "services/calendar-service/README.md",
+    "services/calendar-service/app/main.py",
+    "services/calendar-service/app/sync.py",
+    "services/dashboard/public/icons/icons8-mcp-96.png",
+    "services/dashboard/src/app/login/page.tsx",
+    "services/dashboard/src/app/mcp/page.tsx",
+    "services/dashboard/src/app/meetings/[id]/page.tsx",
+    "services/dashboard/src/app/meetings/page.tsx",
+    "services/dashboard/src/components/join/join-modal.tsx",
+    "services/dashboard/src/components/mcp/mcp-config-button.tsx",
+    "services/dashboard/src/components/meetings/meeting-card.tsx",
+    "services/dashboard/src/components/recording/audio-player.tsx",
+    "services/dashboard/src/components/transcript/transcript-segment.tsx",
+    "services/dashboard/src/components/transcript/transcript-viewer.tsx",
+    "services/dashboard/src/lib/dashboard-copy.ts",
+    "services/meeting-api/meeting_api/final_transcription.py",
+    "services/meeting-api/meeting_api/sweeps.py",
+    "services/meeting-api/tests/test_final_transcription.py"
+  ],
+  "flags": [],
+  "blocks": []
+}

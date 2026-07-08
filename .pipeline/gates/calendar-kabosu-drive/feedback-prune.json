@@ -1,0 +1,30 @@
+{
+  "timestamp": "2026-07-07T19:39:02.733089+00:00",
+  "status": "pass",
+  "required": false,
+  "ledger": "/Users/bonginkan-3-gouki/project/generic_tldv/.pipeline/feedback/ledger.jsonl",
+  "rule_count": 1,
+  "decision_counts": {
+    "keep": 1
+  },
+  "conflict_count": 0,
+  "conflicts": [],
+  "decisions": [
+    {
+      "id": "issues-4-19-harness-init-feedback",
+      "decision": "keep",
+      "scope": "generic_tldv/harness-init",
+      "failure_class": "multi_issue_delivery_control",
+      "fingerprint": "14e707c1d675b572",
+      "reasons": [
+        "status:approved"
+      ],
+      "rule": "Use Managed Agent Harness gates, evidence packs, sidechain synthesis, and hash-bound approval for bundled L-size implementation work that changes runtime behavior, data preservation, and user-visible contracts."
+    }
+  ],
+  "kept_rules": [
+    "issues-4-19-harness-init-feedback"
+  ],
+  "review_rules": [],
+  "pruned_rules": []
+}

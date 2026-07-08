@@ -21,13 +21,13 @@ import httpx
 import redis.asyncio as aioredis
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, desc, func, text as sa_text
+from sqlalchemy import and_, desc, func, text as sa_text, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import attributes
 
 from .database import get_db, async_session_local
-from .models import Meeting, MeetingSession
+from .models import Meeting, MeetingSession, Transcription
 from .schemas import (
     MeetingCreate,
     MeetingResponse,
@@ -1982,4 +1982,229 @@ async def transcribe_meeting(
             f"Transcribed {result.segment_count} final segments from recording "
             f"({len(result.speakers)} speakers: {', '.join(result.speakers)})"
         ),
+    )
+
+
+# --- Speaker Corrections (issue #23, Phase 1b) ---
+
+
+class SpeakerRenameOp(BaseModel):
+    """Rename a whole acoustic cluster (preferred) or a display label."""
+    from_cluster: Optional[str] = Field(None, description="Cluster id whose segments are renamed")
+    from_name: Optional[str] = Field(None, description="Fallback for legacy rows without a cluster: rename by current label")
+    to_name: str = Field(..., min_length=1, max_length=255)
+
+
+class SpeakerMergeOp(BaseModel):
+    """Merge several clusters into one name (and a representative cluster id)."""
+    clusters: List[str] = Field(..., min_length=1)
+    to_name: str = Field(..., min_length=1, max_length=255)
+    to_cluster: Optional[str] = Field(None, description="Representative cluster id; defaults to the first entry")
+
+
+class SpeakerReassignOp(BaseModel):
+    """Reassign specific segments to another speaker."""
+    segment_ids: List[str] = Field(..., min_length=1)
+    to_name: str = Field(..., min_length=1, max_length=255)
+    to_cluster: Optional[str] = None
+
+
+class SpeakerUpdateRequest(BaseModel):
+    rename: List[SpeakerRenameOp] = Field(default_factory=list)
+    merge: List[SpeakerMergeOp] = Field(default_factory=list)
+    reassign: List[SpeakerReassignOp] = Field(default_factory=list)
+
+
+class SpeakerUpdateResponse(BaseModel):
+    meeting_id: int
+    updated: Dict[str, int]
+    speakers: List[str]
+    redis_cache_cleared: bool
+    drive_export_requeued: bool
+
+
+@router.patch(
+    "/meetings/{meeting_id}/transcripts/speakers",
+    summary="Bulk-correct transcript speakers (rename / merge / reassign)",
+    response_model=SpeakerUpdateResponse,
+    dependencies=[Depends(get_user_and_token)],
+)
+async def update_meeting_speakers(
+    meeting_id: int,
+    req: SpeakerUpdateRequest,
+    auth_data: tuple = Depends(get_user_and_token),
+    db: AsyncSession = Depends(get_db),
+):
+    """Apply speaker corrections to the persisted transcript.
+
+    Ordering is load-bearing (issue #23): DB commit first (rows + saved
+    corrections + Drive requeue state), then Redis live-cache invalidation —
+    otherwise the Postgres+Redis merge keeps returning the stale name.
+    The original auto label is preserved in speaker_auto for undo, and the
+    cluster→name map survives mode="replace" re-transcription.
+    """
+    _, current_user = auth_data
+    # Row lock: serializes concurrent PATCHes so the meeting.data
+    # read-modify-write below cannot lose a correction (JSONB lost update).
+    meeting = (await db.execute(
+        select(Meeting)
+        .where(Meeting.id == meeting_id, Meeting.user_id == current_user.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )).scalars().first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    # Post-meeting only: on an active meeting the Redis segments hash is the
+    # LIVE mutable store (collector still flushing) — deleting it would drop
+    # unpersisted segments. Same gate as the deferred transcribe endpoint.
+    if meeting.status not in (MeetingStatus.COMPLETED.value, MeetingStatus.FAILED.value):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Meeting status is '{meeting.status}'; speaker corrections are only available after the meeting ends",
+        )
+
+    if not (req.rename or req.merge or req.reassign):
+        raise HTTPException(status_code=422, detail="No speaker operations provided")
+
+    # SET expressions evaluate against the pre-update row, so this preserves
+    # the first-ever label as the undo baseline even for realtime rows that
+    # were written before speaker_auto existed.
+    preserve_auto = func.coalesce(Transcription.speaker_auto, Transcription.speaker)
+
+    updated = {"rename": 0, "merge": 0, "reassign": 0}
+    history: List[Dict[str, Any]] = []
+    now_iso = datetime.utcnow().isoformat()
+
+    # Load saved corrections up-front (under the row lock) and mutate them
+    # in place. `aliases` maps merged-away source clusters to their
+    # representative so a LATER rename of the representative also covers the
+    # source clusters when mode="replace" re-derives the original ids.
+    data = dict(meeting.data or {}) if isinstance(meeting.data, dict) else {}
+    corrections_state = dict(data.get("speaker_corrections") or {})
+    clusters_map: Dict[str, str] = {
+        str(k): str(v) for k, v in dict(corrections_state.get("clusters") or {}).items()
+    }
+    aliases: Dict[str, str] = {
+        str(k): str(v) for k, v in dict(corrections_state.get("aliases") or {}).items()
+    }
+
+    for op in req.rename:
+        if not op.from_cluster and not op.from_name:
+            raise HTTPException(status_code=422, detail="rename requires from_cluster or from_name")
+        conditions = [Transcription.meeting_id == meeting_id]
+        if op.from_cluster:
+            conditions.append(Transcription.speaker_cluster == op.from_cluster)
+        else:
+            conditions.append(Transcription.speaker == op.from_name)
+        result = await db.execute(
+            sa_update(Transcription)
+            .where(and_(*conditions))
+            .values(speaker_auto=preserve_auto, speaker=op.to_name)
+        )
+        updated["rename"] += result.rowcount or 0
+        if op.from_cluster:
+            clusters_map[op.from_cluster] = op.to_name
+            for source, representative in aliases.items():
+                if representative == op.from_cluster:
+                    clusters_map[source] = op.to_name
+        history.append({
+            "op": "rename", "at": now_iso,
+            "from_cluster": op.from_cluster, "from_name": op.from_name,
+            "to_name": op.to_name,
+        })
+
+    for op in req.merge:
+        representative = op.to_cluster or op.clusters[0]
+        result = await db.execute(
+            sa_update(Transcription)
+            .where(
+                Transcription.meeting_id == meeting_id,
+                Transcription.speaker_cluster.in_(op.clusters),
+            )
+            .values(
+                speaker_auto=preserve_auto,
+                speaker=op.to_name,
+                speaker_cluster=representative,
+            )
+        )
+        updated["merge"] += result.rowcount or 0
+        # Every source cluster maps to the merged name so a replace
+        # re-transcription (which re-derives the ORIGINAL cluster ids)
+        # restores the merge; aliases keep the group renameable later.
+        for cluster in op.clusters:
+            clusters_map[cluster] = op.to_name
+            if cluster != representative:
+                aliases[cluster] = representative
+        clusters_map[representative] = op.to_name
+        # Chained merges: re-point aliases whose representative was itself
+        # merged away, so the whole group still follows one representative.
+        for source, rep in list(aliases.items()):
+            if rep in op.clusters and rep != representative:
+                aliases[source] = representative
+                clusters_map[source] = op.to_name
+        history.append({
+            "op": "merge", "at": now_iso,
+            "clusters": op.clusters, "to_cluster": representative,
+            "to_name": op.to_name,
+        })
+
+    for op in req.reassign:
+        values: Dict[str, Any] = {"speaker_auto": preserve_auto, "speaker": op.to_name}
+        if op.to_cluster is not None:
+            values["speaker_cluster"] = op.to_cluster
+        result = await db.execute(
+            sa_update(Transcription)
+            .where(
+                Transcription.meeting_id == meeting_id,
+                Transcription.segment_id.in_(op.segment_ids),
+            )
+            .values(**values)
+        )
+        updated["reassign"] += result.rowcount or 0
+        history.append({
+            "op": "reassign", "at": now_iso,
+            "segment_count": len(op.segment_ids),
+            "to_name": op.to_name, "to_cluster": op.to_cluster,
+        })
+
+    # Persist corrections so mode="replace" re-transcription re-applies them.
+    corrections_state["clusters"] = clusters_map
+    corrections_state["aliases"] = aliases
+    corrections_state["history"] = (list(corrections_state.get("history") or []) + history)[-50:]
+    corrections_state["updated_at"] = now_iso
+    data["speaker_corrections"] = corrections_state
+    meeting.data = data
+    attributes.flag_modified(meeting, "data")
+
+    from .drive_export import requeue_drive_export
+
+    drive_requeued = requeue_drive_export(meeting, triggered_by="speaker_update")
+
+    await db.commit()
+
+    # AFTER commit: drop the Redis live-segments cache so the merged REST
+    # response (Redis wins over Postgres) serves the corrected names.
+    from .final_transcription import _clear_live_transcript_cache
+
+    cache_cleared = await _clear_live_transcript_cache(meeting_id)
+
+    speakers = sorted({
+        name for (name,) in (await db.execute(
+            select(Transcription.speaker)
+            .where(Transcription.meeting_id == meeting_id)
+            .distinct()
+        )).all()
+        if name
+    })
+
+    logger.info(
+        "Speaker corrections applied for meeting %s: %s (cache_cleared=%s drive_requeued=%s)",
+        meeting_id, updated, cache_cleared, drive_requeued,
+    )
+    return SpeakerUpdateResponse(
+        meeting_id=meeting_id,
+        updated=updated,
+        speakers=speakers,
+        redis_cache_cleared=cache_cleared,
+        drive_export_requeued=drive_requeued,
     )

@@ -1,0 +1,8 @@
+{
+  "task": "calendar-kabosu-drive",
+  "size": "L",
+  "decided_after": "approved plan file ++plan++カレンダー連携-カボス自動参加とDrive保存.md",
+  "rationale": "Adds external Google Calendar and Drive integration, re-enables an optional service through Compose, and adds a meeting-api sweep that writes to external storage.",
+  "plan": ".pipeline/plans/calendar-kabosu-drive/plan.md",
+  "verification_contract": ".pipeline/plans/calendar-kabosu-drive/verification-contract.md"
+}

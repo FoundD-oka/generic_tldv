@@ -6,6 +6,8 @@ import type {
   BotConfigUpdate,
   Platform,
   RecordingData,
+  SpeakerUpdatePayload,
+  SpeakerUpdateResult,
 } from "@/types/vexa";
 
 class VexaAPIError extends Error {
@@ -178,6 +180,8 @@ export const vexaAPI = {
       absolute_end_time: string;
       created_at: string;
       segment_id?: string | null;
+      speaker_cluster?: string | null;
+      speaker_auto?: string | null;
     }
     interface RawTranscriptResponse {
       id: number;
@@ -229,6 +233,8 @@ export const vexaAPI = {
       session_uid: "",
       created_at: seg.created_at,
       segment_id: seg.segment_id || undefined,
+      speaker_cluster: seg.speaker_cluster || undefined,
+      speaker_auto: seg.speaker_auto || undefined,
     }));
 
     // Extract recordings from response (populated from meeting.data.recordings by backend)
@@ -473,6 +479,22 @@ export const vexaAPI = {
 
   getRecordingVideoUrl(recordingId: number, mediaFileId: number): string {
     return withBasePath(`/api/vexa/recordings/${recordingId}/media/${mediaFileId}/raw`);
+  },
+
+  // Bulk-correct transcript speakers: rename / merge / reassign (issue #23)
+  async updateSpeakers(
+    meetingId: string | number,
+    payload: SpeakerUpdatePayload
+  ): Promise<SpeakerUpdateResult> {
+    const response = await fetch(
+      withBasePath(`/api/vexa/meetings/${meetingId}/transcripts/speakers`),
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }
+    );
+    return handleResponse<SpeakerUpdateResult>(response);
   },
 
   // Transcribe a recorded meeting (deferred transcription)

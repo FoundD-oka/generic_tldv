@@ -1,0 +1,17 @@
+{
+  "timestamp": "2026-07-08T01:14:24.775479+00:00",
+  "task_id": "speaker-attribution-voiceprint",
+  "size": "L",
+  "status": "pass",
+  "mode": "not_configured",
+  "policy": "optional",
+  "required": false,
+  "provider": "chatgpt-pro-web",
+  "errors": [],
+  "warnings": [],
+  "artifacts": {
+    "brief": ".pipeline/plans/speaker-attribution-voiceprint/consultation-brief.md",
+    "response": ".pipeline/evidence/speaker-attribution-voiceprint/external-consultation/chatgpt-pro.md",
+    "summary": ".pipeline/evidence/speaker-attribution-voiceprint/external-consultation/consultation-summary.json"
+  }
+}

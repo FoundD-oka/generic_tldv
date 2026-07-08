@@ -280,6 +280,8 @@ async def _get_full_transcript_segments(
                 absolute_start_time=abs_start, absolute_end_time=abs_end,
                 segment_id=seg.segment_id,
                 session_uid=seg.session_uid,
+                speaker_cluster=getattr(seg, "speaker_cluster", None),
+                speaker_auto=getattr(seg, "speaker_auto", None),
             )
         except Exception as e:
             logger.error(f"[Segments] PG segment error {key}: {e}")
@@ -342,6 +344,8 @@ async def _get_full_transcript_segments(
                 session_uid=d.get("session_uid"),
                 speaker_mapping_status=d.get("speaker_mapping_status"),
                 track_id=d.get("track_id") or d.get("speaker_track_id"),
+                speaker_cluster=d.get("speaker_cluster"),
+                speaker_auto=d.get("speaker_auto"),
             )
         except Exception as e:
             logger.error(f"[Segments] Redis segment error {seg_key}: {e}")

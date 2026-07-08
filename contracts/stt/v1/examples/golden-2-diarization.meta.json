@@ -1,0 +1,8 @@
+{
+  "fixture": "stt.v1/golden-2-diarization",
+  "contract": "stt.v1",
+  "provenance": "synthetic",
+  "recorded": "2026-07-08",
+  "source": "hand-authored Soniox stt-async-v5 token payload + deterministic fold via soniox_adapter.fold_tokens_to_segments",
+  "notes": "Diarization extension golden: 2 alternating Japanese speakers; asserts speaker-boundary segmentation and string cluster ids. Replayed by services/transcription-service/tests/test_soniox_adapter.py."
+}

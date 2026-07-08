@@ -1,8 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { cn, parseUTCTimestamp } from "@/lib/utils";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Play } from "lucide-react";
+import { Play, Pencil } from "lucide-react";
 import type { TranscriptSegment as TranscriptSegmentType, SpeakerColor } from "@/types/vexa";
 
 interface TranscriptSegmentProps {
@@ -15,6 +15,13 @@ interface TranscriptSegmentProps {
   onClickSegment?: () => void;
   /** When false, hide the avatar and speaker name (consecutive segments from same speaker). Defaults to true. */
   showSpeakerHeader?: boolean;
+  /** 会議後の話者編集（issue #24）: 有効時は話者名クリックでインライン編集 */
+  canEdit?: boolean;
+  /** scope: "speaker" = クラスタ/同名一括、"segment" = この発話のみ */
+  onSpeakerEdit?: (toName: string, scope: "speaker" | "segment") => void;
+  /** 範囲選択（まとめて話者変更）用 */
+  isSelected?: boolean;
+  onToggleSelect?: () => void;
 }
 
 function formatTimestamp(seconds: number): string {
@@ -40,17 +47,6 @@ function formatAbsoluteTimestamp(utcAbsoluteTime: string): string {
     console.error("Error parsing absolute timestamp:", error);
     return "00:00:00";
   }
-}
-
-function getInitials(name: string | null | undefined): string {
-  if (!name) return "??";
-  return name
-    .split(" ")
-    .map((n) => n[0])
-    .filter(Boolean)
-    .join("")
-    .toUpperCase()
-    .slice(0, 2) || "??";
 }
 
 function highlightText(text: string, query: string): React.ReactNode {
@@ -83,12 +79,32 @@ export function TranscriptSegment({
   isActivePlayback,
   onClickSegment,
   showSpeakerHeader = true,
+  canEdit,
+  onSpeakerEdit,
+  isSelected,
+  onToggleSelect,
 }: TranscriptSegmentProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState("");
+
   // Always display absolute time from the feed when available (device-independent).
   // For grouped segments, callers should pass the FIRST segment's `absolute_start_time` as `segment.absolute_start_time`.
   const displayTimestamp = segment.absolute_start_time
     ? formatAbsoluteTimestamp(segment.absolute_start_time)
     : formatTimestamp(segment.start_time);
+
+  const startEditing = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditValue(segment.speaker || "");
+    setIsEditing(true);
+  };
+
+  const submitEdit = (scope: "speaker" | "segment") => {
+    const name = editValue.trim();
+    setIsEditing(false);
+    if (!name || name === segment.speaker) return;
+    onSpeakerEdit?.(name, scope);
+  };
 
   return (
     <div
@@ -98,28 +114,102 @@ export function TranscriptSegment({
         showSpeakerHeader ? "px-3 pt-2 pb-0.5" : "px-3 py-0",
         isHighlighted && "bg-yellow-50 dark:bg-yellow-900/20",
         isActivePlayback && "bg-primary/10 border-l-2 border-primary",
-        !isHighlighted && !isActivePlayback && "hover:bg-muted/50",
+        isSelected && "bg-sky-50 dark:bg-sky-950/30 ring-1 ring-sky-300 dark:ring-sky-800",
+        !isHighlighted && !isActivePlayback && !isSelected && "hover:bg-muted/50",
         onClickSegment && "cursor-pointer"
       )}
     >
+      {/* 範囲選択チェックボックス（編集可能時のみ、ホバー/選択中に表示） */}
+      {onToggleSelect && (
+        <div
+          className={cn(
+            "flex items-start pt-1 transition-opacity",
+            isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+          )}
+        >
+          <input
+            type="checkbox"
+            checked={!!isSelected}
+            onChange={() => onToggleSelect()}
+            onClick={(e) => e.stopPropagation()}
+            aria-label="この発話を選択"
+            className="h-3.5 w-3.5 accent-sky-600 cursor-pointer"
+          />
+        </div>
+      )}
 
       {/* Content */}
       <div className="flex-1 min-w-0">
         {showSpeakerHeader && (
           <div className="flex items-center gap-2 mb-0.5">
-            <span className={cn("font-medium text-sm", speakerColor.text)}>
-              {segment.speaker || ""}
-            </span>
+            {isEditing ? (
+              <span
+                className="flex flex-wrap items-center gap-1.5"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <input
+                  autoFocus
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") submitEdit("speaker");
+                    if (e.key === "Escape") setIsEditing(false);
+                  }}
+                  placeholder="話者名"
+                  className="h-6 w-36 rounded border bg-background px-2 text-sm"
+                  aria-label="話者名を編集"
+                />
+                <button
+                  type="button"
+                  onClick={() => submitEdit("speaker")}
+                  className="rounded border border-primary/40 bg-primary/10 px-2 py-0.5 text-[11px] text-primary hover:bg-primary/20"
+                  title="同じ声（クラスタ）の発話すべてを変更します"
+                >
+                  この話者を一括変更
+                </button>
+                <button
+                  type="button"
+                  onClick={() => submitEdit("segment")}
+                  className="rounded border px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-muted"
+                  title="この発話だけを変更します"
+                >
+                  この発話のみ
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsEditing(false)}
+                  className="px-1 py-0.5 text-[11px] text-muted-foreground hover:text-foreground"
+                >
+                  キャンセル
+                </button>
+              </span>
+            ) : (
+              <span
+                className={cn(
+                  "font-medium text-sm inline-flex items-center gap-1",
+                  speakerColor.text,
+                  canEdit && "cursor-pointer hover:underline decoration-dotted underline-offset-2"
+                )}
+                onClick={canEdit ? startEditing : undefined}
+                title={canEdit ? "クリックで話者名を変更" : undefined}
+                role={canEdit ? "button" : undefined}
+              >
+                {segment.speaker || ""}
+                {canEdit && (
+                  <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-60 transition-opacity" />
+                )}
+              </span>
+            )}
             <span className="text-xs text-muted-foreground">
               {displayTimestamp}
             </span>
-            {onClickSegment && (
+            {onClickSegment && !isEditing && (
               <span
                 className={cn(
-                  "ml-auto inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground transition-all",
+                  "ml-auto inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground transition-opacity",
                   isActivePlayback
                     ? "opacity-100 border-primary/40 bg-primary/10 text-primary"
-                    : "opacity-80 group-hover:opacity-100 group-hover:border-primary/40 group-hover:bg-primary/10 group-hover:text-primary"
+                    : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 group-hover:border-primary/40 group-hover:bg-primary/10 group-hover:text-primary"
                 )}
                 aria-label="この時刻から再生"
                 title="この発話から再生"

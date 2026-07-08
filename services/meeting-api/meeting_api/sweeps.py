@@ -757,6 +757,101 @@ async def _sweep_final_transcription_jobs(
     return swept
 
 
+async def _sweep_drive_export_jobs(
+    db_session_factory: Callable[[], AsyncSession],
+) -> int:
+    """Process queued Google Drive export jobs for calendar-origin meetings."""
+    from sqlalchemy import text
+    from .drive_export import (
+        DRIVE_EXPORT_MAX_ATTEMPTS,
+        DRIVE_EXPORT_SWEEP_LIMIT,
+        DriveExportError,
+        _set_drive_export_state,
+        drive_export_retry_eligible,
+        run_drive_export,
+    )
+
+    swept = 0
+    async with db_session_factory() as db:
+        rows = (await db.execute(text("""
+            SELECT id FROM meetings
+            WHERE status IN (:completed, :failed)
+              AND data #>> '{calendar_event,source}' = 'google_calendar'
+              AND (
+                data #>> '{drive_export,status}' = 'queued'
+                OR (
+                  data #>> '{drive_export,status}' = 'failed'
+                  AND COALESCE(data #>> '{drive_export,retryable}', 'false') = 'true'
+                )
+              )
+            ORDER BY id DESC
+            LIMIT :limit
+        """), {
+            "completed": MeetingStatus.COMPLETED.value,
+            "failed": MeetingStatus.FAILED.value,
+            "limit": DRIVE_EXPORT_SWEEP_LIMIT,
+        })).fetchall()
+
+        for row in rows:
+            meeting_id = row[0]
+            meeting = (await db.execute(
+                select(Meeting)
+                .where(Meeting.id == meeting_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )).scalars().first()
+            if meeting is None:
+                continue
+
+            data = dict(meeting.data or {}) if isinstance(meeting.data, dict) else {}
+            job = dict(data.get("drive_export") or {})
+            status = job.get("status")
+            if status == "done" or status == "running":
+                continue
+            if status == "failed" and not job.get("retryable"):
+                continue
+            if not drive_export_retry_eligible(job):
+                continue
+            attempts = int(job.get("attempts") or 0)
+            if attempts >= DRIVE_EXPORT_MAX_ATTEMPTS:
+                _set_drive_export_state(
+                    meeting,
+                    status="failed",
+                    retryable=False,
+                    last_error="Drive export retry budget exhausted",
+                    failed_at=datetime.utcnow().isoformat(),
+                    updated_at=datetime.utcnow().isoformat(),
+                )
+                await db.commit()
+                logger.error(
+                    "[sweep] drive-export meeting_id=%s exhausted retry budget attempts=%s",
+                    meeting_id,
+                    attempts,
+                )
+                continue
+
+            try:
+                await run_drive_export(meeting_id, db)
+                swept += 1
+                logger.info("[sweep] drive-export succeeded meeting_id=%s", meeting_id)
+            except DriveExportError as exc:
+                logger.warning(
+                    "[sweep] drive-export failure meeting_id=%s retryable=%s detail=%s",
+                    meeting_id,
+                    exc.retryable,
+                    str(exc)[:200],
+                )
+            except Exception as exc:
+                logger.error(
+                    "[sweep] drive-export unexpected failure meeting_id=%s: %s",
+                    meeting_id,
+                    str(exc)[:200],
+                    exc_info=True,
+                )
+
+    return swept
+
+
 async def start_sweeps(
     db_session_factory: Callable[[], AsyncSession],
 ) -> None:
@@ -768,6 +863,7 @@ async def start_sweeps(
       - Pack D.2: container-stop outbox consumer (durable retry + DLQ)
       - Pack E.1-sibling: unfinalized recordings repair/finalize
       - Issue #2: final transcription replacement
+      - Calendar-origin Drive export after final transcription
 
     Pattern mirrors webhook_retry_worker.start_retry_worker — same
     shape, different responsibility.
@@ -821,6 +917,16 @@ async def start_sweeps(
                 )
         except Exception as e:
             logger.error(f"[sweeps] iteration {sweep_iterations} final-transcription error: {e}", exc_info=True)
+
+        try:
+            drive_exported = await _sweep_drive_export_jobs(db_session_factory)
+            if drive_exported > 0:
+                logger.info(
+                    f"[sweeps] iteration {sweep_iterations}: "
+                    f"exported {drive_exported} calendar transcript(s) to Drive"
+                )
+        except Exception as e:
+            logger.error(f"[sweeps] iteration {sweep_iterations} drive-export error: {e}", exc_info=True)
 
         try:
             stop_summary = await _sweep_container_stops()

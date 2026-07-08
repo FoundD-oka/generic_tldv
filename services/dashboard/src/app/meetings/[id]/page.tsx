@@ -1114,13 +1114,19 @@ export default function MeetingDetailPage() {
       </div>
     ) : missingRequestedRecording ? (
       <div className="flex items-center gap-2 px-4 py-2 bg-muted/50 rounded-lg border text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        録画を最終処理中...
+        <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+        <div className="flex flex-col">
+          <span>録画を最終処理中...</span>
+          <span className="text-xs text-muted-foreground/80">録画の長さによって数分かかることがあります</span>
+        </div>
       </div>
     ) : (
       <div className="flex items-center gap-2 px-4 py-2 bg-muted/50 rounded-lg border text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        録画を処理中...
+        <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+        <div className="flex flex-col">
+          <span>録画を処理中...</span>
+          <span className="text-xs text-muted-foreground/80">録画の長さによって数分かかることがあります</span>
+        </div>
       </div>
     )
   ) : null;
@@ -1351,11 +1357,11 @@ export default function MeetingDetailPage() {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem onClick={() => handleOpenInProvider("chatgpt")}>
-                      <Image src="/icons/icons8-chatgpt-100.png" alt="ChatGPT" width={16} height={16} className="object-contain mr-2 invert dark:invert-0" />
+                      <Image src={withBasePath("/icons/icons8-chatgpt-100.png")} alt="ChatGPT" width={16} height={16} unoptimized className="object-contain mr-2 invert dark:invert-0" />
                       ChatGPTで開く
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => handleOpenInProvider("perplexity")}>
-                      <Image src="/icons/icons8-perplexity-ai-100.png" alt="Perplexity" width={16} height={16} className="object-contain mr-2" />
+                      <Image src={withBasePath("/icons/icons8-perplexity-ai-100.png")} alt="Perplexity" width={16} height={16} unoptimized className="object-contain mr-2" />
                       Perplexityで開く
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
@@ -1658,11 +1664,11 @@ export default function MeetingDetailPage() {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem onClick={() => handleOpenInProvider("chatgpt")} disabled={transcripts.length === 0}>
-                      <Image src="/icons/icons8-chatgpt-100.png" alt="ChatGPT" width={16} height={16} className="object-contain mr-2 invert dark:invert-0" />
+                      <Image src={withBasePath("/icons/icons8-chatgpt-100.png")} alt="ChatGPT" width={16} height={16} unoptimized className="object-contain mr-2 invert dark:invert-0" />
                       ChatGPTで開く
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => handleOpenInProvider("perplexity")} disabled={transcripts.length === 0}>
-                      <Image src="/icons/icons8-perplexity-ai-100.png" alt="Perplexity" width={16} height={16} className="object-contain mr-2" />
+                      <Image src={withBasePath("/icons/icons8-perplexity-ai-100.png")} alt="Perplexity" width={16} height={16} unoptimized className="object-contain mr-2" />
                       Perplexityで開く
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
@@ -2056,14 +2062,15 @@ export default function MeetingDetailPage() {
               <div className="flex items-center gap-3">
                 <div className="h-8 w-8 rounded-lg flex items-center justify-center overflow-hidden bg-background">
                   <Image
-                    src={currentMeeting.platform === "google_meet"
+                    src={withBasePath(currentMeeting.platform === "google_meet"
                       ? "/icons/icons8-google-meet-96.png"
                       : currentMeeting.platform === "teams"
                       ? "/icons/icons8-teams-96.png"
-                      : "/icons/icons8-zoom-96.png"}
+                      : "/icons/icons8-zoom-96.png")}
                     alt={platformConfig.name}
                     width={32}
                     height={32}
+                    unoptimized
                     className="object-contain"
                   />
                 </div>

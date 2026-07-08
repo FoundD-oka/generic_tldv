@@ -11,6 +11,13 @@
 TRANSCRIPTION_SERVICE_URL=https://transcription.vexa.ai/v1/audio/transcriptions
 TRANSCRIPTION_SERVICE_TOKEN=your-token
 
+# Optional: Soniox async diarization for the post-meeting (deferred) transcript
+# (issues #21/#22 — per-segment speaker clusters + cluster naming).
+# Set the model to stt-async-* to route the deferred path to Soniox and give
+# transcription-service the API key. Leave unset to keep Whisper (DOM mapping).
+#DEFERRED_TRANSCRIPTION_MODEL=stt-async-v5
+#SONIOX_API_KEY=your-soniox-key
+
 # ============================================================================
 # Ports — change these to avoid conflicts with other stacks
 # ============================================================================
@@ -69,6 +76,34 @@ MINIO_SECURE=false
 
 # Local GPU transcription (uncomment to self-host)
 # LOCAL_TRANSCRIPTION=true
+
+# Kabosu Calendar auto-join + Drive export (optional; run compose with profile `calendar`)
+# Flow:
+#   1. Invite e@bonginkan.ai to a Google Calendar event with a Meet URL.
+#      If Kabosu/Codex should create test meetings too, the OAuth token needs
+#      calendar.events in addition to calendar.readonly and drive.file.
+#   2. calendar-service starts カボス shortly before the event.
+#   3. meeting-api exports the final transcript Markdown to the Drive folder.
+# Get KABOSU_GOOGLE_REFRESH_TOKEN with:
+#   GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=... scripts/google-oauth-refresh-token.py
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+KABOSU_CALENDAR_MODE=single_account
+KABOSU_CALENDAR_ACCOUNT_EMAIL=e@bonginkan.ai
+KABOSU_GOOGLE_REFRESH_TOKEN=
+KABOSU_BOT_OWNER_USER_ID=
+# KABOSU_DRIVE_FOLDER_ID may be a My Drive or Shared Drive folder id
+# (Shared Drive uploads are supported via supportsAllDrives).
+KABOSU_DRIVE_FOLDER_ID=
+KABOSU_BOT_NAME=カボス
+KABOSU_BOT_LANGUAGE=ja
+KABOSU_VOICE_AGENT_ENABLED=true
+KABOSU_DRIVE_EXPORT_ENABLED=true
+# Set to true to export only Google Calendar-origin meetings.
+# Default (false) exports every completed meeting, including manual joins.
+KABOSU_DRIVE_EXPORT_CALENDAR_ONLY=false
+CALENDAR_SYNC_INTERVAL=300
+CALENDAR_LEAD_TIME=2
 
 # Optional Piper TTS service. Kabosu wake replies use Aivis Cloud audio_base64;
 # enable compose profile `tts` only when you need text /speak through Piper.

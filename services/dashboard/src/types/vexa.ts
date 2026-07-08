@@ -74,6 +74,25 @@ export interface TranscriptSegment {
   updated_at?: string;
   /** Stable segment identity from bot: {session_uid}:{speakerId}:{seq} */
   segment_id?: string;
+  /** Acoustic cluster id from STT diarization (anonymous, per-meeting) */
+  speaker_cluster?: string;
+  /** Original auto-assigned speaker label (undo baseline) */
+  speaker_auto?: string;
+}
+
+/** Payload for PATCH /meetings/{id}/transcripts/speakers (issue #23) */
+export interface SpeakerUpdatePayload {
+  rename?: Array<{ from_cluster?: string; from_name?: string; to_name: string }>;
+  merge?: Array<{ clusters: string[]; to_name: string; to_cluster?: string }>;
+  reassign?: Array<{ segment_ids: string[]; to_name: string; to_cluster?: string }>;
+}
+
+export interface SpeakerUpdateResult {
+  meeting_id: number;
+  updated: Record<string, number>;
+  speakers: string[];
+  redis_cache_cleared: boolean;
+  drive_export_requeued: boolean;
 }
 
 export interface CreateBotRequest {
