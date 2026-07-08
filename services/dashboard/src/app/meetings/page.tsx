@@ -28,21 +28,67 @@ import { usePendingMeeting } from "@/hooks/use-pending-meeting";
 import { toast } from "sonner";
 import { withBasePath } from "@/lib/base-path";
 import { DEFAULT_DASHBOARD_BRAND } from "@/lib/dashboard-brand";
-import { getDashboardCopy } from "@/lib/dashboard-copy";
+import { getDashboardCopy, type DashboardCopy } from "@/lib/dashboard-copy";
 import { useRuntimeConfig } from "@/hooks/use-runtime-config";
 
 function PlatformIcon({ platform }: { platform: string }) {
   if (platform === "google_meet") {
-    return <Image src="/icons/icons8-google-meet-96.png" alt="Google Meet" width={20} height={20} className="rounded" />;
+    return (
+      <Image
+        src={withBasePath("/icons/icons8-google-meet-96.png")}
+        alt="Google Meet"
+        width={20}
+        height={20}
+        className="rounded"
+        unoptimized
+      />
+    );
   }
   if (platform === "teams") {
-    return <Image src="/icons/icons8-teams-96.png" alt="Teams" width={20} height={20} className="rounded" />;
+    return (
+      <Image
+        src={withBasePath("/icons/icons8-teams-96.png")}
+        alt="Teams"
+        width={20}
+        height={20}
+        className="rounded"
+        unoptimized
+      />
+    );
   }
   if (platform === "browser_session") {
     return <Monitor className="h-5 w-5 text-muted-foreground" />;
   }
-  return <Image src="/icons/icons8-zoom-96.png" alt="Zoom" width={20} height={20} className="rounded" />;
+  return (
+    <Image
+      src={withBasePath("/icons/icons8-zoom-96.png")}
+      alt="Zoom"
+      width={20}
+      height={20}
+      className="rounded"
+      unoptimized
+    />
+  );
 }
+
+// Maps the (always Japanese) label returned by getDetailedStatus() to a
+// dashboard-copy status description key, so the status badge tooltip can be
+// localized even though the underlying label text is not.
+const STATUS_LABEL_TO_DESC_KEY: Record<string, keyof DashboardCopy["meetings"]["statusDescriptions"]> = {
+  "停止済み": "stopped",
+  "終了": "meetingEnded",
+  "退出済み": "kicked",
+  "入室拒否": "admissionRejected",
+  "完了": "completed",
+  "失敗": "failed",
+  "要対応": "needsHumanHelp",
+  "記録中": "active",
+  "参加中": "joining",
+  "入室待ち": "awaitingAdmission",
+  "受付済み": "requested",
+  "停止中": "stopping",
+  "不明": "unknown",
+};
 
 function StatusDot({ status }: { status: string }) {
   return (
@@ -77,9 +123,11 @@ function formatDuration(startTime: string | null, endTime: string | null): strin
 // API timestamp as UTC. date-fns format() then renders in browser-local tz.
 // Pre-fix: new Date(dateStr) with unsuffixed-ISO was treated as local time,
 // producing a tz-shifted display.
-function formatDate(dateStr: string): string {
+// Absolute date/time including the year, used as a hover tooltip for the
+// relative time shown in the meetings table (e.g. "7日前").
+function formatDateWithYear(dateStr: string): string {
   const d = parseUTCTimestamp(dateStr);
-  return format(d, "M月d日 HH:mm", { locale: ja });
+  return format(d, "yyyy年M月d日 HH:mm", { locale: ja });
 }
 
 export default function MeetingsPage() {
@@ -328,7 +376,7 @@ export default function MeetingsPage() {
                   </tr>
                 ) : (
                   filteredMeetings.map((meeting) => (
-                    <MeetingRow key={meeting.id} meeting={meeting} />
+                    <MeetingRow key={meeting.id} meeting={meeting} copy={copy} />
                   ))
                 )}
               </tbody>
@@ -346,11 +394,22 @@ export default function MeetingsPage() {
   );
 }
 
-function MeetingRow({ meeting }: { meeting: Meeting }) {
+function MeetingRow({ meeting, copy }: { meeting: Meeting; copy: DashboardCopy["meetings"] }) {
   const router = useRouter();
   const statusConfig = getDetailedStatus(meeting.status, meeting.data);
-  const displayTitle = meeting.data?.name || meeting.data?.title || meeting.platform_specific_id;
   const participants = meeting.data?.participants || [];
+  const rawTitle = meeting.data?.name || meeting.data?.title;
+  const participantsHeading =
+    !rawTitle && participants.length > 0
+      ? copy.participantsMeetingTitle.replace("{names}", participants.join(", "))
+      : null;
+  const displayTitle = rawTitle || participantsHeading || meeting.platform_specific_id;
+  const showCodeBelow = Boolean(rawTitle || participantsHeading);
+
+  const descKey = STATUS_LABEL_TO_DESC_KEY[statusConfig.label];
+  const statusDescription = (descKey && copy.statusDescriptions[descKey]) || statusConfig.description;
+
+  const timeSource = meeting.start_time || meeting.created_at;
 
   return (
       <tr
@@ -362,14 +421,14 @@ function MeetingRow({ meeting }: { meeting: Meeting }) {
         </td>
         <td className="px-5 py-3">
           <span className="font-medium">{displayTitle}</span>
-          {(meeting.data?.name || meeting.data?.title) && (
+          {showCodeBelow && (
             <span className="block text-xs text-muted-foreground font-mono mt-0.5">
               {meeting.platform_specific_id}
             </span>
           )}
         </td>
         <td className="px-5 py-3">
-          <span className="inline-flex items-center gap-1.5">
+          <span className="inline-flex items-center gap-1.5" title={statusDescription}>
             <StatusDot status={meeting.status} />
             <span
               className={cn(
@@ -387,7 +446,10 @@ function MeetingRow({ meeting }: { meeting: Meeting }) {
         <td className="px-5 py-3 text-muted-foreground">
           {formatDuration(meeting.start_time, meeting.end_time)}
         </td>
-        <td className="hidden lg:table-cell px-5 py-3 text-muted-foreground text-xs">
+        <td
+          className="hidden lg:table-cell px-5 py-3 text-muted-foreground text-xs"
+          title={participants.length > 2 ? participants.join(", ") : undefined}
+        >
           {participants.length > 0 ? (
             <span>
               {participants.slice(0, 2).join(", ")}
@@ -398,15 +460,10 @@ function MeetingRow({ meeting }: { meeting: Meeting }) {
           )}
         </td>
         <td className="hidden sm:table-cell px-5 py-3 text-muted-foreground text-xs whitespace-nowrap">
-          {meeting.start_time ? (
-            <>
-              {formatDate(meeting.start_time)}
-              <span className="block text-[10px] text-muted-foreground/70">
-                {formatDistanceToNow(parseUTCTimestamp(meeting.start_time), { addSuffix: true, locale: ja })}
-              </span>
-            </>
-          ) : meeting.created_at ? (
-            formatDate(meeting.created_at)
+          {timeSource ? (
+            <span title={formatDateWithYear(timeSource)}>
+              {formatDistanceToNow(parseUTCTimestamp(timeSource), { addSuffix: true, locale: ja })}
+            </span>
           ) : (
             "—"
           )}

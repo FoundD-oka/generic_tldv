@@ -307,6 +307,14 @@ services:
       - CAPTURE_MODES=${CAPTURE_MODES:-audio}
       - TRANSCRIPTION_SERVICE_URL=${TRANSCRIPTION_SERVICE_URL:-}
       - TRANSCRIPTION_SERVICE_TOKEN=${TRANSCRIPTION_SERVICE_TOKEN:-}
+      # Deferred (post-meeting) STT model; stt-async-* routes to the Soniox
+      # diarization adapter in transcription-service (issues #21/#22).
+      - DEFERRED_TRANSCRIPTION_MODEL=${DEFERRED_TRANSCRIPTION_MODEL:-large-v3-turbo}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - KABOSU_GOOGLE_REFRESH_TOKEN=${KABOSU_GOOGLE_REFRESH_TOKEN:-}
+      - KABOSU_DRIVE_FOLDER_ID=${KABOSU_DRIVE_FOLDER_ID:-}
+      - KABOSU_DRIVE_EXPORT_ENABLED=${KABOSU_DRIVE_EXPORT_ENABLED:-true}
       - WAKE_STT_URL=${WAKE_STT_URL:-}
       - WAKE_STT_TOKEN=${WAKE_STT_TOKEN:-}
       - WAKE_STT_API_TOKEN=${WAKE_STT_API_TOKEN:-}
@@ -585,34 +593,41 @@ services:
       - vexa
     restart: "no"
 
-  # calendar-service: NO-SHIP for 0.10 — not included in release
-  # calendar-service:
-  #   build:
-  #     context: ../..
-  #     dockerfile: services/calendar-service/Dockerfile
-  #   image: vexaai/calendar-service:${IMAGE_TAG}
-  #   ports:
-  #     - "${CALENDAR_SERVICE_PORT:-8050}:8050"
-  #   environment:
-  #     - DB_HOST=postgres
-  #     - DB_PORT=5432
-  #     - DB_NAME=${DB_NAME:-vexa}
-  #     - DB_USER=${DB_USER:-postgres}
-  #     - DB_PASSWORD=${DB_PASSWORD:-postgres}
-  #     - DB_SSL_MODE=disable
-  #     - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
-  #     - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
-  #     - MEETING_API_URL=http://meeting-api:8080
-  #     - BOT_API_TOKEN=${BOT_API_TOKEN:-}
-  #     - SYNC_INTERVAL_SECONDS=${CALENDAR_SYNC_INTERVAL:-300}
-  #     - DEFAULT_LEAD_TIME_MINUTES=${CALENDAR_LEAD_TIME:-2}
-  #     - LOG_LEVEL=${LOG_LEVEL:-INFO}
-  #   depends_on:
-  #     - postgres
-  #     - meeting-api
-  #   networks:
-  #     - vexa
-  #   restart: unless-stopped
+  calendar-service:
+    profiles: ["calendar"]
+    build:
+      context: ../..
+      dockerfile: services/calendar-service/Dockerfile
+    image: vexaai/calendar-service:${IMAGE_TAG}
+    ports:
+      - "${CALENDAR_SERVICE_PORT:-8050}:8050"
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-vexa}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_SSL_MODE=disable
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - KABOSU_CALENDAR_MODE=${KABOSU_CALENDAR_MODE:-single_account}
+      - KABOSU_GOOGLE_REFRESH_TOKEN=${KABOSU_GOOGLE_REFRESH_TOKEN:-}
+      - KABOSU_BOT_OWNER_USER_ID=${KABOSU_BOT_OWNER_USER_ID:-}
+      - KABOSU_CALENDAR_ACCOUNT_EMAIL=${KABOSU_CALENDAR_ACCOUNT_EMAIL:-}
+      - KABOSU_BOT_NAME=${KABOSU_BOT_NAME:-カボス}
+      - KABOSU_BOT_LANGUAGE=${KABOSU_BOT_LANGUAGE:-ja}
+      - KABOSU_VOICE_AGENT_ENABLED=${KABOSU_VOICE_AGENT_ENABLED:-true}
+      - MEETING_API_URL=http://meeting-api:8080
+      - BOT_API_TOKEN=${BOT_API_TOKEN:-}
+      - SYNC_INTERVAL_SECONDS=${CALENDAR_SYNC_INTERVAL:-300}
+      - DEFAULT_LEAD_TIME_MINUTES=${CALENDAR_LEAD_TIME:-2}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    depends_on:
+      - postgres
+      - meeting-api
+    networks:
+      - vexa
+    restart: unless-stopped
 
 volumes:
   redis-data:

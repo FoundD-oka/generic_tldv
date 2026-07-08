@@ -1,0 +1,37 @@
+{
+  "schema_version": "1.0",
+  "task_id": "speaker-attribution-voiceprint",
+  "runtime_profile": "claude-code",
+  "size": "L",
+  "scope_note": "Phase 0 + Phase 1 only (issues #21-#24). Phases 2-4 (#25-#27) are separate L sub-deliverables with their own contracts.",
+  "result": {
+    "at_pass": true,
+    "fp_pass": true,
+    "nft_pass": true,
+    "hd_resolved": true,
+    "blocking_findings": 0
+  },
+  "evidence": {
+    "session_ledger": ".pipeline/sessions/speaker-attribution-voiceprint/events.jsonl",
+    "sidechain_synthesis": ".pipeline/evidence/speaker-attribution-voiceprint/sidechain-synthesis.md",
+    "verification": [
+      "cd services/meeting-api && PYTHONPATH=.:../../libs/admin-models python -m pytest tests -q --ignore=tests/test_integration_live.py -> 375 passed, 10 skipped",
+      "python -m pytest services/transcription-service/tests/test_soniox_adapter.py -q -> 11 passed (golden replay deterministic)",
+      "cd services/dashboard && npm test -> 73 passed / 13 files",
+      "cd services/dashboard && VEXA_API_URL=http://localhost:8056 npm run build -> success",
+      "python3 -m compileall services/meeting-api/meeting_api services/transcription-service libs/schema-sync -> OK",
+      "bash .claude/hooks/adapter-validate.sh -> pass (soniox-stt adapter)",
+      "bash .claude/hooks/preflight.sh -> warn (schema path flag only), diff_hash sha256:75f30469dbe6e6127afcc651ff1a51078e2abf576368125534a27a92e08b8f37",
+      "bash .claude/hooks/hd-gate.sh -> pass (no unresolved recurring categories)",
+      "node .gitnexus/run.cjs detect-changes -r generic_tldv -> scoped to expected symbols"
+    ],
+    "review": [
+      "Codex rescue sidechain adversarial review: 2 blockers + 3 majors + 1 minor, all fixed with regression tests (see sidechain-synthesis.md); findings recorded via hd-record.sh (source=tribunal)"
+    ]
+  },
+  "notes": [
+    "Deploy ordering: run scripts/migrations/20260708_add_speaker_cluster.py up BEFORE deploying meeting-api (507K-row transcriptions; CONCURRENTLY index). Startup schema-sync skips the online_only index by design.",
+    "Soniox routing is opt-in: DEFERRED_TRANSCRIPTION_MODEL=stt-async-v5 + SONIOX_API_KEY on transcription-service; without them the Whisper + DOM-mapping path is unchanged.",
+    "L policy: hash-bound human approval (approvals.jsonl) still required before PR readiness."
+  ]
+}

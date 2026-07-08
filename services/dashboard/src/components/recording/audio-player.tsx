@@ -306,6 +306,21 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
       setIsMuted(!isMuted);
     }, [isMuted]);
 
+    // Manual retry after a load error — cancels the pending auto-retry and
+    // re-issues the load immediately so the user isn't stuck waiting on the
+    // 1.5s backoff timer.
+    const handleRetry = useCallback(() => {
+      const audio = audioRef.current;
+      if (!audio) return;
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
+      setErrorCount(0);
+      setIsLoading(true);
+      audio.load();
+    }, []);
+
     const handleSeekBarChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
       const time = parseFloat(e.target.value);
       if (!isMultiFragment) {
@@ -428,10 +443,26 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
           )}
         </Button>
 
-        {isLoading && errorCount > 0 && (
-          <span className="text-xs text-muted-foreground whitespace-nowrap">
-            音声を準備しています...
-          </span>
+        {isLoading && (
+          errorCount > 0 ? (
+            <span className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+              <span className="truncate">音声の読み込みに失敗しました</span>
+              <button
+                type="button"
+                onClick={handleRetry}
+                className="shrink-0 font-medium text-primary hover:underline"
+              >
+                再試行
+              </button>
+            </span>
+          ) : (
+            <span
+              className="min-w-0 truncate text-xs text-muted-foreground"
+              title="音声を準備しています... 録画の長さによって数分かかることがあります"
+            >
+              音声を準備しています... 録画の長さによって数分かかることがあります
+            </span>
+          )
         )}
       </div>
     );

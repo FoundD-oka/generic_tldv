@@ -29,6 +29,8 @@ services:
       - DEVICE=cuda
       - COMPUTE_TYPE=${COMPUTE_TYPE:-int8}
       - VAD_MIN_SILENCE_DURATION_MS=80
+      # Soniox async diarization route for stt-async-* models (issue #21)
+      - SONIOX_API_KEY=${SONIOX_API_KEY:-}
     volumes:
       - ./models:/app/models
     deploy:
@@ -54,6 +56,8 @@ services:
       - DEVICE=cuda
       - COMPUTE_TYPE=${COMPUTE_TYPE:-int8}
       - VAD_MIN_SILENCE_DURATION_MS=80
+      # Soniox async diarization route for stt-async-* models (issue #21)
+      - SONIOX_API_KEY=${SONIOX_API_KEY:-}
     volumes:
       - ./models:/app/models
     deploy:

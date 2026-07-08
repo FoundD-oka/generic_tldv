@@ -1,0 +1,78 @@
+{
+  "timestamp": "2026-07-07T05:21:02.365391+00:00",
+  "task_id": "calendar-kabosu-drive",
+  "size": "L",
+  "status": "block",
+  "checks": [
+    {
+      "check": "harness-residency",
+      "ok": true,
+      "detail": "status=pass"
+    },
+    {
+      "check": "preflight",
+      "ok": true,
+      "detail": "status=pass"
+    },
+    {
+      "check": "hd-gate",
+      "ok": true,
+      "detail": "unresolved=[]"
+    },
+    {
+      "check": "doc-staleness",
+      "ok": true,
+      "detail": "status=pass"
+    },
+    {
+      "check": "adapter-contract",
+      "ok": true,
+      "detail": "status=pass count=3"
+    },
+    {
+      "check": "backcast-contracts",
+      "ok": true,
+      "detail": "status=pass mode=not_applicable"
+    },
+    {
+      "check": "external-consultation",
+      "ok": true,
+      "detail": "status=pass mode=not_configured required=False"
+    },
+    {
+      "check": "feedback-prune",
+      "ok": true,
+      "detail": "status=pass required=False"
+    },
+    {
+      "check": "sml-decision",
+      "ok": true,
+      "detail": "size=L"
+    },
+    {
+      "check": "verification-contract",
+      "ok": true,
+      "detail": "/Users/bonginkan-3-gouki/project/generic_tldv/.pipeline/plans/calendar-kabosu-drive/verification-contract.md"
+    },
+    {
+      "check": "evidence-pack",
+      "ok": true,
+      "detail": "/Users/bonginkan-3-gouki/project/generic_tldv/.pipeline/evidence/calendar-kabosu-drive"
+    },
+    {
+      "check": "qa-judgment",
+      "ok": true,
+      "detail": "verdict=pass"
+    },
+    {
+      "check": "tribunal-or-sidechain",
+      "ok": true,
+      "detail": "sidechain/synthesis.json present"
+    },
+    {
+      "check": "approval-hash",
+      "ok": false,
+      "detail": "approved=none current=sha256:c797f7f8ed03fe365fc61ece7eec7c0a5aea9d54a12de16fbbc480a5b94d28c5"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "task": "dashboard-uiux-memo",
+  "size": "M",
+  "decided_after": "plan.md + verification-contract.md 作成後",
+  "rationale": "services/dashboard 内の UI 表示・文言・アイコン参照のみを変更する多ファイル修正。スキーマ・マイグレーション・認証・決済・PII 経路に非接触、外部依存の追加なし。ファイル数が S 基準(≤2)を超えるため M。",
+  "plan": ".pipeline/plans/dashboard-uiux-memo/plan.md",
+  "verification_contract": ".pipeline/plans/dashboard-uiux-memo/verification-contract.md"
+}

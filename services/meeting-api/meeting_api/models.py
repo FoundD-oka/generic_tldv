@@ -69,6 +69,13 @@ class Transcription(Base):
     end_time = Column(Float, nullable=False)
     text = Column(Text, nullable=False)
     speaker = Column(String(255), nullable=True)
+    # Acoustic cluster id from STT diarization (stt.v1 optional `speaker`
+    # field). Anonymous within one deferred transcription; NULL for realtime
+    # rows and non-diarizing backends.
+    speaker_cluster = Column(String(64), nullable=True)
+    # Original auto-assigned label (undo baseline). `speaker` may be manually
+    # corrected; `speaker_auto` never is.
+    speaker_auto = Column(String(255), nullable=True)
     language = Column(String(10), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     session_uid = Column(String, nullable=True, index=True)
@@ -80,6 +87,12 @@ class Transcription(Base):
         Index('ix_transcription_meeting_start', 'meeting_id', 'start_time'),
         Index('ix_transcription_meeting_segment', 'meeting_id', 'segment_id',
               unique=True, postgresql_where=segment_id.isnot(None)),
+        # online_only: startup schema-sync must NOT build this synchronously
+        # on the ~507K-row prod table; scripts/migrations/
+        # 20260708_add_speaker_cluster.py creates it with CONCURRENTLY.
+        # Fresh installs still get it via create_all (new table = no lock).
+        Index('ix_transcription_meeting_cluster', 'meeting_id', 'speaker_cluster',
+              info={'online_only': True}),
     )
 
 

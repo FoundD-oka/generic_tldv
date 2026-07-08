@@ -3,14 +3,15 @@
 import os
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Any, Optional
 
 import httpx
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.orm import attributes
 
-from meeting_api.models import CalendarEvent
+from meeting_api.models import CalendarEvent, Meeting
 from admin_models.models import User
 from app.google_calendar import (
     refresh_access_token,
@@ -27,6 +28,52 @@ GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
 MEETING_API_URL = os.getenv("MEETING_API_URL", "http://meeting-api:8080")
 BOT_API_TOKEN = os.getenv("BOT_API_TOKEN", "")
 DEFAULT_LEAD_TIME_MINUTES = int(os.getenv("DEFAULT_LEAD_TIME_MINUTES", "2"))
+KABOSU_CALENDAR_MODE = os.getenv("KABOSU_CALENDAR_MODE", "per_user").strip().lower()
+KABOSU_GOOGLE_REFRESH_TOKEN = (
+    os.getenv("KABOSU_GOOGLE_REFRESH_TOKEN", "")
+    or os.getenv("KABOSU_CALENDAR_REFRESH_TOKEN", "")
+)
+KABOSU_BOT_OWNER_USER_ID = (
+    os.getenv("KABOSU_BOT_OWNER_USER_ID", "")
+    or os.getenv("KABOSU_CALENDAR_USER_ID", "")
+)
+KABOSU_CALENDAR_ACCOUNT_EMAIL = os.getenv("KABOSU_CALENDAR_ACCOUNT_EMAIL", "").strip()
+KABOSU_BOT_NAME = os.getenv("KABOSU_BOT_NAME", "カボス")
+KABOSU_BOT_LANGUAGE = os.getenv("KABOSU_BOT_LANGUAGE", "ja")
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None or raw == "":
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+KABOSU_VOICE_AGENT_ENABLED = _env_bool("KABOSU_VOICE_AGENT_ENABLED", True)
+
+
+def single_account_mode_enabled() -> bool:
+    """Return true when the calendar service should sync only the Kabosu account."""
+    return KABOSU_CALENDAR_MODE == "single_account"
+
+
+def _kabosu_owner_user_id() -> Optional[int]:
+    try:
+        return int(KABOSU_BOT_OWNER_USER_ID)
+    except (TypeError, ValueError):
+        return None
+
+
+def _bot_request_headers() -> dict[str, str]:
+    headers = {"X-API-Key": BOT_API_TOKEN}
+    owner_user_id = _kabosu_owner_user_id()
+    if owner_user_id is not None:
+        headers.update({
+            "X-User-ID": str(owner_user_id),
+            "X-User-Scopes": "bot,tx,browser",
+            "X-User-Limits": os.getenv("KABOSU_BOT_OWNER_MAX_CONCURRENT", "999"),
+        })
+    return headers
 
 
 async def sync_user_calendar(user_id: int, db: AsyncSession) -> int:
@@ -45,13 +92,82 @@ async def sync_user_calendar(user_id: int, db: AsyncSession) -> int:
         logger.info(f"User {user_id} has no Google Calendar refresh token")
         return 0
 
-    # Refresh access token
-    access_token, expires_in = await refresh_access_token(
-        GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, refresh_token
+    upserted, next_sync_token = await _sync_calendar_events(
+        user_id,
+        refresh_token,
+        gc_data.get("sync_token"),
+        db,
+        sync_label=f"user {user_id}",
     )
 
-    # Get existing sync token for incremental sync
-    existing_sync_token = gc_data.get("sync_token")
+    # Save new sync token
+    if next_sync_token:
+        gc_data["sync_token"] = next_sync_token
+        user_data["google_calendar"] = gc_data
+        await db.execute(
+            update(User).where(User.id == user_id).values(data=user_data)
+        )
+
+    await db.commit()
+    logger.info(f"Synced {upserted} events for user {user_id}")
+    return upserted
+
+
+async def sync_single_account_calendar(db: AsyncSession) -> int:
+    """Sync the dedicated Kabosu calendar account into one owner user's events."""
+    owner_user_id = _kabosu_owner_user_id()
+    if owner_user_id is None:
+        logger.warning("KABOSU_CALENDAR_MODE=single_account requires KABOSU_BOT_OWNER_USER_ID")
+        return 0
+    if not KABOSU_GOOGLE_REFRESH_TOKEN:
+        logger.warning("KABOSU_CALENDAR_MODE=single_account requires KABOSU_GOOGLE_REFRESH_TOKEN")
+        return 0
+    if not KABOSU_CALENDAR_ACCOUNT_EMAIL:
+        logger.warning("KABOSU_CALENDAR_MODE=single_account requires KABOSU_CALENDAR_ACCOUNT_EMAIL")
+        return 0
+
+    result = await db.execute(select(User).where(User.id == owner_user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        logger.warning(f"Kabosu owner user {owner_user_id} not found")
+        return 0
+
+    user_data = dict(user.data or {})
+    gc_data = dict(user_data.get("google_calendar") or {})
+    single_state = dict(gc_data.get("single_account") or {})
+
+    upserted, next_sync_token = await _sync_calendar_events(
+        owner_user_id,
+        KABOSU_GOOGLE_REFRESH_TOKEN,
+        single_state.get("sync_token"),
+        db,
+        sync_label=f"kabosu account {KABOSU_CALENDAR_ACCOUNT_EMAIL}",
+    )
+
+    if next_sync_token:
+        single_state["sync_token"] = next_sync_token
+        single_state["account_email"] = KABOSU_CALENDAR_ACCOUNT_EMAIL
+        single_state["last_synced_at"] = datetime.now(timezone.utc).isoformat()
+        gc_data["single_account"] = single_state
+        user_data["google_calendar"] = gc_data
+        await db.execute(update(User).where(User.id == owner_user_id).values(data=user_data))
+
+    await db.commit()
+    logger.info(f"Synced {upserted} events for Kabosu calendar account")
+    return upserted
+
+
+async def _sync_calendar_events(
+    user_id: int,
+    refresh_token: str,
+    existing_sync_token: Optional[str],
+    db: AsyncSession,
+    *,
+    sync_label: str,
+) -> tuple[int, Optional[str]]:
+    access_token, _expires_in = await refresh_access_token(
+        GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, refresh_token
+    )
 
     time_min = datetime.now(timezone.utc)
     time_max = time_min + timedelta(days=7)
@@ -64,7 +180,7 @@ async def sync_user_calendar(user_id: int, db: AsyncSession) -> int:
     )
 
     if api_response.get("fullSyncRequired"):
-        logger.info(f"Full sync required for user {user_id}, clearing sync token")
+        logger.info(f"Full sync required for {sync_label}, clearing sync token")
         api_response = await list_events(
             access_token, time_min=time_min, time_max=time_max
         )
@@ -78,7 +194,6 @@ async def sync_user_calendar(user_id: int, db: AsyncSession) -> int:
         if not event_id:
             continue
 
-        # Skip cancelled events
         if event.get("status") == "cancelled":
             await db.execute(
                 update(CalendarEvent)
@@ -92,7 +207,7 @@ async def sync_user_calendar(user_id: int, db: AsyncSession) -> int:
 
         start_time = parse_event_time(event, "start")
         if not start_time:
-            continue  # All-day event, skip
+            continue
 
         end_time = parse_event_time(event, "end")
         meeting_url = extract_meeting_url(event)
@@ -120,17 +235,7 @@ async def sync_user_calendar(user_id: int, db: AsyncSession) -> int:
         await db.execute(stmt)
         upserted += 1
 
-    # Save new sync token
-    if next_sync_token:
-        gc_data["sync_token"] = next_sync_token
-        user_data["google_calendar"] = gc_data
-        await db.execute(
-            update(User).where(User.id == user_id).values(data=user_data)
-        )
-
-    await db.commit()
-    logger.info(f"Synced {upserted} events for user {user_id}")
-    return upserted
+    return upserted, next_sync_token
 
 
 async def schedule_upcoming_bots(db: AsyncSession) -> int:
@@ -142,7 +247,7 @@ async def schedule_upcoming_bots(db: AsyncSession) -> int:
         select(CalendarEvent).where(
             CalendarEvent.status == "pending",
             CalendarEvent.start_time <= cutoff,
-            CalendarEvent.start_time >= now - timedelta(minutes=5),
+            CalendarEvent.end_time > now,
             CalendarEvent.meeting_url.isnot(None),
             CalendarEvent.platform.isnot(None),
         )
@@ -151,33 +256,34 @@ async def schedule_upcoming_bots(db: AsyncSession) -> int:
     scheduled = 0
 
     for event in events:
-        # Get user's API key for meeting-api auth
-        user_result = await db.execute(select(User).where(User.id == event.user_id))
-        user = user_result.scalar_one_or_none()
-        if not user:
-            continue
-
         try:
+            native_meeting_id = _extract_native_id(event.meeting_url, event.platform)
+            payload: dict[str, Any] = {
+                "platform": event.platform,
+                "native_meeting_id": native_meeting_id,
+                "meeting_url": event.meeting_url,
+                "bot_name": KABOSU_BOT_NAME,
+                "language": KABOSU_BOT_LANGUAGE,
+                "voice_agent_enabled": KABOSU_VOICE_AGENT_ENABLED,
+            }
             async with httpx.AsyncClient() as client:
                 resp = await client.post(
                     f"{MEETING_API_URL}/bots",
-                    json={
-                        "platform": event.platform,
-                        "native_meeting_id": _extract_native_id(event.meeting_url, event.platform),
-                        "bot_name": f"Vexa - {event.title or 'Calendar'}",
-                    },
-                    headers={"X-API-Key": BOT_API_TOKEN},
+                    json=payload,
+                    headers=_bot_request_headers(),
                     timeout=30,
                 )
 
             if resp.status_code in (200, 201):
                 resp_data = resp.json()
+                meeting_id = resp_data.get("id")
+                await _attach_calendar_metadata(db, event, meeting_id)
                 await db.execute(
                     update(CalendarEvent)
                     .where(CalendarEvent.id == event.id)
                     .values(
                         status="scheduled",
-                        meeting_id=resp_data.get("id"),
+                        meeting_id=meeting_id,
                     )
                 )
                 scheduled += 1
@@ -194,6 +300,47 @@ async def schedule_upcoming_bots(db: AsyncSession) -> int:
 
     await db.commit()
     return scheduled
+
+
+async def _attach_calendar_metadata(
+    db: AsyncSession,
+    event: CalendarEvent,
+    meeting_id: Optional[int],
+) -> None:
+    if not meeting_id:
+        return
+    result = await db.execute(select(Meeting).where(Meeting.id == meeting_id))
+    meeting = result.scalar_one_or_none()
+    if not meeting:
+        logger.warning("Meeting %s not found after calendar bot creation", meeting_id)
+        return
+
+    data = dict(meeting.data or {}) if isinstance(meeting.data, dict) else {}
+    data["calendar_event"] = _calendar_event_metadata(event)
+    meeting.data = data
+    attributes.flag_modified(meeting, "data")
+
+
+def _calendar_event_metadata(event: CalendarEvent) -> dict[str, Any]:
+    return {
+        "source": "google_calendar",
+        "calendar_event_id": event.id,
+        "external_event_id": event.external_event_id,
+        "title": event.title,
+        "start_time": _dt_iso(event.start_time),
+        "end_time": _dt_iso(event.end_time),
+        "meeting_url": event.meeting_url,
+        "platform": event.platform,
+        "account_email": KABOSU_CALENDAR_ACCOUNT_EMAIL,
+    }
+
+
+def _dt_iso(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)
 
 
 def _extract_native_id(url: str, platform: str) -> str:

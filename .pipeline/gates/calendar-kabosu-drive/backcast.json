@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-07-07T05:21:02.228476+00:00",
+  "task_id": "calendar-kabosu-drive",
+  "status": "pass",
+  "mode": "not_applicable",
+  "details": {
+    "checkpoint_contract": ".pipeline/plans/calendar-kabosu-drive/checkpoint-contract.json",
+    "evidence_manifest": ".pipeline/evidence/calendar-kabosu-drive/evidence-manifest.json",
+    "approval_decision": ".pipeline/approvals/calendar-kabosu-drive/approval-decision.json",
+    "state_machine": ".pipeline/rules/backcast-state-machine.json",
+    "mode": "optional"
+  },
+  "errors": [],
+  "warnings": []
+}

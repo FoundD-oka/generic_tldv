@@ -163,7 +163,7 @@ export default function MCPPage() {
     return (
       <div className="h-5 w-5 relative flex items-center justify-center">
         <img
-          src="/icons/icons8-mcp-96 (1).png"
+          src={withBasePath("/icons/icons8-mcp-96.png")}
           alt="MCP"
           width={20}
           height={20}
@@ -191,7 +191,7 @@ export default function MCPPage() {
         <Card className="cursor-pointer hover:bg-muted/30 transition-colors" onClick={handleCursorInstall}>
           <CardContent className="pt-6 pb-6 flex items-center gap-4">
             <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center">
-              <Image src="/icons/cursor.svg" alt="Cursor" width={24} height={24} className="dark:invert" />
+              <Image src={withBasePath("/icons/cursor.svg")} alt="Cursor" width={24} height={24} className="dark:invert" unoptimized />
             </div>
             <div>
               <p className="font-medium">Cursorに接続</p>
@@ -202,7 +202,7 @@ export default function MCPPage() {
         <Card className="cursor-pointer hover:bg-muted/30 transition-colors" onClick={handleVSCodeInstall}>
           <CardContent className="pt-6 pb-6 flex items-center gap-4">
             <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center">
-              <Image src="/icons/vscode.svg" alt="VS Code" width={24} height={24} />
+              <Image src={withBasePath("/icons/vscode.svg")} alt="VS Code" width={24} height={24} unoptimized />
             </div>
             <div>
               <p className="font-medium">VS Codeに接続</p>
