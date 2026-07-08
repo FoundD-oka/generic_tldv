@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-07-08T01:14:24.883032+00:00",
+  "timestamp": "2026-07-08T01:17:41.995054+00:00",
   "task_id": "speaker-attribution-voiceprint",
   "size": "L",
   "status": "ready",
@@ -12,7 +12,7 @@
     {
       "check": "preflight",
       "ok": true,
-      "detail": "status=warn"
+      "detail": "status=pass"
     },
     {
       "check": "hd-gate",
@@ -22,7 +22,7 @@
     {
       "check": "doc-staleness",
       "ok": true,
-      "detail": "status=warn"
+      "detail": "status=pass"
     },
     {
       "check": "adapter-contract",
@@ -42,7 +42,7 @@
     {
       "check": "feedback-prune",
       "ok": true,
-      "detail": "status=pass required=True"
+      "detail": "status=pass required=False"
     },
     {
       "check": "sml-decision",
@@ -72,7 +72,7 @@
     {
       "check": "approval-hash",
       "ok": true,
-      "detail": "approved=sha256:75f30469dbe6e6127afcc651ff1a51078e2abf576368125534a27a92e08b8f37 current=sha256:75f30469dbe6e6127afcc651ff1a51078e2abf576368125534a27a92e08b8f37"
+      "detail": "approved=sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 current=sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   ]
 }
