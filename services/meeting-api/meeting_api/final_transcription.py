@@ -347,14 +347,31 @@ def _convert_audio_to_wav(audio_data: bytes, media_format: str) -> tuple[bytes, 
                     pass
 
 
+def _deferred_transcription_endpoint() -> tuple[str, str]:
+    """Resolve the STT endpoint for the deferred (post-meeting) path.
+
+    TRANSCRIPTION_SERVICE_URL is shared with the realtime bot pipeline, so a
+    deferred-only override lets the post-meeting path use a different backend
+    (e.g. the Soniox-capable transcription-service) without touching realtime.
+    """
+    url = (
+        os.environ.get("DEFERRED_TRANSCRIPTION_SERVICE_URL", "").strip()
+        or os.environ.get("TRANSCRIPTION_SERVICE_URL", "")
+    )
+    token = (
+        os.environ.get("DEFERRED_TRANSCRIPTION_SERVICE_TOKEN", "").strip()
+        or os.environ.get("TRANSCRIPTION_SERVICE_TOKEN", "")
+    )
+    return url, token
+
+
 async def _call_transcription_service(
     audio_data: bytes,
     media_format: str,
     *,
     language: Optional[str],
 ) -> Dict[str, Any]:
-    tx_url = os.environ.get("TRANSCRIPTION_SERVICE_URL", "")
-    tx_token = os.environ.get("TRANSCRIPTION_SERVICE_TOKEN", "")
+    tx_url, tx_token = _deferred_transcription_endpoint()
     if not tx_url:
         raise HTTPException(status_code=503, detail="TRANSCRIPTION_SERVICE_URL not configured")
 

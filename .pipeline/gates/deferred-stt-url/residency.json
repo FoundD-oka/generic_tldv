@@ -1,0 +1,172 @@
+{
+  "timestamp": "2026-07-08T03:18:01.268678+00:00",
+  "status": "pass",
+  "root": "/Users/bonginkan-3-gouki/project/generic_tldv",
+  "checks": [
+    {
+      "check": "path:.pipeline/config.json",
+      "ok": true,
+      "detail": ".pipeline/config.json"
+    },
+    {
+      "check": "path:.pipeline/rules/hd-log.tsv",
+      "ok": true,
+      "detail": ".pipeline/rules/hd-log.tsv"
+    },
+    {
+      "check": "path:.pipeline/adapters",
+      "ok": true,
+      "detail": ".pipeline/adapters"
+    },
+    {
+      "check": "path:.pipeline/feedback",
+      "ok": true,
+      "detail": ".pipeline/feedback"
+    },
+    {
+      "check": "path:.claude/settings.json",
+      "ok": true,
+      "detail": ".claude/settings.json"
+    },
+    {
+      "check": "path:.claude/hooks/preflight.sh",
+      "ok": true,
+      "detail": ".claude/hooks/preflight.sh"
+    },
+    {
+      "check": "path:.claude/hooks/pr-ready-gate.sh",
+      "ok": true,
+      "detail": ".claude/hooks/pr-ready-gate.sh"
+    },
+    {
+      "check": "path:.claude/hooks/hd-gate.sh",
+      "ok": true,
+      "detail": ".claude/hooks/hd-gate.sh"
+    },
+    {
+      "check": "path:.claude/hooks/hd-record.sh",
+      "ok": true,
+      "detail": ".claude/hooks/hd-record.sh"
+    },
+    {
+      "check": "path:.claude/hooks/doc-staleness.sh",
+      "ok": true,
+      "detail": ".claude/hooks/doc-staleness.sh"
+    },
+    {
+      "check": "path:.claude/hooks/harness-residency.sh",
+      "ok": true,
+      "detail": ".claude/hooks/harness-residency.sh"
+    },
+    {
+      "check": "path:.claude/hooks/adapter-validate.sh",
+      "ok": true,
+      "detail": ".claude/hooks/adapter-validate.sh"
+    },
+    {
+      "check": "path:.claude/hooks/feedback-prune.sh",
+      "ok": true,
+      "detail": ".claude/hooks/feedback-prune.sh"
+    },
+    {
+      "check": "path:.claude/agents/context-scout.md",
+      "ok": true,
+      "detail": ".claude/agents/context-scout.md"
+    },
+    {
+      "check": "path:.claude/agents/plan-relay.md",
+      "ok": true,
+      "detail": ".claude/agents/plan-relay.md"
+    },
+    {
+      "check": "path:.claude/agents/qa-judge.md",
+      "ok": true,
+      "detail": ".claude/agents/qa-judge.md"
+    },
+    {
+      "check": "path:.claude/agents/bug-tribunal.md",
+      "ok": true,
+      "detail": ".claude/agents/bug-tribunal.md"
+    },
+    {
+      "check": "path:.claude/agents/sidechain-review.md",
+      "ok": true,
+      "detail": ".claude/agents/sidechain-review.md"
+    },
+    {
+      "check": "path:.claude/skills/harness-residency/SKILL.md",
+      "ok": true,
+      "detail": ".claude/skills/harness-residency/SKILL.md"
+    },
+    {
+      "check": "path:.claude/skills/adapter-contract/SKILL.md",
+      "ok": true,
+      "detail": ".claude/skills/adapter-contract/SKILL.md"
+    },
+    {
+      "check": "path:.claude/skills/feedback-ledger/SKILL.md",
+      "ok": true,
+      "detail": ".claude/skills/feedback-ledger/SKILL.md"
+    },
+    {
+      "check": "path:.claude/skills/sidechain-review/SKILL.md",
+      "ok": true,
+      "detail": ".claude/skills/sidechain-review/SKILL.md"
+    },
+    {
+      "check": "path:schemas/harness-adapter.schema.json",
+      "ok": true,
+      "detail": "schemas/harness-adapter.schema.json"
+    },
+    {
+      "check": "path:AGENTS.md",
+      "ok": true,
+      "detail": "AGENTS.md"
+    },
+    {
+      "check": "path:CLAUDE.md",
+      "ok": true,
+      "detail": "CLAUDE.md"
+    },
+    {
+      "check": "link:.claude/agents",
+      "ok": true,
+      "detail": "symlink to shared harness"
+    },
+    {
+      "check": "link:.claude/skills",
+      "ok": true,
+      "detail": "symlink to shared harness"
+    },
+    {
+      "check": "link:.claude/rules",
+      "ok": true,
+      "detail": "symlink to shared harness"
+    },
+    {
+      "check": "link:.claude/hooks",
+      "ok": true,
+      "detail": "symlink to shared harness"
+    },
+    {
+      "check": "settings:preflight.sh",
+      "ok": true,
+      "detail": "expected hook marker"
+    },
+    {
+      "check": "settings:evidence-completeness.sh",
+      "ok": true,
+      "detail": "expected hook marker"
+    },
+    {
+      "check": "guard:AGENTS.md",
+      "ok": true,
+      "detail": "AGENTS.md should mention harness rules"
+    },
+    {
+      "check": "guard:CLAUDE.md",
+      "ok": true,
+      "detail": "CLAUDE.md should mention harness routing"
+    }
+  ]
+}
