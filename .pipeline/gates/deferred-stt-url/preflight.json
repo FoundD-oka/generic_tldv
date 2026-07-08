@@ -1,0 +1,17 @@
+{
+  "timestamp": "2026-07-08T03:18:01.341573+00:00",
+  "status": "pass",
+  "diff_hash": "sha256:b73c4712cefd521bf5523a46ef4bf45ab06db954388123678ca898f66932c6f0",
+  "changed_files": [
+    "AGENTS.md",
+    "CLAUDE.md",
+    "deploy/compose/docker-compose.yml",
+    "deploy/env-example",
+    "services/meeting-api/meeting_api/final_transcription.py",
+    "services/meeting-api/tests/test_final_transcription.py",
+    "services/transcription-service/Dockerfile",
+    "services/transcription-service/Dockerfile.cpu"
+  ],
+  "flags": [],
+  "blocks": []
+}

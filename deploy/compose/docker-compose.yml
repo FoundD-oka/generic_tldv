@@ -310,6 +310,10 @@ services:
       # Deferred (post-meeting) STT model; stt-async-* routes to the Soniox
       # diarization adapter in transcription-service (issues #21/#22).
       - DEFERRED_TRANSCRIPTION_MODEL=${DEFERRED_TRANSCRIPTION_MODEL:-large-v3-turbo}
+      # Deferred-only STT endpoint override; realtime bots keep using
+      # TRANSCRIPTION_SERVICE_URL. Empty = same endpoint as realtime.
+      - DEFERRED_TRANSCRIPTION_SERVICE_URL=${DEFERRED_TRANSCRIPTION_SERVICE_URL:-}
+      - DEFERRED_TRANSCRIPTION_SERVICE_TOKEN=${DEFERRED_TRANSCRIPTION_SERVICE_TOKEN:-}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
       - KABOSU_GOOGLE_REFRESH_TOKEN=${KABOSU_GOOGLE_REFRESH_TOKEN:-}
