@@ -1,0 +1,78 @@
+{
+  "timestamp": "2026-07-08T01:14:24.883032+00:00",
+  "task_id": "speaker-attribution-voiceprint",
+  "size": "L",
+  "status": "ready",
+  "checks": [
+    {
+      "check": "harness-residency",
+      "ok": true,
+      "detail": "status=pass"
+    },
+    {
+      "check": "preflight",
+      "ok": true,
+      "detail": "status=warn"
+    },
+    {
+      "check": "hd-gate",
+      "ok": true,
+      "detail": "unresolved=[]"
+    },
+    {
+      "check": "doc-staleness",
+      "ok": true,
+      "detail": "status=warn"
+    },
+    {
+      "check": "adapter-contract",
+      "ok": true,
+      "detail": "status=pass count=4"
+    },
+    {
+      "check": "backcast-contracts",
+      "ok": true,
+      "detail": "status=pass mode=not_applicable"
+    },
+    {
+      "check": "external-consultation",
+      "ok": true,
+      "detail": "status=pass mode=not_configured required=False"
+    },
+    {
+      "check": "feedback-prune",
+      "ok": true,
+      "detail": "status=pass required=True"
+    },
+    {
+      "check": "sml-decision",
+      "ok": true,
+      "detail": "size=L"
+    },
+    {
+      "check": "verification-contract",
+      "ok": true,
+      "detail": "/Users/bonginkan-3-gouki/project/generic_tldv/.pipeline/plans/speaker-attribution-voiceprint/verification-contract.md"
+    },
+    {
+      "check": "evidence-pack",
+      "ok": true,
+      "detail": "/Users/bonginkan-3-gouki/project/generic_tldv/.pipeline/evidence/speaker-attribution-voiceprint"
+    },
+    {
+      "check": "qa-judgment",
+      "ok": true,
+      "detail": "verdict=needs_human"
+    },
+    {
+      "check": "tribunal-or-sidechain",
+      "ok": true,
+      "detail": "sidechain/synthesis.json present"
+    },
+    {
+      "check": "approval-hash",
+      "ok": true,
+      "detail": "approved=sha256:75f30469dbe6e6127afcc651ff1a51078e2abf576368125534a27a92e08b8f37 current=sha256:75f30469dbe6e6127afcc651ff1a51078e2abf576368125534a27a92e08b8f37"
+    }
+  ]
+}

@@ -11,6 +11,13 @@
 TRANSCRIPTION_SERVICE_URL=https://transcription.vexa.ai/v1/audio/transcriptions
 TRANSCRIPTION_SERVICE_TOKEN=your-token
 
+# Optional: Soniox async diarization for the post-meeting (deferred) transcript
+# (issues #21/#22 — per-segment speaker clusters + cluster naming).
+# Set the model to stt-async-* to route the deferred path to Soniox and give
+# transcription-service the API key. Leave unset to keep Whisper (DOM mapping).
+#DEFERRED_TRANSCRIPTION_MODEL=stt-async-v5
+#SONIOX_API_KEY=your-soniox-key
+
 # ============================================================================
 # Ports — change these to avoid conflicts with other stacks
 # ============================================================================

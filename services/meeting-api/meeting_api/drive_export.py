@@ -109,6 +109,52 @@ def queue_drive_export_if_needed(
     return True
 
 
+def requeue_drive_export(
+    meeting: Meeting,
+    *,
+    triggered_by: str,
+) -> bool:
+    """Force a re-export after transcript content mutated (e.g. speaker rename).
+
+    Unlike queue_drive_export_if_needed, a `done` (or terminally `failed`)
+    export is re-queued; the existing Drive file_id is kept in state so the
+    re-run updates the same document instead of creating a duplicate.
+    """
+    if os.getenv("KABOSU_DRIVE_EXPORT_ENABLED", "true").strip().lower() in {"0", "false", "no", "off"}:
+        return False
+    if _calendar_only_mode() and _calendar_metadata(meeting) is None:
+        return False
+
+    current = dict(_meeting_data(meeting).get("drive_export") or {})
+    now = _utcnow_iso()
+    if current.get("status") == "queued":
+        # Not started yet; the pending run reads fresh rows at run time.
+        return False
+    if current.get("status") == "running":
+        # An export is mid-flight with the OLD rows. Flag a re-run; the
+        # exporter re-queues itself instead of finishing as `done`.
+        _set_drive_export_state(
+            meeting,
+            rerun_requested=True,
+            updated_at=now,
+            triggered_by=triggered_by,
+        )
+        return True
+
+    _set_drive_export_state(
+        meeting,
+        status="queued",
+        queued_at=now,
+        updated_at=now,
+        attempts=0,
+        last_error=None,
+        retryable=True,
+        triggered_by=triggered_by,
+        requeued_from=current.get("status"),
+    )
+    return True
+
+
 def drive_export_retry_eligible(job: Dict[str, Any], *, now: Optional[datetime] = None) -> bool:
     attempts = int(job.get("attempts") or 0)
     if attempts <= 0:
@@ -179,7 +225,9 @@ async def run_drive_export(
         )).scalars().all()
         filename = drive_export_filename(meeting, calendar_event)
         content = build_drive_markdown(meeting, calendar_event, transcripts)
-        upload = await upload_markdown_to_drive(filename, content)
+        # Re-exports (speaker rename etc.) update the existing Drive file
+        # in place instead of creating a duplicate.
+        upload = await upload_markdown_to_drive(filename, content, file_id=current.get("file_id"))
     except DriveExportError as exc:
         _set_drive_export_state(
             meeting,
@@ -205,12 +253,49 @@ async def run_drive_export(
         await db.commit()
         raise DriveExportError(f"Drive export failed: {exc}") from exc
 
+    # Re-read the meeting before the final state write: a speaker PATCH may
+    # have committed corrections (and a rerun_requested flag) while the upload
+    # was in flight. Writing the stale in-memory JSONB back would clobber it.
+    refreshed = (await db.execute(
+        select(Meeting)
+        .where(Meeting.id == meeting_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )).scalars().first()
+    if refreshed is not None:
+        meeting = refreshed
+    current = dict(_meeting_data(meeting).get("drive_export") or {})
+
+    if current.get("rerun_requested"):
+        # Transcript content changed mid-export: the uploaded file already has
+        # stale names, so go straight back to queued for a fresh render.
+        _set_drive_export_state(
+            meeting,
+            status="queued",
+            queued_at=_utcnow_iso(),
+            updated_at=_utcnow_iso(),
+            attempts=0,
+            rerun_requested=False,
+            file_id=upload.get("id"),
+            web_view_link=upload.get("webViewLink"),
+            filename=filename,
+            last_error=None,
+            retryable=True,
+        )
+        await db.commit()
+        logger.info(
+            "Drive export for meeting %s re-queued (content changed mid-export) file=%s",
+            meeting_id, upload.get("id"),
+        )
+        return {"status": "queued", "filename": filename, **upload}
+
     _set_drive_export_state(
         meeting,
         status="done",
         completed_at=_utcnow_iso(),
         updated_at=_utcnow_iso(),
         attempts=attempts,
+        rerun_requested=False,
         file_id=upload.get("id"),
         web_view_link=upload.get("webViewLink"),
         filename=filename,
@@ -271,36 +356,57 @@ def build_drive_markdown(
     return "\n".join(lines)
 
 
-async def upload_markdown_to_drive(filename: str, content: str) -> Dict[str, Any]:
+async def upload_markdown_to_drive(
+    filename: str,
+    content: str,
+    *,
+    file_id: Optional[str] = None,
+) -> Dict[str, Any]:
     folder_id = os.getenv("KABOSU_DRIVE_FOLDER_ID", "").strip()
     if not folder_id:
         raise DriveExportError("KABOSU_DRIVE_FOLDER_ID is not configured", retryable=True)
 
     access_token = await refresh_google_access_token()
-    metadata = {
+    metadata: Dict[str, Any] = {
         "name": filename,
-        "parents": [folder_id],
         "mimeType": "text/markdown",
     }
+    if not file_id:
+        # Parents can only be set at creation time.
+        metadata["parents"] = [folder_id]
     boundary = f"kabosu_{uuid.uuid4().hex}"
     body = _multipart_related_body(boundary, metadata, content)
     timeout = float(os.getenv("KABOSU_DRIVE_UPLOAD_TIMEOUT_SECONDS", "60"))
 
+    params = {
+        "uploadType": "multipart",
+        "fields": "id,webViewLink",
+        # Required when the parent folder lives in a Shared Drive; harmless for My Drive.
+        "supportsAllDrives": "true",
+    }
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": f"multipart/related; boundary={boundary}",
+    }
     async with httpx.AsyncClient(timeout=timeout) as client:
-        resp = await client.post(
-            DRIVE_UPLOAD_URL,
-            params={
-                "uploadType": "multipart",
-                "fields": "id,webViewLink",
-                # Required when the parent folder lives in a Shared Drive; harmless for My Drive.
-                "supportsAllDrives": "true",
-            },
-            content=body,
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": f"multipart/related; boundary={boundary}",
-            },
-        )
+        if file_id:
+            resp = await client.patch(
+                f"{DRIVE_UPLOAD_URL}/{file_id}",
+                params=params,
+                content=body,
+                headers=headers,
+            )
+            if resp.status_code == 404:
+                # File was deleted from Drive; fall back to creating a new one.
+                logger.warning("Drive file %s gone; creating a new export file", file_id)
+                return await upload_markdown_to_drive(filename, content)
+        else:
+            resp = await client.post(
+                DRIVE_UPLOAD_URL,
+                params=params,
+                content=body,
+                headers=headers,
+            )
     if resp.status_code >= 400:
         raise DriveExportError(
             f"Drive upload failed: {resp.status_code} {resp.text[:300]}",

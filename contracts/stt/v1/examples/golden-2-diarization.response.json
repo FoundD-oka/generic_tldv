@@ -1,0 +1,53 @@
+{
+    "text": "おはようございます。今日の議題を確認します。 はい、お願いします。 まず進捗からですね。",
+    "language": "ja",
+    "language_probability": 1.0,
+    "duration": 6.6,
+    "segments": [
+        {
+            "id": 0,
+            "seek": 0,
+            "start": 0.0,
+            "end": 3.26,
+            "text": "おはようございます。今日の議題を確認します。",
+            "tokens": [],
+            "temperature": 0.0,
+            "avg_logprob": 0.0,
+            "compression_ratio": 1.0,
+            "no_speech_prob": 0.0,
+            "audio_start": 0.0,
+            "audio_end": 3.26,
+            "speaker": "1"
+        },
+        {
+            "id": 1,
+            "seek": 0,
+            "start": 3.6,
+            "end": 4.76,
+            "text": "はい、お願いします。",
+            "tokens": [],
+            "temperature": 0.0,
+            "avg_logprob": 0.0,
+            "compression_ratio": 1.0,
+            "no_speech_prob": 0.0,
+            "audio_start": 3.6,
+            "audio_end": 4.76,
+            "speaker": "2"
+        },
+        {
+            "id": 2,
+            "seek": 0,
+            "start": 5.1,
+            "end": 6.6,
+            "text": "まず進捗からですね。",
+            "tokens": [],
+            "temperature": 0.0,
+            "avg_logprob": 0.0,
+            "compression_ratio": 1.0,
+            "no_speech_prob": 0.0,
+            "audio_start": 5.1,
+            "audio_end": 6.6,
+            "speaker": "1"
+        }
+    ]
+}

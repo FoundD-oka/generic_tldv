@@ -1,0 +1,55 @@
+{
+  "schema_version": "1.0",
+  "id": "soniox-stt",
+  "name": "Soniox async STT (speaker diarization)",
+  "kind": "domain-tool",
+  "source": {
+    "upstream": "https://soniox.com/docs/stt/async/async-transcription",
+    "docs": "https://soniox.com/docs/stt/concepts/speaker-diarization",
+    "license": "Soniox commercial terms"
+  },
+  "entrypoints": {
+    "run": "POST $TRANSCRIPTION_SERVICE_URL with model=stt-async-v5 (routed by services/transcription-service/soniox_adapter.py)",
+    "fold": "soniox_adapter.fold_tokens_to_segments(tokens)"
+  },
+  "contracts": {
+    "inputs": [
+      "audio file (wav/webm/opus)",
+      "model=stt-async-*",
+      "optional language hint",
+      "SONIOX_API_KEY env"
+    ],
+    "outputs": [
+      "stt.v1 verbose_json response with optional per-segment `speaker` string cluster id (contracts/stt/v1)"
+    ],
+    "evidence": [
+      "contracts/stt/v1/examples/golden-2-diarization.soniox-tokens.json",
+      "contracts/stt/v1/examples/golden-2-diarization.response.json",
+      "services/transcription-service/tests/test_soniox_adapter.py"
+    ]
+  },
+  "safety": {
+    "boundaries": [
+      "deferred (post-meeting) tier only; realtime stays on local Whisper",
+      "speaker labels are anonymous within-file clusters (max 15), never names or cross-session identity",
+      "no voiceprint/enrollment capability — cross-meeting identity is out of scope for this adapter",
+      "uploaded files and transcriptions are deleted from Soniox after transcript fetch (best effort)",
+      "audio leaves the deployment to the Soniox API; requires SONIOX_API_KEY to be intentionally configured"
+    ],
+    "forbidden_claims": [
+      "cluster ids are stable across meetings",
+      "diarization output is ground-truth speaker identity"
+    ]
+  },
+  "validation": {
+    "checks": [
+      "manifest validates against schemas/harness-adapter.schema.json",
+      "golden token payload folds byte-identically into golden response (unit test)",
+      "backends without diarization omit `speaker` (backward compatibility test)"
+    ],
+    "minimum_artifacts": [
+      "contracts/stt/v1/examples/golden-2-diarization.response.json",
+      "services/transcription-service/tests/test_soniox_adapter.py"
+    ]
+  }
+}

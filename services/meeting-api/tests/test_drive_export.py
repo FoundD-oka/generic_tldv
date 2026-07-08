@@ -10,6 +10,7 @@ from meeting_api import sweeps
 from meeting_api.drive_export import (
     build_drive_markdown,
     queue_drive_export_if_needed,
+    requeue_drive_export,
     run_drive_export,
 )
 from meeting_api.models import Transcription
@@ -101,6 +102,7 @@ async def test_run_drive_export_uploads_markdown_and_marks_done():
     db.execute = AsyncMock(side_effect=[
         MockResult([meeting]),
         MockResult(transcripts),
+        MockResult([meeting]),  # pre-done refresh (mid-export mutation check)
     ])
     db.commit = AsyncMock()
     uploaded = AsyncMock(return_value={"id": "drive-file-1", "webViewLink": "https://drive/file"})
@@ -131,7 +133,11 @@ async def test_run_drive_export_non_calendar_meeting_uses_meeting_metadata():
         Transcription(meeting_id=meeting.id, start_time=0, end_time=2, speaker="Alice", text="手動参加", language="ja"),
     ]
     db = AsyncMock()
-    db.execute = AsyncMock(side_effect=[MockResult([meeting]), MockResult(transcripts)])
+    db.execute = AsyncMock(side_effect=[
+        MockResult([meeting]),
+        MockResult(transcripts),
+        MockResult([meeting]),  # pre-done refresh (mid-export mutation check)
+    ])
     db.commit = AsyncMock()
     uploaded = AsyncMock(return_value={"id": "drive-file-2", "webViewLink": "https://drive/file2"})
 
@@ -193,3 +199,123 @@ async def test_sweep_drive_export_jobs_runs_queued_job():
 
     assert swept == 1
     run.assert_awaited_once_with(TEST_MEETING_ID, db)
+
+
+# ---------------------------------------------------------------------------
+# Speaker-update requeue (issue #23) — including the mid-export race
+# ---------------------------------------------------------------------------
+
+
+def test_requeue_drive_export_requeues_done_export():
+    meeting = make_meeting(
+        id=TEST_MEETING_ID,
+        status=MeetingStatus.COMPLETED.value,
+        data={"drive_export": {"status": "done", "file_id": "f-1", "attempts": 2}},
+    )
+    with patch("meeting_api.drive_export.attributes.flag_modified", new=MagicMock()):
+        assert requeue_drive_export(meeting, triggered_by="speaker_update") is True
+    state = meeting.data["drive_export"]
+    assert state["status"] == "queued"
+    assert state["requeued_from"] == "done"
+    assert state["file_id"] == "f-1"
+    assert state["attempts"] == 0
+
+
+def test_requeue_during_running_export_flags_rerun_instead_of_requeue():
+    """A running export is rendering OLD rows; flag rerun_requested so the
+    exporter re-queues itself instead of finishing as stale `done`."""
+    meeting = make_meeting(
+        id=TEST_MEETING_ID,
+        status=MeetingStatus.COMPLETED.value,
+        data={"drive_export": {"status": "running", "attempts": 1}},
+    )
+    with patch("meeting_api.drive_export.attributes.flag_modified", new=MagicMock()):
+        assert requeue_drive_export(meeting, triggered_by="speaker_update") is True
+    state = meeting.data["drive_export"]
+    assert state["status"] == "running"  # untouched
+    assert state["rerun_requested"] is True
+
+
+def test_requeue_while_already_queued_is_noop():
+    meeting = make_meeting(
+        id=TEST_MEETING_ID,
+        status=MeetingStatus.COMPLETED.value,
+        data={"drive_export": {"status": "queued", "attempts": 0}},
+    )
+    assert requeue_drive_export(meeting, triggered_by="speaker_update") is False
+    assert meeting.data["drive_export"]["status"] == "queued"
+
+
+@pytest.mark.asyncio
+async def test_run_drive_export_requeues_when_content_changed_mid_export():
+    """rerun_requested committed by a speaker PATCH during the upload must
+    send the export back to queued (the uploaded file has stale names)."""
+    meeting = make_meeting(
+        id=TEST_MEETING_ID,
+        status=MeetingStatus.COMPLETED.value,
+        data={
+            "calendar_event": _calendar_event(),
+            "drive_export": {"status": "queued", "attempts": 0},
+        },
+        created_at=datetime(2026, 7, 3, 1, 0, 0),
+    )
+    transcripts = [
+        Transcription(meeting_id=meeting.id, start_time=0, end_time=2, speaker="Alice", text="完了です", language="ja"),
+    ]
+    # The refresh select returns a meeting whose drive_export was mutated
+    # mid-export by the speaker-update endpoint.
+    refreshed = make_meeting(
+        id=TEST_MEETING_ID,
+        status=MeetingStatus.COMPLETED.value,
+        data={
+            "calendar_event": _calendar_event(),
+            "drive_export": {"status": "running", "attempts": 1, "rerun_requested": True},
+        },
+    )
+    db = AsyncMock()
+    db.execute = AsyncMock(side_effect=[
+        MockResult([meeting]),
+        MockResult(transcripts),
+        MockResult([refreshed]),
+    ])
+    db.commit = AsyncMock()
+    uploaded = AsyncMock(return_value={"id": "drive-file-1", "webViewLink": "https://drive/file"})
+
+    with patch("meeting_api.drive_export.attributes.flag_modified", new=MagicMock()), \
+         patch("meeting_api.drive_export.upload_markdown_to_drive", new=uploaded):
+        result = await run_drive_export(TEST_MEETING_ID, db)
+
+    assert result["status"] == "queued"
+    state = refreshed.data["drive_export"]
+    assert state["status"] == "queued"
+    assert state["rerun_requested"] is False
+    assert state["file_id"] == "drive-file-1"  # next run updates the same file
+
+
+@pytest.mark.asyncio
+async def test_run_drive_export_updates_existing_drive_file_in_place():
+    meeting = make_meeting(
+        id=TEST_MEETING_ID,
+        status=MeetingStatus.COMPLETED.value,
+        data={
+            "calendar_event": _calendar_event(),
+            "drive_export": {"status": "queued", "attempts": 0, "file_id": "existing-file"},
+        },
+        created_at=datetime(2026, 7, 3, 1, 0, 0),
+    )
+    transcripts = []
+    db = AsyncMock()
+    db.execute = AsyncMock(side_effect=[
+        MockResult([meeting]),
+        MockResult(transcripts),
+        MockResult([meeting]),
+    ])
+    db.commit = AsyncMock()
+    uploaded = AsyncMock(return_value={"id": "existing-file", "webViewLink": "https://drive/file"})
+
+    with patch("meeting_api.drive_export.attributes.flag_modified", new=MagicMock()), \
+         patch("meeting_api.drive_export.upload_markdown_to_drive", new=uploaded):
+        result = await run_drive_export(TEST_MEETING_ID, db)
+
+    assert result["status"] == "done"
+    assert uploaded.await_args.kwargs["file_id"] == "existing-file"

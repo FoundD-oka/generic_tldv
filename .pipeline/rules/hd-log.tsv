@@ -1,2 +1,8 @@
 date	task_id	category	source	severity	note
 2026-07-07	dashboard-uiux-memo	deploy-context-drift	human	high	gcloud builds submit inherits .gitignore when no .gcloudignore exists; blanket *.png silently dropped committed dashboard PNG icons from the Cloud Build upload, 404 in prod but fine locally (docker uses .dockerignore). Fixed via repo-root .gcloudignore.
+2026-07-08	speaker-attribution-voiceprint	live-state-mutation-guard	tribunal	blocker	PATCH speakers on active meeting would delete the live Redis segments hash; fixed with status gate 409 + regression test
+2026-07-08	speaker-attribution-voiceprint	correction-durability	tribunal	blocker	merge->rename lost source-cluster corrections across mode=replace; fixed with aliases map + regression test
+2026-07-08	speaker-attribution-voiceprint	export-content-race	tribunal	major	speaker update during running Drive export left stale done file; fixed with rerun_requested + pre-done refresh
+2026-07-08	speaker-attribution-voiceprint	jsonb-lost-update	tribunal	major	concurrent PATCH read-modify-write on meeting.data could drop corrections; fixed with SELECT FOR UPDATE
+2026-07-08	speaker-attribution-voiceprint	sync-migration-bypass	tribunal	major	schema-sync would build the new large-table index non-CONCURRENTLY at startup; fixed with online_only index skip
+2026-07-08	speaker-attribution-voiceprint	stale-ui-filter	tribunal	minor	speaker filter kept old names after merge; fixed by clearing filter on success

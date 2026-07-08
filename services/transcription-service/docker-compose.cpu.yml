@@ -34,6 +34,8 @@ services:
       - DEVICE=cpu
       - COMPUTE_TYPE=int8
       - CPU_THREADS=${CPU_THREADS:-0}
+      # Soniox async diarization route for stt-async-* models (issue #21)
+      - SONIOX_API_KEY=${SONIOX_API_KEY:-}
     volumes:
       - ./models:/app/models
     restart: unless-stopped
