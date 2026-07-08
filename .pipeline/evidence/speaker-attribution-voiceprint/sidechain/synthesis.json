@@ -1,0 +1,28 @@
+{
+  "task_id": "speaker-attribution-voiceprint",
+  "review_type": "sidechain-synthesis",
+  "scope": "Phase 0 + Phase 1 (issues #21-#24) working-tree diff",
+  "verdict": "pass_with_human_approval_required",
+  "reviewers": [
+    {
+      "name": "codex-adversarial-diff-review",
+      "runtime": "codex-rescue (independent runtime, no implementation context)",
+      "focus": "Correctness, races, cache-invalidation ordering, data loss on replace, backward compat, migration safety on ~507K-row transcriptions, test adequacy.",
+      "finding": "2 blockers (live-meeting Redis hash deletion via PATCH; merge->rename correction loss across mode=replace), 3 majors (running-export staleness race, meeting.data JSONB lost update, schema-sync non-CONCURRENTLY index build), 1 minor (stale speaker filter after merge)."
+    }
+  ],
+  "resolution_summary": "All 6 findings fixed in the same working tree with regression tests: post-meeting-only 409 gate before any mutation; speaker_corrections.aliases map keeps merge groups durable through later renames and replace; rerun_requested flag + pre-done meeting refresh closes the mid-export race and the export/PATCH JSONB clobber; SELECT FOR UPDATE serializes concurrent PATCHes; Index info online_only makes schema-sync skip the synchronous build (migration script owns CONCURRENTLY creation); dashboard clears the speaker filter after a successful update.",
+  "blocking_findings": [],
+  "required_follow_up": [
+    "Record hash-bound human approval for diff sha256:75f30469dbe6e6127afcc651ff1a51078e2abf576368125534a27a92e08b8f37 before PR.",
+    "Run scripts/migrations/20260708_add_speaker_cluster.py up on production BEFORE deploying meeting-api.",
+    "Record a real Soniox async request/response golden once SONIOX_API_KEY is provisioned (current diarization golden is synthetic; within-file speaker-number stability to be validated per P0 note).",
+    "Phases 2-4 (#25-#27) remain separate sub-plans with their own contracts and approvals."
+  ],
+  "evidence": [
+    ".pipeline/evidence/speaker-attribution-voiceprint/sidechain-synthesis.md",
+    ".pipeline/evidence/speaker-attribution-voiceprint/test-results.md",
+    ".pipeline/evidence/speaker-attribution-voiceprint/codex-plan-critique.md",
+    ".pipeline/rules/hd-findings.jsonl"
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "verdict": "needs_human",
+  "summary": "All Phase 0 + Phase 1 acceptance criteria (P0-AC1, P1-AC1..P1-AC11) are substantively met. QA independently re-ran the contract test commands: transcription-service test_soniox_adapter.py 11 passed; meeting-api full suite 375 passed / 10 skipped (matches sidechain post-fix count, includes all cited AC and sidechain regression tests, verified present by name); dashboard 73 passed / 13 files and production build succeeded; adapter-validate.sh passes including soniox-stt.adapter.json; golden-2 diarization fixtures exist under contracts/stt/v1/examples and golden-1 is unchanged for backward compat. Sidechain adversarial review (independent Codex runtime) found 2 blockers + 3 majors + 1 minor, all fixed with regression tests and re-verified; blocking findings now 0. Remaining items are L-policy, not AC failures: hash-bound human approval for diff sha256:75f30469dbe6e6127afcc651ff1a51078e2abf576368125534a27a92e08b8f37 is not yet recorded, the production migration has not been executed, and the Soniox golden is synthetic pending a real API key. The pr-ready gate should be re-run: its 2026-07-07T19:50Z snapshot predates sidechain/synthesis.json and this qa-judgment by one minute.",
+  "ac_results": {
+    "P0-AC1": "pass",
+    "P1-AC1": "pass",
+    "P1-AC2": "pass",
+    "P1-AC3": "pass",
+    "P1-AC4": "pass",
+    "P1-AC5": "pass",
+    "P1-AC6": "pass",
+    "P1-AC7": "pass",
+    "P1-AC8": "pass",
+    "P1-AC9": "pass",
+    "P1-AC10": "pass",
+    "P1-AC11": "pass"
+  },
+  "ac_justifications": {
+    "P0-AC1": "contracts/stt/v1/README.md documents the additive per-segment `speaker` cluster-id field; soniox-stt.adapter.json passes the adapter gate (re-run by QA); golden-2 diarization fixtures exist and token-folding, deterministic-replay, within-file cluster-id and no-speaker backward-compat tests re-run green (11 passed).",
+    "P1-AC1": "test_parse_segments_keeps_cluster_ids_when_speaker_events_present (tests/test_speaker_clusters.py:49) verifies cluster ids survive when speaker_events are present; re-run green.",
+    "P1-AC2": "scripts/migrations/20260708_add_speaker_cluster.py implements nullable add, batched backfill, CREATE INDEX CONCURRENTLY and a down path (DROP INDEX CONCURRENTLY + DROP COLUMN); test_migration_statements_are_online_safe and test_migration_batch_ranges_cover_id_space_exactly pass; schema-sync online_only skip additionally regression-tested. Production execution remains a deploy-time follow-up.",
+    "P1-AC3": "test_cluster_vote_stable_where_per_segment_mapping_flips plus explicit Unknown-ratio (test_cluster_vote_below_overlap_ratio_returns_unknown), deterministic tie-break, and never-name-Unknown tests all present and green.",
+    "P1-AC4": "Rename/merge/reassign each have API tests (test_rename_by_cluster_updates_rows_and_saves_correction, test_merge_clusters_records_all_source_clusters, test_reassign_targets_specific_segment_ids); undo baseline preserved via speaker_auto = COALESCE(speaker_auto, speaker) verified in compiled SQL (meetings.py:2072).",
+    "P1-AC5": "test_redis_invalidation_happens_after_commit asserts the live-segments Redis hash is deleted only after DB commit, removing the stale cached name from the Postgres+Redis merge path; verified via side-effect ordering.",
+    "P1-AC6": "test_done_drive_export_is_requeued_on_rename asserts drive_export.status done -> queued with requeued_from=done and the same file_id (in-place Drive update, no duplicate); mid-export running race additionally covered by rerun_requested flag tests.",
+    "P1-AC7": "test_replace_reapplies_manual_cluster_corrections passes; merge->rename durability across mode=replace hardened by speaker_corrections.aliases with dedicated regression tests from the sidechain blocker fix.",
+    "P1-AC8": "speaker_cluster present in meeting_api/schemas.py TranscriptionSegment, dashboard api.ts RawSegment mapping, and types/vexa.ts; dashboard production build re-run by QA succeeds.",
+    "P1-AC9": "Rename is durable in Postgres (UPDATE tests); Drive markdown re-rendered via tested requeue reading row.speaker from DB (drive_export.py:348); dashboard txt/json/srt exports are pure formatters of REST segments whose post-rename freshness is guaranteed by the AC5 cache invalidation; AI chat consumes the same REST segments.",
+    "P1-AC10": "speaker-edit.ts logic covered by 12 unit tests (tests/test_speaker_edit.test.ts: rename by cluster, legacy-label fallback, range reassign by segment ids, multi-speaker merge); transcript-viewer.tsx wires merge/reassign toolbar and inline rename; build passes (repo has no component-render test infra).",
+    "P1-AC11": "test_unauthorized_patch_is_rejected (401/403) and test_other_users_meeting_returns_404 pass; sidechain additionally added test_active_meeting_is_rejected_before_any_mutation (409 gate before any mutation) and row-lock test for concurrent PATCH."
+  },
+  "residual_risk": [
+    "Hash-bound human approval not yet recorded for diff sha256:75f30469dbe6e6127afcc651ff1a51078e2abf576368125534a27a92e08b8f37 (L policy; pr-ready gate currently blocks on it as designed).",
+    "Production migration scripts/migrations/20260708_add_speaker_cluster.py must be run against prod BEFORE deploying meeting-api; only statement-level online-safety is test-verified, it has not been executed against a real Postgres.",
+    "Soniox diarization golden is synthetic; real async API request/response golden and within-file speaker-number stability validation pending SONIOX_API_KEY provisioning.",
+    "P1-AC5 and P1-AC9 are verified transitively (commit-before-invalidate ordering + pure-formatter export of REST segments) rather than by a single end-to-end 'PATCH then GET transcript / export file contains new name' test.",
+    "meeting-api API tests use the repo's mock-DB convention; row locking and JSONB read-modify-write serialization are asserted via compiled SQL / call-order, not a live-Postgres concurrency test.",
+    "GitNexus flags HIGH impact on the Transcription model (20 impacted) and 'high' detect-changes risk on shared dashboard modules; mitigated by additive-only nullable columns/optional fields and full green suites, but reviewers should re-check consumers on merge.",
+    "pr-ready gate output predates sidechain/synthesis.json and this qa-judgment by ~1 minute; re-run bash .claude/hooks/pr-ready-gate.sh speaker-attribution-voiceprint before PR."
+  ]
+}

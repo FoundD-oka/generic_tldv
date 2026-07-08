@@ -1058,6 +1058,8 @@ class TranscriptionSegment(BaseModel):
     session_uid: Optional[str] = Field(None, description="Bot session/stream identity for internal attribution")
     speaker_mapping_status: Optional[str] = Field(None, description="Speaker attribution confidence/status")
     track_id: Optional[str] = Field(None, description="Audio track identity when provided by the bot")
+    speaker_cluster: Optional[str] = Field(None, description="Acoustic cluster id from STT diarization (anonymous, per-meeting)")
+    speaker_auto: Optional[str] = Field(None, description="Original auto-assigned speaker label (undo baseline for manual corrections)")
 
     @field_validator('language')
     @classmethod

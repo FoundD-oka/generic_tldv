@@ -1,0 +1,12 @@
+{
+  "task": "speaker-attribution-voiceprint",
+  "size": "L",
+  "decided_after": "plan_relay",
+  "rationale": "Cross-service change (vexa-bot capture, meeting-api deferred pipeline, dashboard UI) with multiple schema migrations (Transcription.speaker_cluster, MediaFile participant dimension, speaker_profiles + voiceprints), touching the regression-scarred recording/finalizer path, and introducing biometric PII (voiceprints) that requires consent, encryption, tenant isolation, and delete/opt-out. Playback-correctness and privacy sensitive. Phased: Phase 1 is the smallest-blast-radius value drop (cluster-aware correction on the existing mixed master); Phases 2-4 are separately mergeable L sub-deliverables.",
+  "plan": ".pipeline/plans/speaker-attribution-voiceprint/plan.md",
+  "verification_contract": ".pipeline/plans/speaker-attribution-voiceprint/verification-contract.md",
+  "human_gate_required": true,
+  "tribunal_required": true,
+  "pii_path": true,
+  "phases": ["cluster-correction", "per-participant-lanes", "room-share-diarization", "voiceprint-enrollment"]
+}

@@ -108,6 +108,16 @@ def _sync_columns(conn: Connection, base):
             conn.execute(text(stmt))
 
 
+def _is_online_only_index(index) -> bool:
+    """Indexes marked info={'online_only': True} must be built out-of-band
+    with CREATE INDEX CONCURRENTLY (see scripts/migrations/) — a synchronous
+    index.create() would take a write-blocking lock on large tables."""
+    try:
+        return bool((index.info or {}).get("online_only"))
+    except Exception:
+        return False
+
+
 def _sync_indexes(conn: Connection, base):
     """Add missing indexes (skips existing ones by name)."""
     inspector = inspect(conn)
@@ -121,6 +131,12 @@ def _sync_indexes(conn: Connection, base):
 
         for index in table.indexes:
             if index.name and index.name in existing_indexes:
+                continue
+            if _is_online_only_index(index):
+                logger.warning(
+                    f"Skipping online-only index {index.name} on {table.name}: "
+                    "create it via its migration script (CREATE INDEX CONCURRENTLY)"
+                )
                 continue
             try:
                 index.create(conn)

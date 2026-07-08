@@ -20,6 +20,8 @@ import uvicorn
 from faster_whisper import WhisperModel
 # faster-whisper uses CTranslate2 internally (no PyTorch needed)
 
+import soniox_adapter
+
 # Logging
 logging.basicConfig(
     level=logging.INFO,
@@ -297,6 +299,27 @@ async def transcribe_audio(
     """
     if not requested_model:
         raise HTTPException(status_code=400, detail="Model parameter is required")
+
+    # Soniox async route (stt-async-* models): external API with speaker
+    # diarization — no local GPU/queue involvement, so it bypasses the Whisper
+    # load-management path entirely. Used by the deferred (post-meeting) tier.
+    if soniox_adapter.is_soniox_model(requested_model):
+        audio_bytes = await file.read()
+        logger.info(
+            f"Worker {WORKER_ID} routing to Soniox async - model: {requested_model}, "
+            f"filename: {file.filename}, bytes: {len(audio_bytes)}"
+        )
+        try:
+            return await soniox_adapter.transcribe_via_soniox(
+                audio_bytes,
+                filename=file.filename or "audio",
+                model=requested_model,
+                language=language,
+            )
+        except soniox_adapter.SonioxError as e:
+            logger.error(f"Worker {WORKER_ID} Soniox transcription failed: {e}")
+            raise HTTPException(status_code=e.status_code, detail=str(e))
+
     global waiting_requests, active_realtime_requests, active_deferred_requests
 
     tier_from_header = request.headers.get("X-Transcription-Tier")

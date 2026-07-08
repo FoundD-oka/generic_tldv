@@ -207,12 +207,9 @@ async def find_final_transcription_source(
     return None
 
 
-def map_speakers_to_segments(
-    speaker_events: List[Dict[str, Any]],
-    segments: List[Dict[str, Any]],
-) -> List[Dict[str, Any]]:
-    """Map speaker names to transcription segments using speaking ranges."""
-    ranges = []
+def _speaking_ranges(speaker_events: List[Dict[str, Any]]) -> List[tuple]:
+    """Build (name, start_sec, end_sec) speaking ranges from DOM speaker events."""
+    ranges: List[tuple] = []
     active: Dict[str, float] = {}
     for event in sorted(speaker_events, key=lambda e: e.get("relative_timestamp_ms", 0)):
         name = event.get("participant_name", "Unknown")
@@ -224,6 +221,15 @@ def map_speakers_to_segments(
             ranges.append((name, active.pop(name), ts_sec))
     for name, start in active.items():
         ranges.append((name, start, float("inf")))
+    return ranges
+
+
+def map_speakers_to_segments(
+    speaker_events: List[Dict[str, Any]],
+    segments: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Map speaker names to transcription segments using speaking ranges."""
+    ranges = _speaking_ranges(speaker_events)
 
     for seg in segments:
         best_speaker = "Unknown"
@@ -238,6 +244,69 @@ def map_speakers_to_segments(
                 best_speaker = speaker
         seg["speaker"] = best_speaker
     return segments
+
+
+# Minimum share of a cluster's speech time the winning DOM name must cover;
+# below this the cluster stays "Unknown" instead of guessing.
+SPEAKER_CLUSTER_MIN_OVERLAP_RATIO = float(
+    os.getenv("SPEAKER_CLUSTER_MIN_OVERLAP_RATIO", "0.2")
+)
+
+
+def name_clusters_by_dom_vote(
+    segments: List[Dict[str, Any]],
+    speaker_events: List[Dict[str, Any]],
+    *,
+    min_overlap_ratio: Optional[float] = None,
+) -> Dict[str, str]:
+    """Name acoustic clusters by an overlap-seconds-weighted DOM vote.
+
+    Unlike per-segment mapping (jittery on boundaries), the vote sums DOM
+    overlap seconds across ALL segments of a cluster and names the whole
+    cluster at once. A cluster falls back to "Unknown" when the best name
+    covers less than min_overlap_ratio of the cluster's speech time. Ties
+    resolve deterministically by name ascending.
+    """
+    ratio = SPEAKER_CLUSTER_MIN_OVERLAP_RATIO if min_overlap_ratio is None else min_overlap_ratio
+    ranges = _speaking_ranges(speaker_events or [])
+
+    totals: Dict[str, float] = {}
+    votes: Dict[str, Dict[str, float]] = {}
+    for seg in segments:
+        cluster = seg.get("speaker_cluster")
+        if not cluster:
+            continue
+        try:
+            start = float(seg["start"])
+            end = float(seg["end"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        totals[cluster] = totals.get(cluster, 0.0) + max(0.0, end - start)
+        for name, range_start, range_end in ranges:
+            overlap = max(0.0, min(end, range_end) - max(start, range_start))
+            if overlap > 0:
+                cluster_votes = votes.setdefault(cluster, {})
+                cluster_votes[name] = cluster_votes.get(name, 0.0) + overlap
+
+    names: Dict[str, str] = {}
+    for cluster, total in totals.items():
+        best_name = None
+        best_overlap = 0.0
+        for name in sorted((votes.get(cluster) or {}).keys()):
+            overlap = votes[cluster][name]
+            if overlap > best_overlap:
+                best_name = name
+                best_overlap = overlap
+        if (
+            best_name is None
+            or best_name == "Unknown"
+            or total <= 0.0
+            or (best_overlap / total) < ratio
+        ):
+            names[cluster] = "Unknown"
+        else:
+            names[cluster] = best_name
+    return names
 
 
 async def _download_recording_audio(source: FinalTranscriptionSource) -> bytes:
@@ -347,7 +416,22 @@ def _parse_segments(
                 end = 0.0
             segments = [{"start": 0.0, "end": max(end, 0.001), "text": text}]
     detected_language = tx_result.get("language", language or "unknown")
-    if speaker_events:
+
+    # stt.v1 diarization extension: when the STT already labeled segments with
+    # acoustic cluster ids (`speaker`), those clusters are the source of truth.
+    # DOM speaker_events then only NAME clusters (whole-cluster weighted vote)
+    # and never overwrite per-segment attribution. Backends without
+    # diarization fall back to the legacy per-segment DOM overlap mapping.
+    has_clusters = any(seg.get("speaker") not in (None, "") for seg in segments)
+    if has_clusters:
+        for seg in segments:
+            cluster = seg.get("speaker")
+            seg["speaker_cluster"] = str(cluster) if cluster not in (None, "") else None
+        cluster_names = name_clusters_by_dom_vote(segments, speaker_events or [])
+        for seg in segments:
+            cluster = seg.get("speaker_cluster")
+            seg["speaker"] = cluster_names.get(cluster, "Unknown") if cluster else "Unknown"
+    elif speaker_events:
         segments = map_speakers_to_segments(speaker_events, segments)
     return segments, detected_language
 
@@ -392,6 +476,27 @@ def _resolve_final_transcription_language(meeting: Meeting, explicit_language: O
     if isinstance(language, str) and language.strip():
         return language.strip()
     return FINAL_TRANSCRIPTION_DEFAULT_LANGUAGE or "ja"
+
+
+def _saved_cluster_corrections(meeting: Meeting) -> Dict[str, str]:
+    """Manual cluster→name corrections persisted by the speaker-update API.
+
+    Stored in meeting.data["speaker_corrections"]["clusters"] so they survive
+    a mode="replace" re-transcription (rows are deleted and rebuilt, but the
+    cluster ids from diarization are re-derived and the names re-applied).
+    """
+    data = _meeting_data(meeting)
+    saved = data.get("speaker_corrections")
+    if not isinstance(saved, dict):
+        return {}
+    clusters = saved.get("clusters")
+    if not isinstance(clusters, dict):
+        return {}
+    return {
+        str(cluster): str(name).strip()
+        for cluster, name in clusters.items()
+        if isinstance(name, str) and name.strip()
+    }
 
 
 async def _has_meaningful_existing_speakers(db: AsyncSession, meeting_id: int) -> bool:
@@ -615,6 +720,15 @@ async def run_deferred_transcription(
         )).scalar() or 0
         await db.execute(delete(Transcription).where(Transcription.meeting_id == meeting_id))
 
+    # Re-apply saved manual cluster corrections so replace never silently
+    # discards human edits; the auto label stays in speaker_auto for undo.
+    corrections = _saved_cluster_corrections(meeting)
+    for seg in segments:
+        seg["speaker_auto"] = seg.get("speaker")
+        cluster = seg.get("speaker_cluster")
+        if cluster and cluster in corrections:
+            seg["speaker"] = corrections[cluster]
+
     stored = 0
     for idx, seg in enumerate(segments):
         start = float(seg.get("start", 0))
@@ -629,6 +743,8 @@ async def run_deferred_transcription(
             end_time=end,
             text=text,
             speaker=seg.get("speaker"),
+            speaker_cluster=seg.get("speaker_cluster"),
+            speaker_auto=seg.get("speaker_auto"),
             language=detected_language,
             session_uid=source.session_uid,
             segment_id=segment_id,

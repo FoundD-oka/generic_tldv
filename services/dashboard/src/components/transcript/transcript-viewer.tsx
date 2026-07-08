@@ -19,8 +19,14 @@ import {
   DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu";
 import { TranscriptSegment } from "./transcript-segment";
-import type { Meeting, TranscriptSegment as TranscriptSegmentType, ChatMessage } from "@/types/vexa";
+import type { Meeting, TranscriptSegment as TranscriptSegmentType, ChatMessage, SpeakerUpdatePayload } from "@/types/vexa";
 import { getSpeakerColor } from "@/types/vexa";
+import {
+  buildSegmentReassign,
+  buildSpeakerMerge,
+  buildSpeakerRename,
+  describeSpeakerUpdate,
+} from "@/lib/speaker-edit";
 import {
   exportToTxt,
   exportToJson,
@@ -126,6 +132,12 @@ export function TranscriptViewer({
   const [selectedSpeakers, setSelectedSpeakers] = useState<string[]>([]);
   const [transcribeLanguage, setTranscribeLanguage] = useState("auto");
   const [isTranscribing, setIsTranscribing] = useState(false);
+  // 話者編集（issue #24）: 会議後の文字起こしのみ編集可能
+  const [selectedSegmentIds, setSelectedSegmentIds] = useState<Set<string>>(new Set());
+  const [isMergeInputOpen, setIsMergeInputOpen] = useState(false);
+  const [mergeTargetName, setMergeTargetName] = useState("");
+  const [reassignTargetName, setReassignTargetName] = useState("");
+  const [isUpdatingSpeakers, setIsUpdatingSpeakers] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -335,6 +347,60 @@ export function TranscriptViewer({
   }, [meeting?.id, transcribeLanguage, onTranscribeComplete]);
 
   const hasActiveFilters = searchQuery.trim() || selectedSpeakers.length > 0;
+
+  // ---- 話者編集（issue #24 Phase 1c） ----
+  const canEditSpeakers = !isLive && !isLoading && !!meeting?.id;
+
+  const applySpeakerUpdate = useCallback(
+    async (payload: SpeakerUpdatePayload | null) => {
+      if (!payload || !meeting?.id) return;
+      setIsUpdatingSpeakers(true);
+      try {
+        const result = await vexaAPI.updateSpeakers(meeting.id, payload);
+        toast.success("話者を更新しました", {
+          description: describeSpeakerUpdate(result.updated),
+        });
+        setSelectedSegmentIds(new Set());
+        setIsMergeInputOpen(false);
+        setMergeTargetName("");
+        setReassignTargetName("");
+        // 旧話者名のフィルタが残ると改名後のセグメントが隠れるため解除する
+        setSelectedSpeakers([]);
+        onTranscribeComplete?.();
+      } catch (error) {
+        toast.error("話者の更新に失敗しました", {
+          description: (error as Error).message,
+        });
+      } finally {
+        setIsUpdatingSpeakers(false);
+      }
+    },
+    [meeting?.id, onTranscribeComplete]
+  );
+
+  const toggleGroupSelection = useCallback((segmentIds: string[]) => {
+    setSelectedSegmentIds((prev) => {
+      const next = new Set(prev);
+      const allSelected = segmentIds.every((id) => next.has(id));
+      for (const id of segmentIds) {
+        if (allSelected) next.delete(id);
+        else next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleReassignSelected = useCallback(() => {
+    void applySpeakerUpdate(
+      buildSegmentReassign([...selectedSegmentIds], reassignTargetName)
+    );
+  }, [applySpeakerUpdate, selectedSegmentIds, reassignTargetName]);
+
+  const handleMergeSelectedSpeakers = useCallback(() => {
+    void applySpeakerUpdate(
+      buildSpeakerMerge(selectedSpeakers, segments, mergeTargetName)
+    );
+  }, [applySpeakerUpdate, selectedSpeakers, segments, mergeTargetName]);
 
   // Handle scroll events to detect when user scrolls up
   const handleScroll = useCallback(() => {
@@ -702,6 +768,11 @@ export function TranscriptViewer({
                 {selectedSpeakers.length > 0 && (
                   <>
                     <DropdownMenuSeparator />
+                    {canEditSpeakers && selectedSpeakers.length >= 2 && (
+                      <DropdownMenuItem onClick={() => setIsMergeInputOpen(true)}>
+                        選択した話者を統合...
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuItem onClick={() => setSelectedSpeakers([])}>
                       選択を解除
                     </DropdownMenuItem>
@@ -755,6 +826,77 @@ export function TranscriptViewer({
                 <X className="h-3 w-3 ml-1" />
               </Badge>
             ))}
+          </div>
+        )}
+
+        {/* 話者統合の入力行（フィルタで選択した話者を1名にまとめる） */}
+        {isMergeInputOpen && (
+          <div className="flex flex-wrap items-center gap-2 text-sm animate-fade-in">
+            <span className="text-muted-foreground">
+              選択した{selectedSpeakers.length}名の話者を統合:
+            </span>
+            <Input
+              autoFocus
+              value={mergeTargetName}
+              onChange={(e) => setMergeTargetName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && mergeTargetName.trim()) handleMergeSelectedSpeakers();
+                if (e.key === "Escape") setIsMergeInputOpen(false);
+              }}
+              placeholder="統合後の話者名"
+              className="h-7 w-44 text-sm"
+            />
+            <Button
+              size="sm"
+              className="h-7"
+              disabled={isUpdatingSpeakers || !mergeTargetName.trim() || selectedSpeakers.length < 2}
+              onClick={handleMergeSelectedSpeakers}
+            >
+              {isUpdatingSpeakers ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "統合"}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7"
+              onClick={() => setIsMergeInputOpen(false)}
+            >
+              キャンセル
+            </Button>
+          </div>
+        )}
+
+        {/* 範囲選択 → まとめて話者変更ツールバー */}
+        {selectedSegmentIds.size > 0 && (
+          <div className="flex flex-wrap items-center gap-2 text-sm animate-fade-in">
+            <Badge variant="secondary" className="font-normal">
+              {selectedSegmentIds.size}件選択中
+            </Badge>
+            <Input
+              value={reassignTargetName}
+              onChange={(e) => setReassignTargetName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && reassignTargetName.trim()) handleReassignSelected();
+                if (e.key === "Escape") setSelectedSegmentIds(new Set());
+              }}
+              placeholder="変更後の話者名"
+              className="h-7 w-44 text-sm"
+            />
+            <Button
+              size="sm"
+              className="h-7"
+              disabled={isUpdatingSpeakers || !reassignTargetName.trim()}
+              onClick={handleReassignSelected}
+            >
+              {isUpdatingSpeakers ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "まとめて話者変更"}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7"
+              onClick={() => setSelectedSegmentIds(new Set())}
+            >
+              選択解除
+            </Button>
           </div>
         )}
       </CardHeader>
@@ -941,9 +1083,20 @@ export function TranscriptViewer({
                   completed: group.segments.every(s => s.completed !== false),
                   session_uid: group.segments[0]?.session_uid || "",
                   created_at: group.startTime,
+                  speaker_cluster: group.segments[0]?.speaker_cluster,
+                  speaker_auto: group.segments[0]?.speaker_auto,
                 };
 
                 const isActivePlayback = activePlaybackIndex === index;
+
+                // 話者編集: PGに永続化された行（segment_idあり）のみ対象
+                const groupSegmentIds = group.segments
+                  .map((s) => s.segment_id)
+                  .filter((id): id is string => !!id);
+                const isGroupSelectable = canEditSpeakers && groupSegmentIds.length > 0;
+                const isGroupSelected =
+                  isGroupSelectable &&
+                  groupSegmentIds.every((id) => selectedSegmentIds.has(id));
 
                 // Determine if this is a continuation from the same speaker
                 // by looking at the previous timeline item. A same-speaker run
@@ -995,6 +1148,30 @@ export function TranscriptViewer({
                       isActivePlayback={isActivePlayback}
                       onClickSegment={onSegmentClick ? () => onSegmentClick(group.startTimeSeconds, group.startTime) : undefined}
                       showSpeakerHeader={showSpeakerHeader}
+                      canEdit={canEditSpeakers}
+                      onSpeakerEdit={(toName, scope) => {
+                        if (scope === "speaker") {
+                          void applySpeakerUpdate(
+                            buildSpeakerRename(
+                              {
+                                speaker: syntheticSegment.speaker,
+                                speaker_cluster: syntheticSegment.speaker_cluster,
+                              },
+                              toName
+                            )
+                          );
+                        } else {
+                          void applySpeakerUpdate(
+                            buildSegmentReassign(groupSegmentIds, toName)
+                          );
+                        }
+                      }}
+                      isSelected={isGroupSelected}
+                      onToggleSelect={
+                        isGroupSelectable
+                          ? () => toggleGroupSelection(groupSegmentIds)
+                          : undefined
+                      }
                     />
                   </div>
                 );

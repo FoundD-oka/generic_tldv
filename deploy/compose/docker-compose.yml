@@ -307,6 +307,9 @@ services:
       - CAPTURE_MODES=${CAPTURE_MODES:-audio}
       - TRANSCRIPTION_SERVICE_URL=${TRANSCRIPTION_SERVICE_URL:-}
       - TRANSCRIPTION_SERVICE_TOKEN=${TRANSCRIPTION_SERVICE_TOKEN:-}
+      # Deferred (post-meeting) STT model; stt-async-* routes to the Soniox
+      # diarization adapter in transcription-service (issues #21/#22).
+      - DEFERRED_TRANSCRIPTION_MODEL=${DEFERRED_TRANSCRIPTION_MODEL:-large-v3-turbo}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
       - KABOSU_GOOGLE_REFRESH_TOKEN=${KABOSU_GOOGLE_REFRESH_TOKEN:-}
