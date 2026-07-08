@@ -439,3 +439,30 @@ async def test_sweep_final_transcription_jobs_runs_replace_mode():
         mode="replace",
         triggered_by="final_transcription_sweep",
     )
+
+
+def test_deferred_transcription_endpoint_override(monkeypatch):
+    from meeting_api.final_transcription import _deferred_transcription_endpoint
+
+    monkeypatch.setenv("TRANSCRIPTION_SERVICE_URL", "http://realtime:8091/v1/audio/transcriptions")
+    monkeypatch.setenv("TRANSCRIPTION_SERVICE_TOKEN", "realtime-token")
+    monkeypatch.delenv("DEFERRED_TRANSCRIPTION_SERVICE_URL", raising=False)
+    monkeypatch.delenv("DEFERRED_TRANSCRIPTION_SERVICE_TOKEN", raising=False)
+
+    # Without an override the deferred path follows the realtime endpoint.
+    assert _deferred_transcription_endpoint() == (
+        "http://realtime:8091/v1/audio/transcriptions", "realtime-token",
+    )
+
+    # The deferred-only override wins without touching the realtime env.
+    monkeypatch.setenv("DEFERRED_TRANSCRIPTION_SERVICE_URL", "http://soniox-capable:8092/v1/audio/transcriptions")
+    url, token = _deferred_transcription_endpoint()
+    assert url == "http://soniox-capable:8092/v1/audio/transcriptions"
+    assert token == "realtime-token"  # token falls back independently
+
+    monkeypatch.setenv("DEFERRED_TRANSCRIPTION_SERVICE_TOKEN", "deferred-token")
+    assert _deferred_transcription_endpoint()[1] == "deferred-token"
+
+    # Blank override strings are ignored, not treated as configured.
+    monkeypatch.setenv("DEFERRED_TRANSCRIPTION_SERVICE_URL", "  ")
+    assert _deferred_transcription_endpoint()[0] == "http://realtime:8091/v1/audio/transcriptions"

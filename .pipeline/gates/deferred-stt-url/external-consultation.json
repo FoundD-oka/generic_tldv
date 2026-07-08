@@ -1,0 +1,17 @@
+{
+  "timestamp": "2026-07-08T03:18:01.579247+00:00",
+  "task_id": "deferred-stt-url",
+  "size": "S",
+  "status": "pass",
+  "mode": "not_configured",
+  "policy": "optional",
+  "required": false,
+  "provider": "chatgpt-pro-web",
+  "errors": [],
+  "warnings": [],
+  "artifacts": {
+    "brief": ".pipeline/plans/deferred-stt-url/consultation-brief.md",
+    "response": ".pipeline/evidence/deferred-stt-url/external-consultation/chatgpt-pro.md",
+    "summary": ".pipeline/evidence/deferred-stt-url/external-consultation/consultation-summary.json"
+  }
+}
