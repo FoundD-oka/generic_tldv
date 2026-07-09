@@ -24,6 +24,9 @@ Verification-contract items covered here:
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -554,6 +557,61 @@ async def test_shared_mic_two_stable_clusters_speaker_none_and_recorded():
 
 
 @pytest.mark.asyncio
+async def test_shared_mic_lane_namespaces_clusterless_segment_instead_of_blanking_it():
+    """BUG-001 regression: a lane with 2 stable diarized clusters (shared
+    mic) can ALSO contain a segment Soniox could not diarize at all (no
+    `speaker` tag from the STT backend). Before the fix, the unconditional
+    `seg["speaker"] = None` in the shared-mic branch collapsed that
+    segment's identity to speaker_cluster=None/speaker=None — the same
+    blank "" identity key used meeting-wide for every other unattributed
+    segment, with no needs_review affordance to fix it. After the fix it
+    must get its OWN namespaced "lane:{laneKey}:unclustered" sub-cluster id
+    (still with speaker=None, per AC5) so it stays distinct and reviewable."""
+    meeting = _meeting_with_single_lane()
+    db = _db_for(meeting)
+    added: list[Transcription] = []
+    db.add = MagicMock(side_effect=added.append)
+
+    async def fake_stt(audio, fmt, *, language):
+        return {
+            "language": "ja",
+            "segments": [
+                # 2 stable diarized clusters — this makes the lane shared-mic.
+                {"start": 0.0, "end": 3.0, "text": "こんにちは、今日はよろしくお願いします", "speaker": "spk0"},
+                {"start": 4.0, "end": 7.0, "text": "別の発言者からの発話内容です", "speaker": "spk1"},
+                # No `speaker` key at all — Soniox could not diarize this
+                # one. has_clusters stays True (spk0/spk1 carry the tag),
+                # so this segment comes out of _parse_segments with
+                # speaker_cluster=None, speaker="Unknown".
+                {"start": 8.0, "end": 9.0, "text": "聞き取れない発話"},
+            ],
+        }
+
+    with patch("meeting_api.final_transcription.attributes.flag_modified", new=MagicMock()), \
+         patch("meeting_api.final_transcription._download_recording_audio", new=AsyncMock(return_value=b"wav")), \
+         patch("meeting_api.final_transcription._convert_audio_to_wav", return_value=(b"wav", "wav")), \
+         patch("meeting_api.final_transcription._call_transcription_service", new=AsyncMock(side_effect=fake_stt)), \
+         patch("meeting_api.final_transcription._clear_live_transcript_cache", new=AsyncMock(return_value=True)), \
+         patch("meeting_api.final_transcription._publish_transcript_finalized", new=AsyncMock()):
+        await run_deferred_transcription(TEST_MEETING_ID, db, mode="reject_if_exists")
+
+    assert len(added) == 3
+    by_cluster = {t.speaker_cluster: t for t in added}
+    assert set(by_cluster) == {
+        f"lane:{LANE_A_KEY}:spk0",
+        f"lane:{LANE_A_KEY}:spk1",
+        f"lane:{LANE_A_KEY}:unclustered",
+    }
+    unclustered = by_cluster[f"lane:{LANE_A_KEY}:unclustered"]
+    assert unclustered.speaker is None, "AC5 — still no guessed identity, just like a named sub-cluster"
+    assert unclustered.speaker_auto is None
+    # The other two segments are unaffected by this fix.
+    assert all(t.speaker is None for t in added)
+    state = meeting.data["final_transcription"]
+    assert state["shared_mic_lanes"] == [LANE_A_KEY]
+
+
+@pytest.mark.asyncio
 async def test_solo_lane_with_tiny_noise_cluster_does_not_split():
     """Issue #26 P3-AC3 (false-split guard): a lane with one genuine
     (stable) cluster plus a tiny one-word interjection (0.3s, well under
@@ -664,3 +722,23 @@ async def test_saved_correction_for_subcluster_applies_after_shared_mic_processi
     assert renamed.speaker == "花子", "saved rename still targets only its own sub-cluster"
     assert renamed.speaker_auto is None, "auto baseline stays the discarded (None) DOM name, not the correction"
     assert other.speaker is None, "the OTHER sub-cluster is untouched by a rename scoped to spk0 only"
+
+
+def test_lane_shared_mic_min_cluster_tokens_accepts_decimal_env_value():
+    """BUG-004 regression: LANE_SHARED_MIC_MIN_CLUSTER_TOKENS is parsed at
+    module IMPORT time, so this must be a fresh-process import (a
+    monkeypatched env var + importlib.reload in-process would mutate the
+    shared module namespace other test modules already hold references
+    into). A plausible-looking decimal value (by analogy with the
+    float-typed LANE_SHARED_MIC_MIN_CLUSTER_DURATION_S sibling) must not
+    crash the whole process with ValueError at startup."""
+    env = dict(os.environ, LANE_SHARED_MIC_MIN_CLUSTER_TOKENS="5.0")
+    result = subprocess.run(
+        [
+            sys.executable, "-c",
+            "from meeting_api.final_transcription import LANE_SHARED_MIC_MIN_CLUSTER_TOKENS as v; print(v)",
+        ],
+        env=env, capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "5"

@@ -1,0 +1,67 @@
+{
+  "schema_version": "1.0",
+  "task_id": "issue-26-lane-diarization",
+  "commit": "58200e2",
+  "final_verdicts": [
+    {
+      "id": "BUG-001",
+      "is_real_bug": true,
+      "severity": "medium",
+      "category": "logic-error",
+      "reasoning": "Verified final_transcription.py:427-432. In the shared_mic branch of _apply_lane_identity, `seg[\"speaker\"] = None` executes unconditionally for every segment, outside the `if cluster:` guard that namespaces speaker_cluster. Traced _parse_segments (851-859): whenever ANY segment in a lane's tx_result carries a diarization tag, has_clusters=True for the whole batch, so a segment Soniox did NOT tag comes out with speaker_cluster=None, speaker=\"Unknown\". If that lane is otherwise shared-mic (K_stable>=2), the unconditional None-write overwrites \"Unknown\" while the falsy cluster skips namespacing, leaving speaker_cluster=None too. _derive_speaker_mapping_status(None, None) then returns None (the lane-sub-cluster regex never matches None), so this segment is not flagged needs_review, and dashboard getSpeakerIdentityKey (segment.speaker || segment.speaker_cluster || \"\") resolves it to the shared blank-key bucket used meeting-wide for any unattributed segment. Confirmed via `git show 58200e2` that the prior multi-cluster branch never touched seg[\"speaker\"] at all, so this is a genuine behavioral regression introduced by this commit, not a pre-existing limitation. No test in test_final_transcription_lanes.py exercises a mixed clustered/clusterless segment set inside a K_stable>=2 lane, so the gap is untested. Impact is real but bounded: it degrades one edge-case segment's identity to the pre-existing generic-blank bucket rather than crashing or leaking a raw id, which is why this lands at medium rather than high.",
+      "action_required": "fix-recommended",
+      "fix_suggestion": "Only null out seg[\"speaker\"] inside the `if cluster:` branch (i.e., only for segments that actually carry a lane sub-cluster id), or explicitly namespace clusterless segments too (e.g. lane:{lane.lane_key}:unclustered) so they keep a stable, reviewable identity instead of collapsing to the generic blank key. Add a mixed clustered/clusterless fixture to test_final_transcription_lanes.py for a K_stable>=2 lane."
+    },
+    {
+      "id": "BUG-002",
+      "is_real_bug": true,
+      "severity": "medium",
+      "category": "logic-error",
+      "reasoning": "Traced the full runtime path. transcript-viewer.tsx:240-249 builds speakerOrder via getSpeakerIdentityKey (speaker-label.ts:27, segment.speaker || segment.speaker_cluster || \"\"); for a needs_review sub-cluster this key is the raw speaker_cluster (e.g. lane:abc:spk0) since speaker is empty. The speaker-filter dropdown (770-785) populates selectedSpeakers from exactly these identity-key strings. handleMergeSelectedSpeakers (416-420) calls buildSpeakerMerge(selectedSpeakers, segments, mergeTargetName) with the raw `segments` prop. speaker-edit.ts:54-55 filters `if (!seg.speaker || !selected.has(seg.speaker)) continue;` — matching on seg.speaker only, never on speaker_cluster/identity key. For a needs_review segment seg.speaker is falsy, so it is always skipped regardless of whether its speaker_cluster is in `selected`. Selecting two needs_review badges and clicking merge causes buildSpeakerMerge to return null; applySpeakerUpdate (373: `if (!payload || !meeting?.id) return;`) then no-ops with zero user feedback. test_speaker_edit.test.ts only exercises name-keyed selections (Unknown/Unknown 2), confirming this path shipped untested. buildSpeakerRename (single-segment rename, the flow the plan actually specifies for naming needs_review sub-speakers) correctly checks speaker_cluster first and is unaffected — this narrows the blast radius to the multi-select merge action specifically, which is why this is medium rather than high: the plan's intended one-click naming flow (rename) still works, but the generic merge action silently breaks for this new segment shape.",
+      "action_required": "fix-recommended",
+      "fix_suggestion": "Change buildSpeakerMerge to match segments by identity key (seg.speaker || seg.speaker_cluster, mirroring getSpeakerIdentityKey) instead of seg.speaker alone. Add a regression test mixing a needs_review lane-sub-cluster segment into the merge selection, and consider surfacing an error toast when applySpeakerUpdate receives a null payload so a failed merge is never silent."
+    },
+    {
+      "id": "BUG-003",
+      "is_real_bug": false,
+      "severity": "false-positive",
+      "category": "logic-error",
+      "reasoning": "export.ts is not in this commit's changed-file list (confirmed via `git show 58200e2 --stat`: 19 files changed, export.ts absent), and the commit message explicitly states 'Invariants preserved: ... exports unchanged.' This is a reviewed, documented decision, not an oversight: .pipeline/plans/issue-26-lane-diarization/plan.md's Out of Scope section states 'exports/public shareへのneeds_review反映（Phase 3は内部UI限定、非目標として明記。NH-3）', and the Codex plan critique independently raised this exact question (NH-3) before implementation, resolving it as an explicit non-goal. The finder's technical description of the code (exports read raw segment.speaker, producing blank names for two distinct needs_review sub-speakers) is accurate as a description of current behavior, and does represent a real fidelity gap between on-screen and exported transcripts for shared-mic meetings — but characterizing a pre-scoped, documented, deliberately-deferred product decision as a defect this diff introduced overstates it. This is a known, accepted limitation, not an unreviewed bug.",
+      "action_required": "no-action",
+      "fix_suggestion": "No action required against this diff's scope. If/when needs_review fidelity in exports becomes a priority, track it as a new issue building on NH-3 rather than reopening it against Phase 3, using getSpeakerDisplayLabel/buildSpeakerDisplayLabels to resolve labels before handing segments to exportToTxt/Json/Srt/Vtt."
+    },
+    {
+      "id": "BUG-004",
+      "is_real_bug": true,
+      "severity": "low",
+      "category": "other",
+      "reasoning": "Verified final_transcription.py:56-58: LANE_SHARED_MIC_MIN_CLUSTER_TOKENS = int(os.getenv(\"LANE_SHARED_MIC_MIN_CLUSTER_TOKENS\", \"5\")), while its sibling two lines above uses float(...). Confirmed int(\"5.0\") raises ValueError: invalid literal for int() with base 10: '5.0'. Both statements execute at module import time, so a malformed env value would crash the whole meeting-api process on startup, not just this feature. This is disproportionate for a tunable threshold, and inconsistent with the defensive posture _stable_lane_clusters documents for itself ('Never raises... degrades toward unstable'). deploy/env-example and docker-compose.yml currently ship correct non-decimal defaults for this specific var, so there is no live misconfiguration today, but the risk of an operator typing \"5.0\" by analogy with the neighboring float-typed sibling is real and plausible, which is why this is a genuine (if low-probability, currently-latent) defect rather than a false positive.",
+      "action_required": "fix-recommended",
+      "fix_suggestion": "Parse with int(float(os.getenv(...))) to accept both \"5\" and \"5.0\", or wrap the module-level parse in a try/except that logs and falls back to the default, matching the defensive posture documented for the rest of this feature."
+    },
+    {
+      "id": "BUG-005",
+      "is_real_bug": true,
+      "severity": "low",
+      "category": "logic-error",
+      "reasoning": "Verified collector/endpoints.py: the PG branch (300-314) computes speaker_mapping_status via _derive_speaker_mapping_status(pg_speaker_cluster, seg.speaker), while the Redis branch (374) does speaker_mapping_status=d.get(\"speaker_mapping_status\") — trusting whatever key happens to be in the JSON blob, with no derivation fallback. The function's own docstring (261-265) confirms Redis segments take precedence over Postgres on key collision, so this is a real, if currently dormant, asymmetry: today it is safe only because nothing in the realtime collector pipeline writes a lane-shaped speaker_cluster into Redis (lane diarization is deferred-only), an implicit cross-module invariant this module has no way to enforce or even detect if violated. No plan text or inline comment documents this asymmetry as an intentional decision — it appears to be an oversight in an otherwise carefully-derived feature, distinguishing it from BUG-003's documented non-goal.",
+      "action_required": "fix-recommended",
+      "fix_suggestion": "Route the Redis branch through the same _derive_speaker_mapping_status call (e.g. derive first, fall back to the JSON field only if derivation returns None and the field is explicitly set) so both merge branches share one source of truth instead of one deriving and the other trusting the wire."
+    },
+    {
+      "id": "BUG-006",
+      "is_real_bug": true,
+      "severity": "low",
+      "category": "logic-error",
+      "reasoning": "Verified final_transcription.py:572 (`lane.lane_key if shared_mic else None`) and 597 (`if shared_mic_lane_key: shared_mic_lane_keys.append(...)`) both rely on Python truthiness, treating an empty-string lane_key identically to 'no shared-mic lane.' Confirmed the legitimate bot path (vexa-bot browser.ts, sha1Hex(...).slice(0,10)) always yields a non-empty 10-char key, so this is unreachable through normal bot operation. However, confirmed in media_types.py (is_lane_media_type: str(media_type or \"\").lower().startswith(\"lane-\")) and recordings.py (media_type: str = Form(default=\"audio\"), an unvalidated free-form string on the internal upload endpoint) that a caller supplying the literal media_type \"lane-\" would pass is_lane_media_type and produce lane_key=\"\" via mf_type[len(\"lane-\"):] in _lane_master_sources, with no guard rejecting an empty resulting key. This makes the gap real rather than purely theoretical, though it requires a malformed/internal caller rather than any normal user or bot action, correctly justifying the low severity and low likelihood both reviewers assigned.",
+      "action_required": "monitor",
+      "fix_suggestion": "Thread an explicit boolean/sentinel through _transcribe's return value (e.g. return (lane.lane_key, shared_mic) as a tuple, or check `shared_mic_lane_key is not None` with a sentinel other than the empty string) instead of relying on Python truthiness for a string only guaranteed non-empty by an upstream convention this module cannot validate."
+    }
+  ],
+  "summary": {
+    "total_reported": 6,
+    "confirmed_bugs": 5,
+    "false_positives": 1,
+    "critical_issues": 0
+  }
+}

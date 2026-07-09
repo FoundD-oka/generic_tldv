@@ -53,9 +53,12 @@ MAX_LANE_TOTAL_DURATION_SECONDS = float(
 LANE_SHARED_MIC_MIN_CLUSTER_DURATION_S = float(
     os.getenv("LANE_SHARED_MIC_MIN_CLUSTER_DURATION_S", "2.0")
 )
-LANE_SHARED_MIC_MIN_CLUSTER_TOKENS = int(
+# BUG-004 — int(float(...)) so a decimal-looking value (e.g. "5.0", a
+# plausible typo by analogy with the float-typed sibling above) is accepted
+# instead of crashing the whole process at import time with ValueError.
+LANE_SHARED_MIC_MIN_CLUSTER_TOKENS = int(float(
     os.getenv("LANE_SHARED_MIC_MIN_CLUSTER_TOKENS", "5")
-)
+))
 
 
 @dataclass(frozen=True)
@@ -429,6 +432,17 @@ def _apply_lane_identity(
             cluster = seg.get("speaker_cluster")
             if cluster:
                 seg["speaker_cluster"] = f"lane:{lane.lane_key}:{cluster}"
+            else:
+                # BUG-001 — a segment Soniox could not diarize (no cluster
+                # tag) must not collapse into the shared meeting-wide blank
+                # identity just because its lane happens to be shared-mic.
+                # Namespace it too, under its own stable sub-cluster id, so
+                # it keeps a distinct identity and still matches
+                # _LANE_SUB_CLUSTER_RE downstream (_derive_speaker_mapping_
+                # status in collector/endpoints.py), i.e. it is flagged
+                # needs_review exactly like a named sub-cluster segment
+                # instead of silently disappearing into "".
+                seg["speaker_cluster"] = f"lane:{lane.lane_key}:unclustered"
             seg["speaker"] = None
     else:
         for seg in segments:
@@ -569,6 +583,14 @@ async def _transcribe_lanes(
             # yielding the identical Future/Task object that was used as a
             # dict key, so the lane_key is threaded through the return
             # value itself instead.
+            # BUG-006 (monitor) — this relies on Python truthiness, so an
+            # empty-string lane_key would be conflated with "no shared-mic
+            # lane" (None) below and in the `if shared_mic_lane_key:` check
+            # further down. lane_key is always a 10-char sha1 slug generated
+            # bot-side (vexa-bot browser.ts: sha1Hex(track.id).slice(0,10))
+            # and is never empty through normal bot operation, so this is
+            # acceptable while the internal upload endpoint is the only
+            # producer of `media_type="lane-..."` — see tribunal BUG-006.
             return segments, detected, (lane.lane_key if shared_mic else None)
 
     transcribe_tasks = {
@@ -594,6 +616,9 @@ async def _transcribe_lanes(
             errors.append(exc)
             continue
         merged.extend(segments)
+        # BUG-006 (monitor) — truthiness check paired with the one in
+        # `_transcribe` above; see the comment there for the invariant this
+        # relies on (lane_key is always a non-empty bot-generated slug).
         if shared_mic_lane_key:
             shared_mic_lane_keys.append(shared_mic_lane_key)
         if detected and detected != "unknown":

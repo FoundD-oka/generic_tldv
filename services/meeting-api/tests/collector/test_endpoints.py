@@ -10,6 +10,7 @@ which forces speaker=None on every shared-mic sub-cluster segment.
 """
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -98,3 +99,62 @@ async def test_pg_segment_construction_sets_needs_review_for_unnamed_sub_cluster
     by_id = {s.segment_id: s for s in segments}
     assert by_id["seg-1"].speaker_mapping_status == "needs_review"
     assert by_id["seg-2"].speaker_mapping_status is None
+
+
+@pytest.mark.asyncio
+async def test_redis_segment_derives_needs_review_status_as_fallback():
+    """BUG-005 — the Redis (live) merge branch must not just trust
+    `d.get("speaker_mapping_status")`; it must derive the same way the PG
+    branch does, so an unnamed lane sub-cluster id that lands in Redis is
+    still flagged needs_review even though nothing wrote the wire field
+    (today; the derivation must not silently stop working if that changes)."""
+    db = AsyncMock()
+    db.execute = AsyncMock(side_effect=[
+        _Result([]),  # MeetingSession query
+        _Result([]),  # Transcription query
+    ])
+    redis_c = AsyncMock()
+    redis_c.hgetall = AsyncMock(return_value={
+        "seg-r1": json.dumps({
+            "segment_id": "seg-r1",
+            "text": "テスト発話内容",
+            "start_time": 0.0,
+            "end_time": 1.0,
+            "speaker": None,
+            "speaker_cluster": "lane:aaaaaaaaaa:spk0",
+        }),
+    })
+
+    segments = await _get_full_transcript_segments(1, db, redis_c)
+
+    by_id = {s.segment_id: s for s in segments}
+    assert by_id["seg-r1"].speaker_mapping_status == "needs_review"
+
+
+@pytest.mark.asyncio
+async def test_redis_segment_keeps_explicit_wire_status_when_derivation_is_none():
+    """An explicitly-set wire value must survive when derivation itself has
+    nothing to say (e.g. a non-lane speaker_cluster) — derive-first,
+    trust-the-wire-as-fallback, not derive-only."""
+    db = AsyncMock()
+    db.execute = AsyncMock(side_effect=[
+        _Result([]),
+        _Result([]),
+    ])
+    redis_c = AsyncMock()
+    redis_c.hgetall = AsyncMock(return_value={
+        "seg-r2": json.dumps({
+            "segment_id": "seg-r2",
+            "text": "テスト発話内容2",
+            "start_time": 0.0,
+            "end_time": 1.0,
+            "speaker": "山田",
+            "speaker_cluster": "mixed-cluster-1",
+            "speaker_mapping_status": "some_future_status",
+        }),
+    })
+
+    segments = await _get_full_transcript_segments(1, db, redis_c)
+
+    by_id = {s.segment_id: s for s in segments}
+    assert by_id["seg-r2"].speaker_mapping_status == "some_future_status"

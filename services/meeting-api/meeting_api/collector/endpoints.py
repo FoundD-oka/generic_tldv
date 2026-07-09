@@ -362,6 +362,19 @@ async def _get_full_transcript_segments(
                         abs_start = ss + timedelta(seconds=float(d.get("start_time", 0)))
                         abs_end = ss + timedelta(seconds=float(d.get("end_time", 0)))
 
+            # BUG-005 — derive speaker_mapping_status the same way the PG
+            # branch above does, instead of only trusting whatever happens
+            # to be in the Redis JSON blob. Redis segments take precedence
+            # over Postgres on key collision (see docstring above), so if a
+            # future change ever writes a lane sub-cluster id into the live
+            # Redis hash, it must still be flagged needs_review here rather
+            # than silently bypassing derivation. An explicitly-set wire
+            # value is kept when derivation itself yields nothing (e.g. a
+            # non-lane status a future producer might set directly).
+            redis_speaker_cluster = d.get("speaker_cluster")
+            derived_status = _derive_speaker_mapping_status(
+                redis_speaker_cluster, d.get("speaker")
+            )
             merged[key] = TranscriptionSegment(
                 start_time=float(d.get("start_time", 0)),
                 end_time=float(d.get("end_time", 0)),
@@ -371,9 +384,9 @@ async def _get_full_transcript_segments(
                 absolute_start_time=abs_start, absolute_end_time=abs_end,
                 segment_id=d.get('segment_id'),
                 session_uid=d.get("session_uid"),
-                speaker_mapping_status=d.get("speaker_mapping_status"),
+                speaker_mapping_status=derived_status if derived_status is not None else d.get("speaker_mapping_status"),
                 track_id=d.get("track_id") or d.get("speaker_track_id"),
-                speaker_cluster=d.get("speaker_cluster"),
+                speaker_cluster=redis_speaker_cluster,
                 speaker_auto=d.get("speaker_auto"),
             )
         except Exception as e:

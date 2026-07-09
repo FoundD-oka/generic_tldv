@@ -81,6 +81,37 @@ describe("buildSpeakerMerge", () => {
     expect(buildSpeakerMerge([], segments, "佐藤")).toBeNull();
     expect(buildSpeakerMerge(["Unknown"], segments, "")).toBeNull();
   });
+
+  it("BUG-002: matches needs_review lane sub-cluster segments by identity key (speaker || speaker_cluster), not by speaker alone", () => {
+    // Needs_review segments carry an empty `speaker` and their identity is
+    // the raw `speaker_cluster` — exactly what getSpeakerIdentityKey
+    // returns and what the viewer's speaker filter selects by.
+    const withNeedsReview = [
+      { speaker: "", speaker_cluster: "lane:aaaaaaaaaa:spk0" },
+      { speaker: "", speaker_cluster: "lane:aaaaaaaaaa:spk1" },
+    ];
+    expect(
+      buildSpeakerMerge(
+        ["lane:aaaaaaaaaa:spk0", "lane:aaaaaaaaaa:spk1"],
+        withNeedsReview,
+        "佐藤"
+      )
+    ).toEqual({
+      merge: [{ clusters: ["lane:aaaaaaaaaa:spk0", "lane:aaaaaaaaaa:spk1"], to_name: "佐藤" }],
+    });
+  });
+
+  it("BUG-002: mixing a needs_review sub-speaker with a named speaker covers both clusters (no silent drop)", () => {
+    const mixed = [
+      { speaker: "Unknown", speaker_cluster: "1" },
+      { speaker: "", speaker_cluster: "lane:aaaaaaaaaa:spk0" },
+    ];
+    expect(
+      buildSpeakerMerge(["Unknown", "lane:aaaaaaaaaa:spk0"], mixed, "佐藤")
+    ).toEqual({
+      merge: [{ clusters: ["1", "lane:aaaaaaaaaa:spk0"], to_name: "佐藤" }],
+    });
+  });
 });
 
 describe("describeSpeakerUpdate", () => {
