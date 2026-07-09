@@ -20,6 +20,15 @@ type SpeakerLabelInput = Pick<
 const LANE_SUBCLUSTER_RE = /^lane:[^:]+:.+$/;
 
 /**
+ * ソロレーン形式`lane:{key}`（コロン1つだけ、サブクラスタではない）に
+ * マッチする。F2（Fable final-audit consultation）: lane_labelが無く
+ * DOM投票名も無いソロレーンはこの形のまま残り、`speaker_mapping_status`
+ * も付かない（needs_reviewではない）ため`isNeedsReviewSegment`だけでは
+ * 検出できない。ラベル未解決のまま生idを表示させないための専用判定。
+ */
+const LANE_SOLO_RE = /^lane:[^:]+$/;
+
+/**
  * grouping/filter/色/連続speaker header判定など、identityが問題になる
  * 箇所すべてで使うフォールバックキー。表示には使わない。
  */
@@ -36,6 +45,17 @@ export function getSpeakerIdentityKey(segment: SpeakerLabelInput): string {
 export function isNeedsReviewSegment(segment: SpeakerLabelInput): boolean {
   if (segment.speaker_mapping_status === "needs_review") return true;
   return !segment.speaker && !!segment.speaker_cluster && LANE_SUBCLUSTER_RE.test(segment.speaker_cluster);
+}
+
+/**
+ * F2（Fable final-audit consultation）: 名前もラベルも付いていない
+ * ソロレーン（サブクラスタ形式ではない、`lane:{key}`ちょうどコロン1つ）
+ * かどうかを判定する。`isNeedsReviewSegment`はサブクラスタ形式のみを見る
+ * ため、この形は素通りしてしまう —未解決のまま生cluster idが表示に漏れる
+ * のを防ぐための専用判定。
+ */
+export function isUnlabeledSoloLaneSegment(segment: SpeakerLabelInput): boolean {
+  return !segment.speaker && !!segment.speaker_cluster && LANE_SOLO_RE.test(segment.speaker_cluster);
 }
 
 // 0 -> "A", 25 -> "Z", 26 -> "AA", ... （会議内で滅多に26クラスタを超えないが安全側に倒す）
@@ -55,12 +75,17 @@ function indexToLetters(index: number): string {
  * - 命名済み（`speaker`が入っている）segmentはその名前をラベルにする。
  * - 未命名の要確認サブクラスタは、そのサブクラスタidの初出順に
  *   「要確認の話者A」「要確認の話者B」…を割り当てる。
+ * - 未命名のソロレーン（F2: lane_label無し・DOM名無しで`lane:{key}`の
+ *   ままのもの）は、そのレーンidの初出順に「未特定の話者A」「未特定の
+ *   話者B」…を割り当てる（要確認＝複数話者の切り分けが必要、とは意味が
+ *   異なるため別ラベル）。
  * - それ以外（クラスタも名前もない従来の空segment）はmapに入れず、
  *   呼び出し側で従来通り空文字にフォールバックさせる。
  */
 export function buildSpeakerDisplayLabels(segments: SpeakerLabelInput[]): Map<string, string> {
   const labels = new Map<string, string>();
   let nextReviewIndex = 0;
+  let nextUnlabeledIndex = 0;
   for (const seg of segments) {
     const key = getSpeakerIdentityKey(seg);
     if (!key || labels.has(key)) continue;
@@ -69,6 +94,9 @@ export function buildSpeakerDisplayLabels(segments: SpeakerLabelInput[]): Map<st
     } else if (isNeedsReviewSegment(seg)) {
       labels.set(key, `要確認の話者${indexToLetters(nextReviewIndex)}`);
       nextReviewIndex += 1;
+    } else if (isUnlabeledSoloLaneSegment(seg)) {
+      labels.set(key, `未特定の話者${indexToLetters(nextUnlabeledIndex)}`);
+      nextUnlabeledIndex += 1;
     }
   }
   return labels;
@@ -85,4 +113,17 @@ export function getSpeakerDisplayLabel(
   const key = getSpeakerIdentityKey(segment);
   if (key && labels.has(key)) return labels.get(key)!;
   return segment.speaker || "";
+}
+
+/**
+ * F2（Fable final-audit consultation）: 話者フィルタdropdown/バッジなど、
+ * segment全体ではなくidentityキーだけを持っている描画箇所向けの表示ラベル
+ * 解決。`labels`に無いキーであっても、生の`lane:{key}`（サブクラスタ形式
+ * `lane:{key}:{sub}`を含む）を絶対に返さない — `buildSpeakerDisplayLabels`
+ * の対象漏れがあっても二重の防御になる。
+ */
+export function resolveSpeakerLabelByKey(key: string, labels: Map<string, string>): string {
+  if (key && labels.has(key)) return labels.get(key)!;
+  if (key.startsWith("lane:")) return "未特定の話者";
+  return key || "不明";
 }
