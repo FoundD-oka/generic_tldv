@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-07-09T18:29:10.392728+00:00",
+  "task_id": "calendar-wakeword-toggle",
+  "status": "pass",
+  "mode": "not_applicable",
+  "details": {
+    "checkpoint_contract": ".pipeline/plans/calendar-wakeword-toggle/checkpoint-contract.json",
+    "evidence_manifest": ".pipeline/evidence/calendar-wakeword-toggle/evidence-manifest.json",
+    "approval_decision": ".pipeline/approvals/calendar-wakeword-toggle/approval-decision.json",
+    "state_machine": ".pipeline/rules/backcast-state-machine.json",
+    "mode": "optional"
+  },
+  "errors": [],
+  "warnings": []
+}
