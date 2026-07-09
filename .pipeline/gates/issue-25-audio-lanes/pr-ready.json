@@ -1,8 +1,8 @@
 {
-  "timestamp": "2026-07-09T20:40:48.471970+00:00",
+  "timestamp": "2026-07-09T20:58:37.179750+00:00",
   "task_id": "issue-25-audio-lanes",
   "size": "L",
-  "status": "block",
+  "status": "ready",
   "checks": [
     {
       "check": "harness-residency",
@@ -36,8 +36,8 @@
     },
     {
       "check": "external-consultation",
-      "ok": false,
-      "detail": "status=block mode=required required=True"
+      "ok": true,
+      "detail": "status=pass mode=required required=True"
     },
     {
       "check": "feedback-prune",
