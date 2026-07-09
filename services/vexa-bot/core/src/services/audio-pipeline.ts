@@ -139,6 +139,14 @@ export interface LaneAudioChunk {
   laneId: string;
   laneLabel: string | null;
   laneIdSource: string;
+  /**
+   * BUG-002 fix: ms between the mixed recording's start and this lane's
+   * recorder start. Carried through to the upload metadata's
+   * lane_start_offset_ms field so meeting-api can re-align lane-relative
+   * segment timestamps onto the mixed master's timeline. null when the
+   * browser side had no recordingStartedAtMs to compute it from.
+   */
+  laneStartOffsetMs: number | null;
   format: "webm" | "wav";
   data: Buffer;
   seq: number;
@@ -322,6 +330,7 @@ export class UnifiedRecordingPipeline {
     laneId: string;
     laneLabel: string | null;
     laneIdSource: string;
+    laneStartOffsetMs: number | null;
     format: "webm" | "wav";
     data: Buffer;
     seq: number;
@@ -346,6 +355,7 @@ export class UnifiedRecordingPipeline {
             laneId: chunk.laneId,
             laneLabel: chunk.laneLabel ?? undefined,
             laneIdSource: chunk.laneIdSource,
+            laneStartOffsetMs: chunk.laneStartOffsetMs ?? undefined,
           },
         );
       } catch (err: any) {
@@ -726,6 +736,7 @@ export class MediaRecorderCapture extends EventEmitter implements AudioCaptureSo
           laneId: string;
           laneLabel: string | null;
           laneIdSource: string;
+          laneStartOffsetMs: number | null;
           base64: string;
           chunkSeq: number;
           isFinal: boolean;
@@ -740,6 +751,7 @@ export class MediaRecorderCapture extends EventEmitter implements AudioCaptureSo
               laneId: payload.laneId,
               laneLabel: payload.laneLabel,
               laneIdSource: payload.laneIdSource,
+              laneStartOffsetMs: payload.laneStartOffsetMs ?? null,
               format,
               data: buf,
               seq: payload.chunkSeq,

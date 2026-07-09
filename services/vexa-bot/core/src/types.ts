@@ -26,6 +26,7 @@ export type BotConfig = {
   captureModes?: string[];  // e.g., ['audio'], ['audio', 'video'], ['audio', 'screenshots']
   recordingUploadUrl?: string;  // meeting-api internal upload endpoint
   recordParticipantLanes?: boolean;  // issue #25 — opt-in per-participant audio lanes (Google Meet)
+  maxRecordingLanes?: number;  // issue #25 tribunal BUG-015/016 — server-provided lane cap (0 = disabled); preferred over MAX_RECORDING_LANES env
 
   // Per-speaker transcription
   transcriptionServiceUrl?: string;   // HTTP endpoint for transcription-service

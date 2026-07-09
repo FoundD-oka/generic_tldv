@@ -173,6 +173,55 @@ def test_public_recording_view_hides_lanes_but_raw_keeps_them():
 
 
 @pytest.mark.asyncio
+async def test_lane_start_offset_ms_stored_and_inherited():
+    """BUG-002 (server half): lane_start_offset_ms rides the same
+    fresh/inherit merge as lane_id/lane_label/lane_id_source."""
+    meeting = make_meeting(data={})
+    session = make_session()
+    mock_db = _StatefulMockDB(session=session, meeting=meeting)
+    fake_storage = MagicMock()
+
+    with patch.object(recordings_module, "get_storage_client", return_value=fake_storage), \
+         patch.object(recordings_module.attributes, "flag_modified", new=MagicMock()):
+        await recordings_module.internal_upload_recording(
+            db=mock_db, **_lane_upload_call(LANE_A, lane_meta={
+                "lane_id": "spaces/x/devices/1", "lane_label": "山森",
+                "lane_id_source": "participant-id", "lane_start_offset_ms": 5000}))
+        # second chunk omits lane_start_offset_ms — must inherit, not reset to None.
+        await recordings_module.internal_upload_recording(
+            db=mock_db, **_lane_upload_call(LANE_A, chunk_seq=1))
+
+    recs = (meeting.data or {}).get("recordings") or []
+    lane_a = next(mf for mf in recs[0]["media_files"] if mf["type"] == LANE_A)
+    assert lane_a["lane"]["lane_start_offset_ms"] == 5000
+
+
+@pytest.mark.asyncio
+async def test_lane_final_chunk_never_flips_recording_status_or_fires_webhook():
+    """BUG-003: a lane's is_final chunk must only finalize that lane's own
+    media_files entry, never flip the whole recording to COMPLETED or fire
+    recording.completed — a mid-meeting lane departure is not the meeting
+    ending."""
+    meeting = make_meeting(data={})
+    session = make_session()
+    mock_db = _StatefulMockDB(session=session, meeting=meeting)
+    fake_storage = MagicMock()
+
+    with patch.object(recordings_module, "get_storage_client", return_value=fake_storage), \
+         patch.object(recordings_module.attributes, "flag_modified", new=MagicMock()), \
+         patch.object(recordings_module, "send_event_webhook", new=AsyncMock()) as webhook:
+        await recordings_module.internal_upload_recording(
+            db=mock_db, **_lane_upload_call(LANE_A, is_final=True, lane_meta={
+                "lane_id": "p1", "lane_label": "山森", "lane_id_source": "participant-id"}))
+
+    recs = (meeting.data or {}).get("recordings") or []
+    assert recs[0]["status"] != "completed", "lane is_final must not complete the whole recording"
+    lane_a = next(mf for mf in recs[0]["media_files"] if mf["type"] == LANE_A)
+    assert lane_a["is_final"] is True, "the lane's OWN media_files entry still finalizes"
+    webhook.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_delete_recording_removes_lane_files_too():
     """Lane filtering happens ONLY at the response boundary — the delete
     path must still see and remove lane storage objects."""
