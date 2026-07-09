@@ -21,6 +21,7 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import attributes
 
 from .database import get_db
+from .media_types import is_audio_like_media_type, is_lane_media_type
 from .models import Meeting, MeetingSession
 from .schemas import (
     RecordingResponse,
@@ -147,7 +148,7 @@ def media_content_type(media_type: str, media_format: str) -> str:
     fmt = str(media_format or "").lower()
     typ = str(media_type or "").lower()
     if fmt == "webm":
-        return "audio/webm" if typ == "audio" else "video/webm"
+        return "audio/webm" if is_audio_like_media_type(typ) else "video/webm"
     content_types = {
         "wav": "audio/wav",
         "opus": "audio/opus",
@@ -275,6 +276,21 @@ def _build_storage_media_response(storage, storage_path: str, content_type: str,
     return Response(content=data, media_type=content_type, headers=headers)
 
 
+def _public_recording_view(rec: Dict[str, Any]) -> Dict[str, Any]:
+    """Strip lane media files from API responses (issue #25: lanes are
+    internal-only). MediaFileResponse.type is an enum without lane-*, and
+    lanes are not a playback surface. Only the response boundary filters —
+    deletion and finalizer paths read the raw JSONB so lane objects are
+    still cleaned up and concatenated.
+    """
+    view = dict(rec)
+    view["media_files"] = [
+        mf for mf in (rec.get("media_files") or [])
+        if not (isinstance(mf, dict) and is_lane_media_type(mf.get("type")))
+    ]
+    return view
+
+
 async def _list_meeting_data_recordings(db: AsyncSession, user_id: int, meeting_id: Optional[int] = None) -> List[Dict]:
     stmt = select(Meeting).where(Meeting.user_id == user_id)
     if meeting_id is not None:
@@ -344,6 +360,9 @@ async def internal_upload_recording(
     chunk_seq: int = Form(default=0),
     db: AsyncSession = Depends(get_db),
 ):
+    lane_id: Optional[str] = None
+    lane_label: Optional[str] = None
+    lane_id_source: Optional[str] = None
     if metadata:
         try:
             meta = json.loads(metadata)
@@ -354,6 +373,9 @@ async def internal_upload_recording(
         media_format = meta.get("format", media_format)
         duration_seconds = meta.get("duration_seconds", duration_seconds)
         sample_rate = meta.get("sample_rate", sample_rate)
+        lane_id = meta.get("lane_id")
+        lane_label = meta.get("lane_label")
+        lane_id_source = meta.get("lane_id_source")
         if "is_final" in meta:
             is_final = _to_bool(meta.get("is_final"), default=True)
         if "chunk_seq" in meta:
@@ -490,11 +512,20 @@ async def internal_upload_recording(
         if mf.get("type") != media_type
     ]
     # Pack U.7 — preserve master path against late-chunk overwrite.
+    # Lane masters live under their own /{lane-*}/ prefix, so the guard must
+    # match the entry's own media_type dir, not just /audio/ (issue #25).
     prior_sp = (prior_same_type or {}).get("storage_path") or ""
     prior_is_final = bool((prior_same_type or {}).get("is_final"))
     master_finalized = (
         prior_sp.endswith("/audio/master.webm")
         or prior_sp.endswith("/audio/master.wav")
+        or (
+            is_lane_media_type(media_type)
+            and (
+                prior_sp.endswith(f"/{media_type}/master.webm")
+                or prior_sp.endswith(f"/{media_type}/master.wav")
+            )
+        )
         or prior_is_final
     )
     new_storage_path = prior_sp if master_finalized else storage_path
@@ -505,10 +536,22 @@ async def internal_upload_recording(
             "chunk_seq=%s — preserving master storage_path=%s",
             meeting.id, recording_id, media_type, chunk_seq, prior_sp,
         )
+    # Lane identity survives chunks that omit metadata: later chunks inherit
+    # the prior entry's lane object unless this chunk supplies fresh values.
+    lane_info = None
+    if is_lane_media_type(media_type):
+        fresh = {
+            "lane_id": lane_id,
+            "lane_label": lane_label,
+            "lane_id_source": lane_id_source,
+        }
+        prior_lane = (prior_same_type or {}).get("lane") or {}
+        lane_info = {**prior_lane, **{k: v for k, v in fresh.items() if v is not None}}
     existing_media_files.append({
         "id": (prior_same_type or {}).get("id") or _new_recording_numeric_id(),
         "type": media_type,
         "format": media_format,
+        **({"lane": lane_info} if lane_info is not None else {}),
         "storage_path": new_storage_path,
         "storage_backend": os.environ.get("STORAGE_BACKEND", "minio"),
         "file_size_bytes": cumulative_bytes,
@@ -571,7 +614,7 @@ async def list_recordings(
     _, user = auth
     recs = await _list_meeting_data_recordings(db, user.id, meeting_id=meeting_id)
     page = recs[offset:offset + limit]
-    return RecordingListResponse(recordings=[RecordingResponse.model_validate(r) for r in page])
+    return RecordingListResponse(recordings=[RecordingResponse.model_validate(_public_recording_view(r)) for r in page])
 
 
 @router.get("/recordings/{recording_id}", response_model=RecordingResponse, summary="Get a single recording")
@@ -584,7 +627,7 @@ async def get_recording(
     _, rec = await _find_meeting_data_recording(db, user.id, recording_id)
     if rec is None:
         raise HTTPException(status_code=404, detail="Recording not found")
-    return RecordingResponse.model_validate(rec)
+    return RecordingResponse.model_validate(_public_recording_view(rec))
 
 
 @router.get("/recordings/{recording_id}/master", summary="Get presigned URL for the canonical master media file of a given type")

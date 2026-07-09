@@ -1108,6 +1108,9 @@ async def request_bot(
         "recordingUploadUrl": f"{MEETING_API_URL}/internal/recordings/upload",
         "transcriptionServiceUrl": os.getenv("TRANSCRIPTION_SERVICE_URL"),
         "transcriptionServiceToken": os.getenv("TRANSCRIPTION_SERVICE_TOKEN"),
+        # Issue #25 — opt-in per-participant audio lanes (Google Meet).
+        # Cost scales with participant count, so default off.
+        "recordParticipantLanes": os.getenv("RECORD_PARTICIPANT_LANES", "false").lower() == "true",
     }
     if req.recording_enabled is not None:
         bot_config["recordingEnabled"] = bool(req.recording_enabled)

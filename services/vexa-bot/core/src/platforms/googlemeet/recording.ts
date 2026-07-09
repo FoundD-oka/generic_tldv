@@ -45,6 +45,17 @@ export async function startGoogleRecording(page: Page, botConfig: BotConfig): Pr
     } else {
       recordingService = new RecordingService(botConfig.meeting_id, sessionUid);
 
+      // Issue #25 — per-participant lane recording. Opt-in (cost scales with
+      // participant count); default off keeps the bot byte-identical to the
+      // pre-lane behavior.
+      const recordLanes =
+        botConfig.recordParticipantLanes === true ||
+        String(process.env.RECORD_PARTICIPANT_LANES || "").toLowerCase() === "true";
+      const maxLanes = Math.max(
+        1,
+        parseInt(process.env.MAX_RECORDING_LANES || "8", 10) || 8,
+      );
+
       // CRITICAL: inject browser-utils bundle BEFORE constructing the
       // MediaRecorderCapture pipeline. The pipeline's startBrowserCapture
       // callback runs page.evaluate which accesses
@@ -70,7 +81,7 @@ export async function startGoogleRecording(page: Page, botConfig: BotConfig): Pr
         platform: "gmeet",
         timesliceMs: 30000,
         startBrowserCapture: async (page, timesliceMs) => {
-          await page.evaluate(async ({ timesliceMs }) => {
+          await page.evaluate(async ({ timesliceMs, recordLanes, maxLanes }) => {
             const u = (window as any).VexaBrowserUtils;
             (window as any).logBot(`[Google Recording] Browser utils available: ${Object.keys(u || {}).join(', ')}`);
 
@@ -114,6 +125,24 @@ export async function startGoogleRecording(page: Page, botConfig: BotConfig): Pr
             // Signal Node.js that recording started — re-aligns segment timestamps
             (window as any).__vexaRecordingStarted?.();
 
+            // Issue #25 — per-participant lane recording (opt-in). Runs in
+            // parallel with the combined pipeline above and never touches
+            // it: lanes upload under media_type "lane-{laneKey}", which the
+            // server stores outside the mixed master's /audio/ prefix.
+            if (recordLanes) {
+              const laneManager = new u.BrowserLaneRecorderManager({
+                timesliceMs,
+                maxLanes,
+                laneChunkCallback: (window as any).__vexaSaveLaneChunk,
+              });
+              (window as any).__vexaLaneRecorderManager = laneManager;
+              await laneManager.start(mediaElements);
+              (window as any).logBot(
+                `[Google Recording] Participant lane recording enabled ` +
+                `(lanes=${laneManager.laneCount()}, max=${maxLanes})`
+              );
+            }
+
             // Initialize the audio data processor for the
             // alone-cross-validation hook (Layer 2 of #285). The per-speaker
             // transcription pipeline runs on the Node side; this hook only
@@ -138,10 +167,24 @@ export async function startGoogleRecording(page: Page, botConfig: BotConfig): Pr
                 } catch {}
               });
             }
-          }, { timesliceMs });
+          }, { timesliceMs, recordLanes, maxLanes });
         },
         stopBrowserCapture: async (page) => {
           await page.evaluate(async () => {
+            // Lanes first (issue #25): their final chunks must flush before
+            // the bot's exit path starts tearing the page down. Lane stop
+            // never gates the combined stop — failures are logged and the
+            // mixed-master path proceeds regardless.
+            const lm = (window as any).__vexaLaneRecorderManager;
+            if (lm && typeof lm.stopAll === "function") {
+              try {
+                await lm.stopAll();
+              } catch (err: any) {
+                (window as any).logBot?.(
+                  `[Google Recording] lane stopAll failed: ${err?.message || err}`
+                );
+              }
+            }
             const p = (window as any).__vexaMediaRecorderPipeline;
             if (p && typeof p.stop === "function") {
               await p.stop();
