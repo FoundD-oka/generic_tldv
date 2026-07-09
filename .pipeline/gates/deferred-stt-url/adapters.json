@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-07-08T03:18:01.485788+00:00",
+  "timestamp": "2026-07-09T17:44:41.791002+00:00",
   "status": "pass",
   "adapter_count": 4,
   "adapters": [
     {
-      "path": ".pipeline/adapters/chatgpt-pro-web.adapter.json",
+      "path": ".pipeline/adapters/claude-fable-cli.adapter.json",
       "status": "pass",
       "errors": []
     },

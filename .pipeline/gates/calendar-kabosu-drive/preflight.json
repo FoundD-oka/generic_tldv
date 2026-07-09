@@ -1,38 +1,8 @@
 {
-  "timestamp": "2026-07-07T19:50:11.891041+00:00",
-  "status": "warn",
-  "diff_hash": "sha256:75f30469dbe6e6127afcc651ff1a51078e2abf576368125534a27a92e08b8f37",
-  "changed_files": [
-    "AGENTS.md",
-    "CLAUDE.md",
-    "contracts/stt/v1/README.md",
-    "deploy/compose/docker-compose.yml",
-    "deploy/env-example",
-    "libs/schema-sync/schema_sync/sync.py",
-    "services/dashboard/src/components/transcript/transcript-segment.tsx",
-    "services/dashboard/src/components/transcript/transcript-viewer.tsx",
-    "services/dashboard/src/lib/api.ts",
-    "services/dashboard/src/types/vexa.ts",
-    "services/meeting-api/meeting_api/collector/endpoints.py",
-    "services/meeting-api/meeting_api/drive_export.py",
-    "services/meeting-api/meeting_api/final_transcription.py",
-    "services/meeting-api/meeting_api/meetings.py",
-    "services/meeting-api/meeting_api/models.py",
-    "services/meeting-api/meeting_api/schemas.py",
-    "services/meeting-api/tests/test_drive_export.py",
-    "services/transcription-service/docker-compose.cpu.yml",
-    "services/transcription-service/docker-compose.yml",
-    "services/transcription-service/main.py"
-  ],
-  "flags": [
-    {
-      "path": "libs/schema-sync/schema_sync/sync.py",
-      "reason": "migration/schema path changed"
-    },
-    {
-      "path": "services/meeting-api/meeting_api/schemas.py",
-      "reason": "migration/schema path changed"
-    }
-  ],
+  "timestamp": "2026-07-08T01:16:33.332921+00:00",
+  "status": "pass",
+  "diff_hash": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "changed_files": [],
+  "flags": [],
   "blocks": []
 }

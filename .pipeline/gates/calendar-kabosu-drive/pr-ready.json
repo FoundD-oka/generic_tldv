@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-07-07T05:21:02.365391+00:00",
+  "timestamp": "2026-07-08T01:16:33.657667+00:00",
   "task_id": "calendar-kabosu-drive",
   "size": "L",
   "status": "block",
@@ -27,7 +27,7 @@
     {
       "check": "adapter-contract",
       "ok": true,
-      "detail": "status=pass count=3"
+      "detail": "status=pass count=4"
     },
     {
       "check": "backcast-contracts",
@@ -72,7 +72,7 @@
     {
       "check": "approval-hash",
       "ok": false,
-      "detail": "approved=none current=sha256:c797f7f8ed03fe365fc61ece7eec7c0a5aea9d54a12de16fbbc480a5b94d28c5"
+      "detail": "approved=sha256:c797f7f8ed03fe365fc61ece7eec7c0a5aea9d54a12de16fbbc480a5b94d28c5 current=sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   ]
 }
