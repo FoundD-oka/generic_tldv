@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-07-08T03:18:01.638256+00:00",
+  "timestamp": "2026-07-09T17:44:41.880493+00:00",
   "status": "pass",
-  "required": true,
+  "required": false,
   "ledger": "/Users/bonginkan-3-gouki/project/generic_tldv/.pipeline/feedback/ledger.jsonl",
   "rule_count": 1,
   "decision_counts": {
