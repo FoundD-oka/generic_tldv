@@ -36,7 +36,7 @@ import {
   generateFilename,
 } from "@/lib/export";
 import { cn, parseUTCTimestamp } from "@/lib/utils";
-import { buildSpeakerDisplayLabels, getSpeakerDisplayLabel, getSpeakerIdentityKey } from "@/lib/speaker-label";
+import { buildSpeakerDisplayLabels, getSpeakerDisplayLabel, getSpeakerIdentityKey, resolveSpeakerLabelByKey } from "@/lib/speaker-label";
 import { vexaAPI } from "@/lib/api";
 import { toast } from "sonner";
 import { LanguagePicker } from "@/components/language-picker";
@@ -286,7 +286,7 @@ export function TranscriptViewer({
       result = result.filter(
         (g) =>
           g.combinedText.toLowerCase().includes(query) ||
-          (speakerDisplayLabels.get(g.key) || g.key).toLowerCase().includes(query)
+          resolveSpeakerLabelByKey(g.key, speakerDisplayLabels).toLowerCase().includes(query)
       );
     }
 
@@ -769,7 +769,7 @@ export function TranscriptViewer({
               <DropdownMenuContent align="end" className="w-56">
                 {speakerOrder.map((speaker) => {
                   const color = getSpeakerColor(speaker, speakerOrder);
-                  const label = speakerDisplayLabels.get(speaker) || speaker || "不明";
+                  const label = resolveSpeakerLabelByKey(speaker, speakerDisplayLabels);
                   return (
                     <DropdownMenuCheckboxItem
                       key={speaker}
@@ -840,7 +840,7 @@ export function TranscriptViewer({
                 className="font-normal cursor-pointer hover:bg-destructive/20"
                 onClick={() => toggleSpeaker(speaker)}
               >
-                {speakerDisplayLabels.get(speaker) || speaker || "不明"}
+                {resolveSpeakerLabelByKey(speaker, speakerDisplayLabels)}
                 <X className="h-3 w-3 ml-1" />
               </Badge>
             ))}

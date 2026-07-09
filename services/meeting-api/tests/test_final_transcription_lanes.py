@@ -20,6 +20,14 @@ Verification-contract items covered here:
   clusters as their OWN needs_review sub-cluster instead of absorbing them
 * issue #26 P3-AC2: a saved rename for "lane:{key}:{cluster}" still applies
   to only that sub-cluster after shared-mic processing
+* F1 (Fable final-audit consultation): K_stable>=2 PLUS an unstable cluster
+  coexisting in the same lane — the unstable cluster is never absorbed into
+  either stable cluster, keeps its own namespaced sub-cluster id, and reads
+  back as needs_review via `_derive_speaker_mapping_status`
+* F3 (Fable final-audit consultation): a cluster whose total duration/token
+  count land EXACTLY on `LANE_SHARED_MIC_MIN_CLUSTER_DURATION_S`/`_TOKENS`
+  counts as STABLE (the filter's `<` comparison means the boundary itself
+  is on the stable side, i.e. `>=`)
 """
 
 from __future__ import annotations
@@ -31,9 +39,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from meeting_api.collector.endpoints import _derive_speaker_mapping_status
 from meeting_api.final_transcription import (
+    LANE_SHARED_MIC_MIN_CLUSTER_DURATION_S,
+    LANE_SHARED_MIC_MIN_CLUSTER_TOKENS,
     LaneTranscriptionFallback,
     _lane_master_sources,
+    _stable_lane_clusters,
     run_deferred_transcription,
 )
 from meeting_api.models import Transcription
@@ -612,6 +624,76 @@ async def test_shared_mic_lane_namespaces_clusterless_segment_instead_of_blankin
 
 
 @pytest.mark.asyncio
+async def test_shared_mic_unstable_cluster_coexists_without_being_absorbed():
+    """F1 (Fable final-audit consultation) — verification-contract.md §0/AC4
+    explicitly requires a fixture with K_stable>=2 STABLE clusters PLUS an
+    unstable (below-threshold) cluster coexisting in the same lane. Plan B-2
+    forbids absorbing the unstable cluster into "the closest" stable
+    cluster — there is no well-defined closest cluster — so it must:
+      (a) NOT be merged/absorbed into spk0 or spk1 (3 distinct clusters
+          survive, not 2),
+      (b) keep its OWN namespaced sub-cluster id "lane:{key}:{cluster}",
+      (c) have speaker=None (and speaker_auto=None), which
+          `_derive_speaker_mapping_status` reads back as "needs_review"
+          downstream — exactly like a named sub-cluster, not silently
+          dropped and not conflated with the stable clusters.
+    """
+    meeting = _meeting_with_single_lane()
+    db = _db_for(meeting)
+    added: list[Transcription] = []
+    db.add = MagicMock(side_effect=added.append)
+
+    async def fake_stt(audio, fmt, *, language):
+        return {
+            "language": "ja",
+            "segments": [
+                # Two genuinely stable clusters (3s each) → K_stable=2.
+                {"start": 0.0, "end": 3.0, "text": "こんにちは、今日はよろしくお願いします", "speaker": "spk0"},
+                {"start": 4.0, "end": 7.0, "text": "別の発言者からの発話内容です", "speaker": "spk1"},
+                # A third, unstable cluster (0.3s, well under the 2.0s
+                # duration bar) coexisting in the SAME shared-mic lane.
+                {"start": 7.1, "end": 7.4, "text": "うん", "speaker": "spk2"},
+            ],
+        }
+
+    with patch("meeting_api.final_transcription.attributes.flag_modified", new=MagicMock()), \
+         patch("meeting_api.final_transcription._download_recording_audio", new=AsyncMock(return_value=b"wav")), \
+         patch("meeting_api.final_transcription._convert_audio_to_wav", return_value=(b"wav", "wav")), \
+         patch("meeting_api.final_transcription._call_transcription_service", new=AsyncMock(side_effect=fake_stt)), \
+         patch("meeting_api.final_transcription._clear_live_transcript_cache", new=AsyncMock(return_value=True)), \
+         patch("meeting_api.final_transcription._publish_transcript_finalized", new=AsyncMock()):
+        await run_deferred_transcription(TEST_MEETING_ID, db, mode="reject_if_exists")
+
+    assert len(added) == 3, "the unstable cluster's segment must survive as its own row, not be dropped"
+    by_cluster = {t.speaker_cluster: t for t in added}
+    # (a) + (b): all three clusters kept DISTINCT namespaced ids — the
+    # unstable cluster was never merged into spk0 or spk1.
+    assert set(by_cluster) == {
+        f"lane:{LANE_A_KEY}:spk0",
+        f"lane:{LANE_A_KEY}:spk1",
+        f"lane:{LANE_A_KEY}:spk2",
+    }
+    unstable = by_cluster[f"lane:{LANE_A_KEY}:spk2"]
+    # (c): speaker/speaker_auto are None — never absorbed into a guessed
+    # or neighboring identity.
+    assert unstable.speaker is None
+    assert unstable.speaker_auto is None
+    assert _derive_speaker_mapping_status(unstable.speaker_cluster, unstable.speaker) == "needs_review", (
+        "the unstable sub-cluster must read back as needs_review, exactly "
+        "like a named stable sub-cluster — never silently resolved"
+    )
+    # K_stable is still 2 (the unstable cluster is excluded from the count
+    # itself) — the lane is shared-mic, matching AC1/AC5.
+    assert meeting.data["final_transcription"]["shared_mic_lanes"] == [LANE_A_KEY]
+    # Sanity: the stable clusters are ALSO unresolved (speaker=None) here,
+    # so they too read back needs_review — the unstable cluster is not
+    # singled out as the odd one, it just isn't absorbed anywhere.
+    for cluster_id in (f"lane:{LANE_A_KEY}:spk0", f"lane:{LANE_A_KEY}:spk1"):
+        stable_row = by_cluster[cluster_id]
+        assert _derive_speaker_mapping_status(stable_row.speaker_cluster, stable_row.speaker) == "needs_review"
+
+
+@pytest.mark.asyncio
 async def test_solo_lane_with_tiny_noise_cluster_does_not_split():
     """Issue #26 P3-AC3 (false-split guard): a lane with one genuine
     (stable) cluster plus a tiny one-word interjection (0.3s, well under
@@ -684,6 +766,78 @@ async def test_all_tiny_clusters_fall_back_to_solo():
     assert all(t.speaker_cluster == f"lane:{LANE_A_KEY}" for t in added)
     assert all(t.speaker == "山森" for t in added)
     assert all(t.speaker is not None for t in added), "AC4 — never leaves speaker as a guessed value, but also never as an ambiguous unset here"
+
+
+def test_stable_lane_clusters_exact_boundary_counts_as_stable():
+    """F3 (Fable final-audit consultation) — `_stable_lane_clusters` excludes
+    a cluster with `duration < min_duration_s` (and, when token_count is
+    present, `tokens < min_tokens`). That `<` means the threshold itself is
+    on the STABLE side (i.e. the real semantics are `>=`). Lock in the exact
+    boundary the contract's AC4 calls out: a cluster whose TOTAL duration is
+    exactly `LANE_SHARED_MIC_MIN_CLUSTER_DURATION_S` (2.0s by default) and
+    TOTAL token_count is exactly `LANE_SHARED_MIC_MIN_CLUSTER_TOKENS` (5 by
+    default) must be judged STABLE, not filtered out."""
+    duration = LANE_SHARED_MIC_MIN_CLUSTER_DURATION_S
+    tokens = LANE_SHARED_MIC_MIN_CLUSTER_TOKENS
+    at_boundary = [
+        {"start": 0.0, "end": duration, "speaker_cluster": "spk0", "token_count": tokens},
+    ]
+    assert _stable_lane_clusters(at_boundary, duration, tokens) == {"spk0"}, (
+        "duration==min_duration_s AND token_count==min_tokens exactly at the "
+        "threshold must count as STABLE (>=), not be excluded"
+    )
+
+    # Sanity contrast — shaving a hair off either dimension must drop it.
+    below_duration = [
+        {"start": 0.0, "end": duration - 0.001, "speaker_cluster": "spk0", "token_count": tokens},
+    ]
+    assert _stable_lane_clusters(below_duration, duration, tokens) == set()
+
+    below_tokens = [
+        {"start": 0.0, "end": duration, "speaker_cluster": "spk0", "token_count": tokens - 1},
+    ]
+    assert _stable_lane_clusters(below_tokens, duration, tokens) == set()
+
+
+@pytest.mark.asyncio
+async def test_shared_mic_clusters_exactly_at_stability_boundary_count_as_stable():
+    """F3 (Fable final-audit consultation) — end-to-end counterpart of
+    `test_stable_lane_clusters_exact_boundary_counts_as_stable`: two clusters
+    whose total duration and token_count each land EXACTLY on the
+    LANE_SHARED_MIC_MIN_CLUSTER_DURATION_S/_TOKENS boundary must both count
+    toward K_stable (K_stable=2 → shared-mic lane, not solo)."""
+    duration = LANE_SHARED_MIC_MIN_CLUSTER_DURATION_S
+    tokens = LANE_SHARED_MIC_MIN_CLUSTER_TOKENS
+    meeting = _meeting_with_single_lane()
+    db = _db_for(meeting)
+    added: list[Transcription] = []
+    db.add = MagicMock(side_effect=added.append)
+
+    async def fake_stt(audio, fmt, *, language):
+        return {
+            "language": "ja",
+            "segments": [
+                {"start": 0.0, "end": duration, "text": "ちょうど境界値の発話です",
+                 "speaker": "spk0", "token_count": tokens},
+                {"start": duration + 1.0, "end": 2 * duration + 1.0, "text": "こちらもちょうど境界値です",
+                 "speaker": "spk1", "token_count": tokens},
+            ],
+        }
+
+    with patch("meeting_api.final_transcription.attributes.flag_modified", new=MagicMock()), \
+         patch("meeting_api.final_transcription._download_recording_audio", new=AsyncMock(return_value=b"wav")), \
+         patch("meeting_api.final_transcription._convert_audio_to_wav", return_value=(b"wav", "wav")), \
+         patch("meeting_api.final_transcription._call_transcription_service", new=AsyncMock(side_effect=fake_stt)), \
+         patch("meeting_api.final_transcription._clear_live_transcript_cache", new=AsyncMock(return_value=True)), \
+         patch("meeting_api.final_transcription._publish_transcript_finalized", new=AsyncMock()):
+        await run_deferred_transcription(TEST_MEETING_ID, db, mode="reject_if_exists")
+
+    assert {t.speaker_cluster for t in added} == {
+        f"lane:{LANE_A_KEY}:spk0", f"lane:{LANE_A_KEY}:spk1",
+    }, "both exact-boundary clusters kept their own sub-cluster id (K_stable=2), neither absorbed nor dropped"
+    assert meeting.data["final_transcription"]["shared_mic_lanes"] == [LANE_A_KEY], (
+        "K_stable=2 at the exact boundary must resolve to shared-mic, not solo"
+    )
 
 
 @pytest.mark.asyncio
