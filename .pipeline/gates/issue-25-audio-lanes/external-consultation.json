@@ -1,0 +1,21 @@
+{
+  "timestamp": "2026-07-09T20:40:48.377952+00:00",
+  "task_id": "issue-25-audio-lanes",
+  "size": "L",
+  "status": "block",
+  "mode": "required",
+  "policy": "required_for_l",
+  "required": true,
+  "provider": "claude-fable-cli",
+  "errors": [
+    "missing .pipeline/plans/issue-25-audio-lanes/consultation-brief.md",
+    "missing or invalid .pipeline/evidence/issue-25-audio-lanes/external-consultation/consultation-summary.json"
+  ],
+  "warnings": [],
+  "artifacts": {
+    "brief": ".pipeline/plans/issue-25-audio-lanes/consultation-brief.md",
+    "response": ".pipeline/evidence/issue-25-audio-lanes/external-consultation/fable.md",
+    "legacy_response": ".pipeline/evidence/issue-25-audio-lanes/external-consultation/chatgpt-pro.md",
+    "summary": ".pipeline/evidence/issue-25-audio-lanes/external-consultation/consultation-summary.json"
+  }
+}

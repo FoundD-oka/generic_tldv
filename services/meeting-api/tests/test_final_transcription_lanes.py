@@ -328,6 +328,89 @@ async def test_lane_fallback_with_meaningful_speakers_skips_instead_of_mixed():
 
 
 @pytest.mark.asyncio
+async def test_lane_in_other_session_does_not_bypass_no_speaker_events_guard():
+    """F1 (Fable consultation): the BUG-011 re-guard used to require
+    lane_fallback_reason to be set, but a session-asymmetric meeting never
+    sets it. Here the finalized lane masters live ONLY in a DIFFERENT
+    recording/session than the chosen mixed audio master: the meeting-wide
+    pre-flight check (_lane_masters_available) sees the other session's
+    lanes and lets the run proceed, but the session-scoped lane lookup used
+    for the actual transcription finds nothing and raises no
+    LaneTranscriptionFallback (lane_fallback_reason stays None). Without the
+    fix, the mixed path would then run with empty speaker_events in
+    mode="replace" and clobber meaningful existing speaker labels with
+    "Unknown". The fixed guard must still skip."""
+    other_lane_key = "cccccccccc"
+    data = {
+        "transcribe_enabled": True,
+        "recording_enabled": True,
+        "speaker_events": [],
+        "recordings": [
+            {
+                "id": 1001,
+                "session_uid": "sess-1",
+                "status": "completed",
+                "media_files": [
+                    {
+                        "id": 2001, "type": "audio", "format": "wav",
+                        "storage_backend": "minio",
+                        "storage_path": f"{BASE}/audio/master.wav",
+                        "finalized_by": "recording_finalizer.master",
+                    },
+                ],
+            },
+            {
+                "id": 1002,
+                "session_uid": "sess-2",
+                "status": "completed",
+                "media_files": [
+                    {
+                        "id": 2002, "type": f"lane-{other_lane_key}", "format": "wav",
+                        "storage_backend": "minio",
+                        "storage_path": f"recordings/5/1002/sess-2/lane-{other_lane_key}/master.wav",
+                        "finalized_by": "recording_finalizer.master",
+                        "lane": {"lane_id": "t9", "lane_label": "他セッションの人",
+                                 "lane_id_source": "participant-id"},
+                    },
+                ],
+            },
+        ],
+    }
+    meeting = make_meeting(id=TEST_MEETING_ID, status=MeetingStatus.COMPLETED.value, data=data)
+
+    db = AsyncMock()
+    db.execute = AsyncMock(side_effect=[
+        MockResult([meeting]),      # meeting select
+        MockResult(scalar_value=2),  # existing_count
+    ])
+    db.commit = AsyncMock()
+    db.add = MagicMock()
+    mixed_stt = AsyncMock()
+
+    with patch("meeting_api.final_transcription.attributes.flag_modified", new=MagicMock()), \
+         patch("meeting_api.final_transcription._has_meaningful_existing_speakers",
+               new=AsyncMock(return_value=True)), \
+         patch("meeting_api.final_transcription._download_recording_audio", new=AsyncMock()), \
+         patch("meeting_api.final_transcription._call_transcription_service", new=mixed_stt):
+        result = await run_deferred_transcription(TEST_MEETING_ID, db, mode="replace")
+
+    mixed_stt.assert_not_awaited(), (
+        "mixed path must not run — the lane path was unavailable only "
+        "because the finalized lanes belong to a different session, not "
+        "because of a real lane_fallback_reason"
+    )
+    db.add.assert_not_called()
+    assert result.segment_count == 0
+    state = meeting.data["final_transcription"]
+    assert state["status"] == "skipped_no_speaker_events"
+    assert state["skipped_reason"] == "no_speaker_events"
+    assert state.get("lane_fallback_reason") is None, (
+        "sanity check: this bypass is exactly the case where no "
+        "LaneTranscriptionFallback was ever raised"
+    )
+
+
+@pytest.mark.asyncio
 async def test_lane_segments_stamped_with_own_lane_session_uid():
     """BUG-023: persisted rows for a lane segment carry that LANE's own
     recording session_uid, not the mixed source's — needed for multi-session

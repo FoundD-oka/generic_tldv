@@ -1037,13 +1037,21 @@ async def run_deferred_transcription(
 
         if not lane_used:
             if (
-                # BUG-011 — the lane path failed AFTER the pre-flight guard
-                # already decided lanes would preserve speaker identity, so
-                # that protection must still apply here: without it, the
-                # mixed path below would delete good existing speaker labels
-                # and rewrite them mostly as "Unknown" (no speaker_events).
-                lane_fallback_reason
-                and mode == "replace"
+                # BUG-011 — the lane path was not used (whether because it
+                # failed, because no lane masters exist at all, or because
+                # the only finalized lane masters belong to a DIFFERENT
+                # session than the chosen mixed source — see F1/Fable
+                # consultation), so the same protection the pre-flight guard
+                # applies must still apply here: without it, the mixed path
+                # below would delete good existing speaker labels and
+                # rewrite them mostly as "Unknown" (no speaker_events).
+                # This must NOT require lane_fallback_reason to be set —
+                # session-scoped lane lookup can leave lane_sources empty
+                # (and lane_fallback_reason None) even though lanes "exist"
+                # somewhere in the meeting, which is exactly the bypass the
+                # pre-flight guard's meeting-wide _lane_masters_available
+                # check cannot catch.
+                mode == "replace"
                 and not force
                 and not speaker_events
                 and await _has_meaningful_existing_speakers(db, meeting_id)
