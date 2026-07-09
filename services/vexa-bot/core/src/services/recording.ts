@@ -5,6 +5,25 @@ import { logJSON } from '../utils/log';
 import http from 'http';
 import https from 'https';
 
+/** Issue #25 — identity for a per-participant audio lane upload. */
+export interface LaneChunkOptions {
+  /** "lane-{laneKey}" — becomes the server-side media_type. */
+  mediaType: string;
+  /** Raw source identifier (track/stream/participant id). */
+  laneId?: string;
+  /** DOM display-name snapshot for the lane's tile (may be absent). */
+  laneLabel?: string;
+  /** "participant-id" | "jsinstance" | "generated" | "stream" */
+  laneIdSource?: string;
+  /**
+   * BUG-002 fix: ms between the mixed recording's start and this lane's
+   * recorder start. Sent as lane_start_offset_ms so meeting-api can
+   * re-align this lane's lane-relative segment timestamps onto the mixed
+   * master's timeline.
+   */
+  laneStartOffsetMs?: number;
+}
+
 /**
  * RecordingService handles accumulating audio data and producing a WAV file.
  * Works in Node.js context — used directly for Zoom (native audio callback),
@@ -218,6 +237,7 @@ export class RecordingService {
     chunkSeq: number,
     isFinal: boolean,
     format: string = 'webm',
+    lane?: LaneChunkOptions,
   ): Promise<void> {
     const uploadTimeoutMs = 30_000;
     const durationSeconds = this.startTime > 0 ? (Date.now() - this.startTime) / 1000 : undefined;
@@ -233,6 +253,16 @@ export class RecordingService {
       file_size_bytes: chunkData.length,
       chunk_seq: chunkSeq,
       is_final: isFinal,
+      // Issue #25 — per-participant lane chunks. media_type keys both the
+      // storage prefix and the media_files entry server-side, so lanes
+      // never touch the mixed master's /audio/ path.
+      ...(lane ? {
+        media_type: lane.mediaType,
+        lane_id: lane.laneId,
+        lane_label: lane.laneLabel,
+        lane_id_source: lane.laneIdSource,
+        lane_start_offset_ms: lane.laneStartOffsetMs,
+      } : {}),
     });
 
     const parts: Buffer[] = [];

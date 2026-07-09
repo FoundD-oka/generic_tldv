@@ -11,6 +11,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .media_types import is_lane_media_type
 from .models import Meeting
 from .database import async_session_local
 from .final_transcription import queue_final_transcription
@@ -332,7 +333,21 @@ async def finalize_in_progress_recordings(meeting: Meeting, db: AsyncSession) ->
             # storage_path is the signal that recording_finalizer owns
             # this entry; we observe and skip.
             sp = (mf.get("storage_path") or "")
-            if sp.endswith("/audio/master.webm") or sp.endswith("/audio/master.wav"):
+            mf_type = mf.get("type")
+            finalizer_owns = (
+                sp.endswith("/audio/master.webm")
+                or sp.endswith("/audio/master.wav")
+                # Lane masters (issue #25) live under /{lane-*}/master.* and
+                # get the same single-writer protection as audio.
+                or (
+                    is_lane_media_type(mf_type)
+                    and (
+                        sp.endswith(f"/{mf_type}/master.webm")
+                        or sp.endswith(f"/{mf_type}/master.wav")
+                    )
+                )
+            )
+            if finalizer_owns:
                 # Observed: recording_finalizer is in flight or done. Don't write.
                 continue
             if not mf.get("is_final"):

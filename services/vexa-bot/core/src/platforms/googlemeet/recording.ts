@@ -45,6 +45,32 @@ export async function startGoogleRecording(page: Page, botConfig: BotConfig): Pr
     } else {
       recordingService = new RecordingService(botConfig.meeting_id, sessionUid);
 
+      // Issue #25 — per-participant lane recording. Opt-in (cost scales with
+      // participant count); default off keeps the bot byte-identical to the
+      // pre-lane behavior.
+      const recordLanesRequested =
+        botConfig.recordParticipantLanes === true ||
+        String(process.env.RECORD_PARTICIPANT_LANES || "").toLowerCase() === "true";
+      // BUG-015/016 fix: prefer botConfig.maxRecordingLanes (wired through
+      // bot_config by meeting-api, unlike MAX_RECORDING_LANES which nothing
+      // sets in the bot container) over the env var. Parse explicitly with
+      // Number.isFinite so an operator-set 0 means "lanes disabled" instead
+      // of falling back to the maximum default — the old
+      // `parseInt(...) || 8` mapped an explicit 0 (falsy) to 8.
+      const configuredMaxLanes = botConfig.maxRecordingLanes;
+      let maxLanes: number;
+      if (typeof configuredMaxLanes === "number" && Number.isFinite(configuredMaxLanes)) {
+        maxLanes = Math.max(0, Math.trunc(configuredMaxLanes));
+      } else {
+        const envRaw = process.env.MAX_RECORDING_LANES;
+        const envParsed = envRaw !== undefined ? parseInt(envRaw, 10) : NaN;
+        maxLanes = Number.isFinite(envParsed) ? Math.max(0, envParsed) : 8;
+      }
+      const recordLanes = recordLanesRequested && maxLanes > 0;
+      if (recordLanesRequested && maxLanes === 0) {
+        log("[Google Recording] Participant lane recording requested but maxLanes=0 — lanes disabled.");
+      }
+
       // CRITICAL: inject browser-utils bundle BEFORE constructing the
       // MediaRecorderCapture pipeline. The pipeline's startBrowserCapture
       // callback runs page.evaluate which accesses
@@ -70,7 +96,7 @@ export async function startGoogleRecording(page: Page, botConfig: BotConfig): Pr
         platform: "gmeet",
         timesliceMs: 30000,
         startBrowserCapture: async (page, timesliceMs) => {
-          await page.evaluate(async ({ timesliceMs }) => {
+          await page.evaluate(async ({ timesliceMs, recordLanes, maxLanes }) => {
             const u = (window as any).VexaBrowserUtils;
             (window as any).logBot(`[Google Recording] Browser utils available: ${Object.keys(u || {}).join(', ')}`);
 
@@ -111,8 +137,45 @@ export async function startGoogleRecording(page: Page, botConfig: BotConfig): Pr
             // change handlers in the speaker-detection page.evaluate below).
             await pipeline.start();
             (window as any).__vexaMediaRecorder = pipeline.getMediaRecorder();
+            // BUG-002: capture t=0 of the mixed master right after its
+            // pipeline starts. Every lane's start offset (lane_start_offset_ms)
+            // is computed relative to this value so meeting-api can re-align
+            // lane-relative segment timestamps onto the mixed master's timeline.
+            const recordingStartedAtMs = Date.now();
             // Signal Node.js that recording started — re-aligns segment timestamps
             (window as any).__vexaRecordingStarted?.();
+
+            // Issue #25 — per-participant lane recording (opt-in). Runs in
+            // parallel with the combined pipeline above and never touches
+            // it: lanes upload under media_type "lane-{laneKey}", which the
+            // server stores outside the mixed master's /audio/ prefix.
+            //
+            // BUG-001: any lane-path failure (missing browser util, manager
+            // construction, or start()) must never abort the mixed-master
+            // pipeline started above — the whole block is wrapped so a
+            // rejection here only disables lanes, logged clearly.
+            if (recordLanes) {
+              try {
+                const laneManager = new u.BrowserLaneRecorderManager({
+                  timesliceMs,
+                  maxLanes,
+                  laneChunkCallback: (window as any).__vexaSaveLaneChunk,
+                  recordingStartedAtMs,
+                });
+                (window as any).__vexaLaneRecorderManager = laneManager;
+                await laneManager.start(mediaElements);
+                (window as any).logBot(
+                  `[Google Recording] Participant lane recording enabled ` +
+                  `(lanes=${laneManager.laneCount()}, max=${maxLanes})`
+                );
+              } catch (laneErr: any) {
+                (window as any).logBot(
+                  `[Google Recording] Participant lane recording failed to start — ` +
+                  `continuing WITHOUT lanes (mixed master recording is unaffected): ` +
+                  `${laneErr?.message || laneErr}`
+                );
+              }
+            }
 
             // Initialize the audio data processor for the
             // alone-cross-validation hook (Layer 2 of #285). The per-speaker
@@ -138,10 +201,24 @@ export async function startGoogleRecording(page: Page, botConfig: BotConfig): Pr
                 } catch {}
               });
             }
-          }, { timesliceMs });
+          }, { timesliceMs, recordLanes, maxLanes });
         },
         stopBrowserCapture: async (page) => {
           await page.evaluate(async () => {
+            // Lanes first (issue #25): their final chunks must flush before
+            // the bot's exit path starts tearing the page down. Lane stop
+            // never gates the combined stop — failures are logged and the
+            // mixed-master path proceeds regardless.
+            const lm = (window as any).__vexaLaneRecorderManager;
+            if (lm && typeof lm.stopAll === "function") {
+              try {
+                await lm.stopAll();
+              } catch (err: any) {
+                (window as any).logBot?.(
+                  `[Google Recording] lane stopAll failed: ${err?.message || err}`
+                );
+              }
+            }
             const p = (window as any).__vexaMediaRecorderPipeline;
             if (p && typeof p.stop === "function") {
               await p.stop();

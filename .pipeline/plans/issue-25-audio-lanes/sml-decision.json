@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0",
+  "task_id": "issue-25-audio-lanes",
+  "checkpoint_id": "",
+  "size": "L",
+  "decided_at": "2026-07-09T18:48:09.489098+00:00",
+  "basis": {
+    "residual_uncertainty": "Epic mandates Phase 2-4 as separate L sub-plans; cross-service (vexa-bot capture, meeting-api finalizer/sweeps/deferred), touches regression-scarred recording pipeline; mixed-master byte-invariance is safety-critical",
+    "not_based_on": "issue title or diff size alone"
+  },
+  "quality_gates": {
+    "required": [
+      "residency",
+      "preflight",
+      "hd-gate",
+      "doc-staleness",
+      "adapter-contract",
+      "backcast-contracts",
+      "evidence-pack",
+      "qa-judgment",
+      "tribunal-or-sidechain",
+      "external-consultation",
+      "approval-hash"
+    ],
+    "external_consultation": "required_for_l"
+  }
+}

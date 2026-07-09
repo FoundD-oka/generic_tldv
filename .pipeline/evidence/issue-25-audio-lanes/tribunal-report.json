@@ -1,0 +1,213 @@
+{
+  "schema_version": "1.0",
+  "task_id": "issue-25-audio-lanes",
+  "commit": "9aed38b",
+  "final_verdicts": [
+    {
+      "id": "BUG-001",
+      "is_real_bug": true,
+      "severity": "critical",
+      "category": "type-error",
+      "reasoning": "Verified directly. build-browser-utils.js:32-37 hardcodes window.VexaBrowserUtils to exactly {BrowserAudioService, BrowserMediaRecorderPipeline, BrowserWhisperLiveService, generateBrowserUUID} — BrowserLaneRecorderManager is missing. dist/browser-utils.global.js (the actual injected bundle) confirms the same omission at line 570 even though the inner CommonJS module exports the class (line 564: exports.BrowserLaneRecorderManager). googlemeet/recording.ts:133 does `new u.BrowserLaneRecorderManager({...})` inside `if (recordLanes)`, which throws TypeError when RECORD_PARTICIPANT_LANES is enabled. Reviewer B independently confirmed the same lines and the propagation path (unguarded page.evaluate rejection -> MediaRecorderCapture.start -> pipeline.start()). Both reviewers agree; the code itself leaves no room for doubt.",
+      "action_required": "fix-immediately",
+      "fix_suggestion": "Add BrowserLaneRecorderManager to the window.VexaBrowserUtils object in build-browser-utils.js and rebuild dist/browser-utils.global.js. Also wrap the lane-manager construction in try/catch in googlemeet/recording.ts so a lane-path failure can never abort the mixed-master recording, matching the commit message's promise that lane failures never touch the master path."
+    },
+    {
+      "id": "BUG-002",
+      "is_real_bug": true,
+      "severity": "critical",
+      "category": "logic-error",
+      "reasoning": "Verified. Nothing in LaneAudioChunk (audio-pipeline.ts:137-146), the upload metadata (recording.ts:239-258), or the media_files lane object (recordings.py:543-549) carries a per-lane start offset. Lanes start whenever a track first appears (initial scan or the 15s rescan in browser.ts start()), so a late joiner's lane has its own t=0 mid-meeting. _transcribe_lanes merges raw start/end values across lanes (final_transcription.py:369) and run_deferred_transcription stores raw start/end into Transcription rows (line 950-951) — a late joiner's speech lands at the top of the transcript. The same lane-relative segments are also voted against the GLOBAL (master-relative) speaker_events timeline inside _parse_segments (called per-lane at final_transcription.py:344-350), corrupting DOM-vote attribution. Both reviewers confirmed with high confidence; this is a real, unaddressed design gap that affects the normal case (any participant joining after the meeting starts).",
+      "action_required": "fix-immediately",
+      "fix_suggestion": "Capture a per-lane start offset in the browser (delta between the mixed pipeline's onstart and each lane's own MediaRecorder onstart) and thread it through LaneChunkOptions -> media_files lane object -> LaneTranscriptionSource. Add the offset to every segment's start/end before merging and before DOM-vote comparison. Until offsets exist, restrict lane-first STT to lanes that started at recording start, or disable the feature."
+    },
+    {
+      "id": "BUG-003",
+      "is_real_bug": true,
+      "severity": "low",
+      "category": "logic-error",
+      "reasoning": "Both claims are individually correct but partially contradictory, and reconciling them changes the verdict from either reviewer's. recordings.py:585-590 is genuinely media-type-agnostic: `if is_final: rec_payload['status'] = COMPLETED ...` fires for ANY media_type, including lane-*, and would flip the whole recording to COMPLETED and fire recording.completed from a mid-meeting lane departure. Reviewer B is also correct that this exact path cannot execute today: the only lane chunk ever emitted with isFinal=true carries base64='' (browser.ts:478-483) and is unconditionally dropped by _handleLaneChunk before any HTTP call (audio-pipeline.ts:330-333), so no lane upload with is_final=true ever reaches recordings.py in this commit. Net verdict: this is a real, currently-dormant defect (missing `not is_lane_media_type(media_type)` guard) introduced by letting lane traffic ride the same endpoint/field as the mixed master's completion signal, but it has zero live impact today because the only trigger condition (BUG-004) never fires. It is a landmine, not a live bug: fixing BUG-004 in isolation (e.g. by making the browser forward isFinal on the last data-bearing lane chunk) would silently reactivate this exact failure.",
+      "action_required": "fix-recommended",
+      "fix_suggestion": "Gate the recording-level COMPLETED transition and the recording.completed webhook on `not is_lane_media_type(media_type)` regardless of whether the current dormant trigger is ever exercised, so future lane-upload changes cannot reintroduce the landmine."
+    },
+    {
+      "id": "BUG-004",
+      "is_real_bug": false,
+      "severity": "false-positive",
+      "category": "logic-error",
+      "reasoning": "Confirmed as literally described (the empty base64='' final lane chunk is dropped by _handleLaneChunk, audio-pipeline.ts:330-333) but it is not a defect introduced by this commit and has no demonstrated functional consequence. The identical pattern already exists, unchanged, for the mixed master: _handleChunk has the same empty-chunk guard (audio-pipeline.ts:370-374), and the master's own onstop marker is also base64='' (browser.ts:478-483) — the master's is_final signal has never reliably reached the server via this path either. The system already compensates structurally: lane/master finality that anything downstream actually depends on is `finalized_by == 'recording_finalizer.master'`, stamped by the finalizer from chunk listing (recording_finalizer.py:669-677) and repaired by the sweep/reconciler (post_meeting.py 'Bug B', sweeps.py _recording_has_unfinalized_lane), not by the upload-time is_final flag. The data-bearing chunks — the thing the stopBrowserCapture comment actually protects — do flush correctly. This is the pre-existing chunk-finality design applied consistently to a new media type, not a regression.",
+      "action_required": "no-action"
+    },
+    {
+      "id": "BUG-005",
+      "is_real_bug": true,
+      "severity": "medium",
+      "category": "race-condition",
+      "reasoning": "Verified. recorder.ondataavailable is async and suspends at its first await (event.data.arrayBuffer(), browser.ts:427-428) before it ever calls the upload callback; recorder.onstop (browser.ts:472-496) awaits only its own empty final-chunk callback and then resolves finalChunkPromise independently — nothing forces onstop to wait for an in-flight ondataavailable continuation. So BrowserLaneRecorderManager.stopAll() / pipeline.stop() can resolve before the last real data chunk has reached Node, and UnifiedRecordingPipeline.stop() takes one snapshot of laneQueues (audio-pipeline.ts:308-310) that can miss a chunk enqueued after the snapshot. The comment claiming lane final chunks 'are already enqueued' (audio-pipeline.ts:308-309) overstates a guarantee the code does not provide. This is inherited from the pre-existing shared BrowserMediaRecorderPipeline (so it also affects the master path), but this commit newly documents it as a solved problem for lanes and extends the same latent gap to a new, cost-sensitive code path. Both reviewers confirmed.",
+      "action_required": "fix-recommended",
+      "fix_suggestion": "Have ondataavailable register its in-flight promise in a set that onstop awaits (Promise.allSettled) before resolving finalChunkPromise, so stop() cannot resolve while a chunk-encode/upload is still in flight."
+    },
+    {
+      "id": "BUG-006",
+      "is_real_bug": false,
+      "severity": "false-positive",
+      "category": "race-condition",
+      "reasoning": "The TOCTOU pattern exists on paper (laneKey is computed via an awaited sha1Hex before this.lanes.set) but the preconditions for it to manifest do not hold. start() awaits the initial scan before installing the interval (browser.ts start()), ruling out initial/rescan overlap. For rescan/rescan overlap, one full scan pass would have to still be running when the next 15000ms interval tick fires; every await inside a pass is microtask-scale (crypto.subtle.digest on a ~40-char string; BrowserMediaRecorderPipeline.start() has no awaited I/O at all — mime probe, constructor, and a synchronous recorder.start() call). A scan over a realistic handful of media elements completes in low single-digit milliseconds. Reviewer B's mechanical walk-through is correct and I independently verified the awaits in question contain no real I/O; there is no plausible execution path that produces the claimed chunk_seq collision.",
+      "action_required": "no-action"
+    },
+    {
+      "id": "BUG-007",
+      "is_real_bug": true,
+      "severity": "medium",
+      "category": "resource-leak",
+      "reasoning": "Verified. scan() (browser.ts:639-669) computes `stream = el.srcObject || (el.captureStream && el.captureStream()) || null` for every element on every pass, and the periodic rescan feeds it the blanket `document.querySelectorAll('audio, video')` (browser.ts:614-616) — unlike the combined-pipeline's findMediaElements(), which only accepts elements that already have a MediaStream srcObject with audio tracks. Per the MediaElement capture spec, captureStream() returns a fresh MediaStream (and fresh track ids) on each call, so any non-srcObject media element (UI sound/self-view/promo elements) gets a brand-new lane started every 15s until maxLanes is exhausted, at which point it silently locks out real participants. Impact is bounded by maxLanes (default 8) and only manifests when RECORD_PARTICIPANT_LANES is enabled, which caps the blast radius, but the mechanism is real and both reviewers confirmed it.",
+      "action_required": "fix-recommended",
+      "fix_suggestion": "Never call captureStream() during rescan for elements not already known to have a MediaStream srcObject; restrict lane capture in scan() to the same srcObject-based filter the combined pipeline's findMediaElements() already uses."
+    },
+    {
+      "id": "BUG-008",
+      "is_real_bug": true,
+      "severity": "medium",
+      "category": "race-condition",
+      "reasoning": "Verified. stopAll() (browser.ts:723-731) sets this.stopped, clears the interval, snapshots Array.from(this.lanes.values()), and clears the map — but this.stopped is checked only at the top of the interval callback (browser.ts:613), never inside scan()'s loop or startLane(). A scan already in flight when stopAll() runs (e.g. suspended at the sha1Hex await or at `await pipeline.start()`) can resume afterward, `this.lanes.set(...)`, and start a recorder that stopAll() never sees and therefore never stops — it keeps uploading through teardown. The window is narrow (requires a scan in flight at the exact moment of stopAll) but the missing guard is real and cheap to fix. Both reviewers confirmed.",
+      "action_required": "fix-recommended",
+      "fix_suggestion": "Check this.stopped inside scan()'s loop and at the top of startLane() (bail before constructing the pipeline); have stopAll() await any in-flight scan promise before taking its snapshot."
+    },
+    {
+      "id": "BUG-009",
+      "is_real_bug": false,
+      "severity": "false-positive",
+      "category": "injection",
+      "reasoning": "The acceptance line `media_type = meta.get('media_type', media_type)` and its interpolation into storage_path both pre-date this commit (confirmed via `git show 9aed38b -- recordings.py`: the diff context around those exact lines is unchanged; only lane_id/lane_label/lane_id_source extraction was added alongside them). The endpoint is internal-only (include_in_schema=False), gated by an HS256 JWT pinned to one meeting_id (require_recording_upload_token, verified in recordings.py:112-119, 402-403), and meeting-api is Docker `expose:`-only per the code's own TODO. The only in-tree caller generates laneKey as 10 lowercase hex characters from a SHA-1 digest (browser.ts:677), so no untrusted or even semi-trusted principal can supply an adversarial media_type today. Object-store keys are flat strings, not filesystem paths, so 'lane-../../x' is a literal (harmless) key rather than a traversal primitive on the shipped MinIO/S3/GCS backends. This is a legitimate defense-in-depth suggestion, not a bug with a demonstrated exploit path in the reviewed commit.",
+      "action_required": "monitor"
+    },
+    {
+      "id": "BUG-010",
+      "is_real_bug": true,
+      "severity": "high",
+      "category": "memory-leak",
+      "reasoning": "Verified. `prepared = await asyncio.gather(*(_prepare(lane) for lane in lane_sources), ...)` (final_transcription.py:325-327) retains every lane's (lane, audio, fmt, duration) tuple simultaneously once produced; LANE_STT_CONCURRENCY (default 2) bounds concurrent download/ffmpeg work but not retention of already-finished results. _convert_audio_to_wav inflates compressed webm/opus to 16kHz/mono/16-bit PCM WAV (~115MB/hour), and the duration-budget check (line 335-336) runs only AFTER every lane has been fully downloaded and converted — an over-budget meeting pays full download+ffmpeg cost and full peak memory before the fallback fires. docker-compose.yml sets meeting-api's `mem_limit: 1g`; a handful of lanes over a couple of hours (well inside the default MAX_LANE_TOTAL_DURATION_SECONDS=14400 budget) plausibly exceeds that limit and OOM-kills the whole API container, not just this job. Raising to high (above the finder's medium) because the failure mode is a full-service outage, not a degraded transcript.",
+      "action_required": "fix-recommended",
+      "fix_suggestion": "Process lanes sequentially (or release each lane's audio buffer immediately after its STT call) instead of batching prepare and transcribe as two full-gather barriers; check the running duration total incrementally so an over-budget meeting aborts before downloading/converting the remaining lanes."
+    },
+    {
+      "id": "BUG-011",
+      "is_real_bug": true,
+      "severity": "high",
+      "category": "logic-error",
+      "reasoning": "Verified. The no-speaker-events replace guard (final_transcription.py:773-782) adds `and not _lane_master_sources(meeting)` on the premise that lane masters carry their own identity — but this is checked before it is known whether the lane path will actually be used. If lane_sources exist but _transcribe_lanes later raises LaneTranscriptionFallback (any lane download/convert/STT failure, or a duration-budget breach — lines 857-875), execution falls through to the unchanged mixed-master path (877-900) with speaker_events==[] — exactly the state the guard exists to prevent. In replace mode, `delete(Transcription).where(...)` (line 937) then unconditionally deletes all existing rows, including meaningful speaker labels, and rewrites them from _parse_segments with no DOM events (mostly 'Unknown'). Raising severity to high because this actively destroys good existing data in the exact scenario the pre-existing guard was designed to protect. Both reviewers confirmed with high confidence.",
+      "action_required": "fix-recommended",
+      "fix_suggestion": "Re-check the original guard condition at the fallback point: if LaneTranscriptionFallback is raised and speaker_events is empty and existing Transcription rows have meaningful speakers and force is not set, abort with status=skipped_no_speaker_events instead of falling through to the mixed path."
+    },
+    {
+      "id": "BUG-012",
+      "is_real_bug": true,
+      "severity": "medium",
+      "category": "logic-error",
+      "reasoning": "Verified. _lane_master_sources (final_transcription.py:236-266) only includes media_files entries with finalized_by == 'recording_finalizer.master'; it does not compare that set against the full set of lane-* entries present in media_files. If any lane exists but has not yet been finalized (e.g. a late chunk arrived after the exit-callback's finalize pass, or a finalize pass returned None because chunk listing was momentarily empty — recording_finalizer.py:456-463 — while a sibling audio/video entry finalized in the same run), _transcribe_lanes silently succeeds on the subset with lane_used=True and no error, omitting that participant's speech entirely from the transcript — violating the module's own stated all-or-nothing contract. Additionally, lanes are collected across ALL recordings/sessions of the meeting while every stored row is stamped with the mixed source's single session_uid (line 972), so lanes from different bot sessions merge onto one timeline. Both reviewers confirmed.",
+      "action_required": "fix-recommended",
+      "fix_suggestion": "Compare the finalized lane set against the full set of lane-* media_files entries present; if any lane exists but is unfinalized, raise LaneTranscriptionFallback instead of proceeding with the subset. Restrict lane sources to the same recording/session as the chosen mixed-master source."
+    },
+    {
+      "id": "BUG-013",
+      "is_real_bug": false,
+      "severity": "false-positive",
+      "category": "logic-error",
+      "reasoning": "Verified against the actual query. _sweep_unfinalized_recordings selects `Meeting.id where status in (COMPLETED, FAILED) and created_at < cutoff order by Meeting.id desc limit UNFINALIZED_RECORDINGS_LIMIT` (sweeps.py:514-520) — it is the newest N terminal meetings by recency, not a query that specifically targets unfinalized rows. Python-side filtering (has_unfinalized_jsonb / _recording_has_unfinalized_lane) happens only after that candidate set is fixed. So an unfixable lane entry (chunks lost to storage-side lifecycle deletion before ever finalizing) does not permanently consume a slot that other meetings need: as new meetings complete, the broken one ages out of the newest-N window on its own, and while it's in scope the extra cost is one bounded list_objects_bounded call per sweep pass — negligible. The claimed 'forever'/'unbounded churn'/'budget exhaustion' framing does not hold under this query shape; it only degrades gracefully into a small constant per-pass cost, and only in an idle deployment. Reviewer B's mechanical read of the query is correct.",
+      "action_required": "monitor"
+    },
+    {
+      "id": "BUG-014",
+      "is_real_bug": true,
+      "severity": "low",
+      "category": "logic-error",
+      "reasoning": "Verified. Both recovery paths — recover_recordings_jsonb_from_storage (sweeps.py:439-461) and _sweep_unfinalized_recordings (sweeps.py:593-610) — rebuild lane media_files entries with only id/type/format/storage_path/etc.; neither writes a `lane` sub-object, because lane_id/lane_label/lane_id_source only ever existed in upload metadata, not in the storage key. After such a recovery + finalize, _lane_master_sources reads `mf.get('lane') or {}` (final_transcription.py:256) and gets lane_label=None, so the solo-lane auto-confirm sets the speaker_cluster but never the actual speaker name — the feature's headline behavior silently disappears in exactly the recovery scenarios these sweeps exist for, with no log flagging the identity loss. Both reviewers confirmed; correctly rated low since it degrades a nice-to-have rather than corrupting data.",
+      "action_required": "fix-recommended",
+      "fix_suggestion": "Persist lane identity somewhere recoverable from storage alone (e.g. a small lane.json sidecar object written alongside the first chunk under the lane's prefix), and have both recovery paths read it back; failing that, log explicitly when lane identity could not be recovered."
+    },
+    {
+      "id": "BUG-015",
+      "is_real_bug": true,
+      "severity": "low",
+      "category": "logic-error",
+      "reasoning": "Verified. googlemeet/recording.ts:54-57: `Math.max(1, parseInt(process.env.MAX_RECORDING_LANES || '8', 10) || 8)`. parseInt('0') === 0 is falsy in JS, so `|| 8` maps an explicit '0' to 8 before Math.max ever clamps it — an operator trying to disable/minimize lanes via MAX_RECORDING_LANES=0 gets the maximum default instead, the opposite of intent. Classic numeric `|| default` footgun. Both reviewers confirmed; correctly rated low since it is a misconfiguration risk, not a crash or data-loss bug (and per BUG-016, this env var is not even wired into the bot container today, further limiting live impact).",
+      "action_required": "fix-recommended",
+      "fix_suggestion": "Parse with an explicit numeric check, e.g. `const n = parseInt(process.env.MAX_RECORDING_LANES ?? '', 10); const maxLanes = Number.isFinite(n) ? Math.max(0, n) : 8;` so 0 means 'lanes disabled' instead of 'use the maximum default'."
+    },
+    {
+      "id": "BUG-016",
+      "is_real_bug": true,
+      "severity": "high",
+      "category": "other",
+      "reasoning": "Verified against the compose diff and meetings.py. `git show 9aed38b -- deploy/compose/docker-compose.yml` shows only `RECORD_PARTICIPANT_LANES=${RECORD_PARTICIPANT_LANES:-false}` was added to meeting-api's explicit environment: list (no env_file directive exists for that service). LANE_STT_CONCURRENCY and MAX_LANE_TOTAL_DURATION_SECONDS are read via os.getenv at import time in final_transcription.py:44-47 but are absent from the compose file, so operator .env values are silently ignored and the hardcoded defaults (2, 14400s) always apply regardless of what deploy/env-example documents. MAX_RECORDING_LANES is read only via `process.env.MAX_RECORDING_LANES` inside the bot's Node process (googlemeet/recording.ts:56); bot_config in meetings.py:1113 carries recordParticipantLanes but has no maxRecordingLanes field, and no other mechanism injects that env var into launched bot containers — so the cap is always 8 regardless of operator configuration. Three of the four documented lane knobs are inert, including the two that are explicitly the STT cost caps the approved plan mandated. Raising to high because this defeats the feature's own stated cost-control mechanism, not merely a cosmetic doc/config mismatch.",
+      "action_required": "fix-recommended",
+      "fix_suggestion": "Add LANE_STT_CONCURRENCY and MAX_LANE_TOTAL_DURATION_SECONDS to meeting-api's environment: list in docker-compose.yml. Carry maxRecordingLanes through bot_config in meetings.py (mirroring recordParticipantLanes) instead of relying on a bot-container env var that nothing sets."
+    },
+    {
+      "id": "BUG-017",
+      "is_real_bug": false,
+      "severity": "false-positive",
+      "category": "logic-error",
+      "reasoning": "Both sub-claims describe intentional, documented behavior rather than defects. _apply_lane_identity's own docstring (final_transcription.py:273-280) states the multi-cluster policy explicitly: clusters are namespaced per lane so they 'can never collide'; naming stays with the DOM vote because 'Phase 3 owns real sub-speaker UX'. A segment with speaker_cluster=None is simply unclustered — None cannot collide with another lane's None (there is nothing to collide), and unclustered segments were never correction-targetable in the pre-existing mixed path either, so leaving them un-namespaced is consistent, not a regression. In the solo branch, keeping the _parse_segments DOM-vote name when lane_label is absent is a best-effort default that is no worse than the mixed path's own behavior for the same segment, and saved manual corrections keyed on the lane cluster still override it (final_transcription.py:941-946) by design. Any wrongness of that voted name traces back to BUG-002's lane-relative timestamp misalignment, which is already reported and scored independently — this finding does not identify a defect beyond that.",
+      "action_required": "no-action"
+    },
+    {
+      "id": "BUG-018",
+      "is_real_bug": true,
+      "severity": "low",
+      "category": "logic-error",
+      "reasoning": "Verified. The merge loop in _transcribe_lanes (final_transcription.py:365-368) does `if detected and detected != 'unknown': detected_language = detected` for each lane's result in iteration order — the surviving value is whichever lane happens to be last in the media_files iteration order, not a majority or duration-weighted choice, and that single value is stamped onto every stored Transcription row's `language` field (line 971) and into final_transcription state. One minority-language participant can flip the recorded meeting language for the entire transcript. Correctly rated low: it's a metadata/labeling defect, not a data-loss or availability issue. Both reviewers confirmed.",
+      "action_required": "fix-recommended",
+      "fix_suggestion": "Pick detected_language by duration-weighted vote across lanes (sum segment durations per detected language, take the max) instead of last-writer-wins."
+    },
+    {
+      "id": "BUG-019",
+      "is_real_bug": false,
+      "severity": "false-positive",
+      "category": "memory-leak",
+      "reasoning": "laneQueues (audio-pipeline.ts:195, 334-366) maps laneKey to the lane's latest upload promise and never deletes settled entries; skippedOverCap (browser.ts:596) similarly never removes ended tracks. Confirmed as literally described, but the retained objects are trivial: a settled Promise (whose closure-captured Buffer is released once the chain resolves per JS engine semantics) plus a short string key. The bot process is per-meeting and exits at meeting end, and even the finder's own worst case (one new key per 15s rescan, compounded by BUG-007) yields on the order of a few hundred small map entries per hour — bytes, not a resource problem that could plausibly cause an observable failure within a meeting's lifetime. This is code-quality tidiness, not a memory-leak bug with any demonstrated or plausible production impact.",
+      "action_required": "no-action"
+    },
+    {
+      "id": "BUG-020",
+      "is_real_bug": true,
+      "severity": "medium",
+      "category": "logic-error",
+      "reasoning": "Verified as a structural mismatch. laneLabelForElement (browser.ts:625-636) resolves a lane's label via `el.closest?.('[data-participant-id]')`, requiring the audio element to be a DOM descendant of a participant tile. But this codebase's own combined-pipeline audio discovery (findMediaElements, browser.ts:37-57) scans ALL `audio, video` elements for srcObject with no tile-ancestry requirement at all — strong internal evidence that Google Meet's remote-audio elements are not reliably tile-nested, since the author didn't rely on that assumption for the combined path either. The laneLabelForElement author's own comment hedges exactly this case ('the audio element may live inside (or near) a participant tile. When it does not...'). If audio elements are typically not tile-nested in practice, lane labels come back null for most/all lanes, and the feature's headline capability (solo-lane auto-confirmed speaker name) never fires — lanes fall back to the misaligned DOM-vote name instead (compounding BUG-002/BUG-017). The label is also captured once at lane start and never re-resolved if the element's srcObject is later reassigned. Both reviewers confirmed with medium confidence (this is a platform-behavior claim that can't be fully proven from code alone, but the code's own internal inconsistency strongly supports it).",
+      "action_required": "fix-recommended",
+      "fix_suggestion": "Correlate track -> participant via the same mechanism the existing Meet speaker-detection code uses (participant-id <-> stream/track mapping) instead of DOM ancestry of the audio element; re-resolve the label if the element's srcObject changes."
+    },
+    {
+      "id": "BUG-021",
+      "is_real_bug": true,
+      "severity": "low",
+      "category": "logic-error",
+      "reasoning": "Verified. startLane registers the lane (`this.lanes.set(track.id, ...)`, browser.ts:697) before `await pipeline.start()` (line 719). Two failure modes: (a) if MediaRecorder construction throws, BrowserMediaRecorderPipeline.start() catches it and simply `return`s (browser.ts:396-401) with no throw — the lane entry stays registered around a pipeline with no recorder, permanently occupying a maxLanes slot while recording nothing, with no retry. (b) `recorder.start(this.opts.timesliceMs)` itself (line 499) is outside any try/catch; a thrown InvalidStateError propagates out of startLane, aborting the remaining iterations of that scan pass (the awaited call sits inside a for-loop, browser.ts:667) and again leaves a dead, unretryable entry. Both are real, low-severity (self-limiting to a stuck slot, not a crash) missing-cleanup defects. Both reviewers confirmed.",
+      "action_required": "fix-recommended",
+      "fix_suggestion": "Wrap `await this.startLane(...)` in scan()'s loop in try/catch (log and continue to the next element); on any start failure, delete the lanes entry so the track can be retried on the next rescan."
+    },
+    {
+      "id": "BUG-022",
+      "is_real_bug": false,
+      "severity": "false-positive",
+      "category": "other",
+      "reasoning": "Verified: no security boundary is actually crossed. Both /media/{id}/download and /media/{id}/raw resolve the recording via `_find_meeting_data_recording(db, user.id, recording_id)` (recordings.py:749, 825) — a user-scoped lookup — so a lane master is only ever reachable by the authenticated OWNER of that meeting, not by an arbitrary third party who merely learns the media_file_id. That is owner-scoped access to one's own meeting audio, which the response-boundary-only filtering was never meant to prevent (_public_recording_view's own docstring states the scope explicitly: 'Only the response boundary filters — deletion and finalizer paths read the raw JSONB'). The recording.completed webhook is delivered to the owner's own configured endpoint — the same trust domain that could already read the meeting's data via the API. lane_label PII follows the same whole-meeting-deletion lifecycle as the pre-existing speaker_events field. This is a naming/consistency nit ('internal-only' oversells the scope) rather than a defect with any actual unauthorized-access impact.",
+      "action_required": "no-action"
+    },
+    {
+      "id": "BUG-023",
+      "is_real_bug": true,
+      "severity": "low",
+      "category": "logic-error",
+      "reasoning": "Verified. When lane_used is true, every Transcription row is still stamped with `session_uid=source.session_uid` (final_transcription.py:972) — the MIXED source's session — even though _lane_master_sources collects lanes across every recording/session of the meeting and each LaneTranscriptionSource carries its own (discarded) session_uid. The success state also records `source_recording_path: source.storage_path` (line 998) — the mixed master, which in the lane_used branch was never actually transcribed — alongside `source: 'deferred_lane_masters'`; lane_keys are recorded but not lane storage paths. For multi-session meetings (bot rejoin) this writes incorrect session attribution into persisted rows, and any operator auditing 'which audio produced this transcript' is pointed at the wrong file. Correctly rated low: it's a provenance/metadata defect, not a correctness-of-transcript-content issue. Both reviewers confirmed.",
+      "action_required": "fix-recommended",
+      "fix_suggestion": "When lane_used, stamp each Transcription row with its own lane's session_uid (already available on LaneTranscriptionSource) instead of the mixed source's, and record the list of lane master storage_paths (e.g. source_lane_paths) in final_transcription state alongside/instead of the mixed master path."
+    }
+  ],
+  "summary": {
+    "total_reported": 23,
+    "confirmed_bugs": 16,
+    "false_positives": 7,
+    "critical_issues": 2
+  }
+}
