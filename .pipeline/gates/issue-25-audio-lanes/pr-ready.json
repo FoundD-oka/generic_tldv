@@ -1,0 +1,78 @@
+{
+  "timestamp": "2026-07-09T20:40:48.471970+00:00",
+  "task_id": "issue-25-audio-lanes",
+  "size": "L",
+  "status": "block",
+  "checks": [
+    {
+      "check": "harness-residency",
+      "ok": true,
+      "detail": "status=pass"
+    },
+    {
+      "check": "preflight",
+      "ok": true,
+      "detail": "status=pass"
+    },
+    {
+      "check": "hd-gate",
+      "ok": true,
+      "detail": "unresolved=[]"
+    },
+    {
+      "check": "doc-staleness",
+      "ok": true,
+      "detail": "status=pass"
+    },
+    {
+      "check": "adapter-contract",
+      "ok": true,
+      "detail": "status=pass count=4"
+    },
+    {
+      "check": "backcast-contracts",
+      "ok": true,
+      "detail": "status=pass mode=not_applicable"
+    },
+    {
+      "check": "external-consultation",
+      "ok": false,
+      "detail": "status=block mode=required required=True"
+    },
+    {
+      "check": "feedback-prune",
+      "ok": true,
+      "detail": "status=pass required=False"
+    },
+    {
+      "check": "sml-decision",
+      "ok": true,
+      "detail": "size=L"
+    },
+    {
+      "check": "verification-contract",
+      "ok": true,
+      "detail": "/Users/bonginkan-3-gouki/project/generic_tldv/.pipeline/plans/issue-25-audio-lanes/verification-contract.md"
+    },
+    {
+      "check": "evidence-pack",
+      "ok": true,
+      "detail": "/Users/bonginkan-3-gouki/project/generic_tldv/.pipeline/evidence/issue-25-audio-lanes"
+    },
+    {
+      "check": "qa-judgment",
+      "ok": true,
+      "detail": "verdict=pass"
+    },
+    {
+      "check": "tribunal-or-sidechain",
+      "ok": true,
+      "detail": "tribunal-report.json present"
+    },
+    {
+      "check": "approval-hash",
+      "ok": true,
+      "detail": "approved=sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 current=sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ]
+}

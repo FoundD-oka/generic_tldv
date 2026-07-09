@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-07-09T20:40:48.336981+00:00",
+  "task_id": "issue-25-audio-lanes",
+  "status": "pass",
+  "mode": "not_applicable",
+  "details": {
+    "checkpoint_contract": ".pipeline/plans/issue-25-audio-lanes/checkpoint-contract.json",
+    "evidence_manifest": ".pipeline/evidence/issue-25-audio-lanes/evidence-manifest.json",
+    "approval_decision": ".pipeline/approvals/issue-25-audio-lanes/approval-decision.json",
+    "state_machine": ".pipeline/rules/backcast-state-machine.json",
+    "mode": "optional"
+  },
+  "errors": [],
+  "warnings": []
+}
