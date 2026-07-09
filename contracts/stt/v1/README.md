@@ -22,9 +22,16 @@ returns diarization (today: Soniox async `stt-async-*` models via
 token-level speaker labels into segments). Cluster ids are stable within one
 response, are NOT names, and are NOT stable across files/sessions.
 
-Backends without diarization (Whisper) omit the field entirely — existing
+Each segment MAY additionally carry a `token_count` field: an **integer count
+of the STT tokens folded into that segment** (today: emitted by the same
+Soniox adapter, alongside `speaker`). It is a pure additive signal for
+downstream false-split guards (e.g. distinguishing a stable speaker cluster
+from a single stray misclassified token) and is not a measure of duration or
+confidence.
+
+Backends without diarization (Whisper) omit both fields entirely — existing
 `start/end/text` consumers are unaffected, and downstream falls back to DOM
-speaker mapping. The OpenAI shape is never forked; this is a pure additive
-field. Golden: `examples/golden-2-diarization.*` (Soniox token payload +
+speaker mapping. The OpenAI shape is never forked; these are pure additive
+fields. Golden: `examples/golden-2-diarization.*` (Soniox token payload +
 folded verbose_json response pair, replayed in
 `services/transcription-service/tests/test_soniox_adapter.py`).

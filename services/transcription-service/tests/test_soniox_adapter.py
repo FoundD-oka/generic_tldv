@@ -46,6 +46,20 @@ def test_fold_alternating_speakers_splits_on_speaker_boundary():
     assert [s["id"] for s in segments] == [0, 1, 2]
 
 
+def test_fold_token_count_matches_folded_tokens_per_speaker():
+    tokens = [
+        {"text": "A1", "start_ms": 0, "end_ms": 100, "speaker": "1"},
+        {"text": "A2", "start_ms": 100, "end_ms": 200, "speaker": "1"},
+        {"text": "A3", "start_ms": 200, "end_ms": 300, "speaker": "1"},
+        {"text": "B1", "start_ms": 300, "end_ms": 400, "speaker": "2"},
+        {"text": "A4", "start_ms": 400, "end_ms": 500, "speaker": "1"},
+        {"text": "A5", "start_ms": 500, "end_ms": 600, "speaker": "1"},
+    ]
+    segments = fold_tokens_to_segments(tokens)
+    assert [s["speaker"] for s in segments] == ["1", "2", "1"]
+    assert [s["token_count"] for s in segments] == [3, 1, 2]
+
+
 def test_fold_splits_same_speaker_on_silence_gap():
     tokens = [
         {"text": "before", "start_ms": 0, "end_ms": 500, "speaker": "1"},

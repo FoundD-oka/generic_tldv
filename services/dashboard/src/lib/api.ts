@@ -182,6 +182,7 @@ export const vexaAPI = {
       segment_id?: string | null;
       speaker_cluster?: string | null;
       speaker_auto?: string | null;
+      speaker_mapping_status?: string | null;
     }
     interface RawTranscriptResponse {
       id: number;
@@ -235,6 +236,7 @@ export const vexaAPI = {
       segment_id: seg.segment_id || undefined,
       speaker_cluster: seg.speaker_cluster || undefined,
       speaker_auto: seg.speaker_auto || undefined,
+      speaker_mapping_status: seg.speaker_mapping_status || undefined,
     }));
 
     // Extract recordings from response (populated from meeting.data.recordings by backend)
