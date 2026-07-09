@@ -128,6 +128,10 @@ docker compose --env-file ../../.env -f docker-compose.yml --profile wake --prof
 The dashboard defaults new meeting bots to `voice_agent_enabled=true` so the
 wake assistant can speak back through the bot.
 
+Calendar-created bots default to `voice_agent_enabled=false`; set
+`KABOSU_VOICE_AGENT_ENABLED=true` only when calendar joins should also wake
+Kabosu by voice.
+
 
 ### Image tagging
 

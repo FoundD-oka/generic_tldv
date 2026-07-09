@@ -9,7 +9,7 @@ import {
   withPostMeetingAutoStop,
 } from "@/lib/bot-create-defaults";
 import type { CreateBotRequestWithAutomaticLeave } from "@/lib/bot-create-defaults";
-import type { Meeting, TranscriptSegment } from "@/types/vexa";
+import type { CreateBotRequest, Meeting, TranscriptSegment } from "@/types/vexa";
 
 describe("exportToTxt", () => {
   it("uses a Japanese text export template", () => {
@@ -95,7 +95,7 @@ describe("withPostMeetingAutoStop", () => {
 
 describe("applyBotCreationDefaults", () => {
   it("applies Kabosu bot name, Japanese language, and voice agent default", () => {
-    const request = applyBotCreationDefaults({
+    const request = applyBotCreationDefaults<CreateBotRequest>({
       platform: "google_meet",
       native_meeting_id: "abc-defg-hij",
     });
@@ -109,7 +109,7 @@ describe("applyBotCreationDefaults", () => {
 
   it("uses runtime default bot name when provided", () => {
     expect(resolveDefaultBotName({ defaultBotName: "会議カボス" })).toBe("会議カボス");
-    expect(applyBotCreationDefaults({
+    expect(applyBotCreationDefaults<CreateBotRequest>({
       platform: "zoom",
       native_meeting_id: "123456789",
     }, { defaultBotName: "会議カボス" }).bot_name).toBe("会議カボス");

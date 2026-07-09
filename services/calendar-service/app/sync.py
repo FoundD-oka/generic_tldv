@@ -40,6 +40,9 @@ KABOSU_BOT_OWNER_USER_ID = (
 KABOSU_CALENDAR_ACCOUNT_EMAIL = os.getenv("KABOSU_CALENDAR_ACCOUNT_EMAIL", "").strip()
 KABOSU_BOT_NAME = os.getenv("KABOSU_BOT_NAME", "カボス")
 KABOSU_BOT_LANGUAGE = os.getenv("KABOSU_BOT_LANGUAGE", "ja")
+KABOSU_POST_MEETING_AUTO_STOP_TIMEOUT_MS = int(
+    os.getenv("KABOSU_POST_MEETING_AUTO_STOP_TIMEOUT_MS", "1000")
+)
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -49,7 +52,7 @@ def _env_bool(name: str, default: bool) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
-KABOSU_VOICE_AGENT_ENABLED = _env_bool("KABOSU_VOICE_AGENT_ENABLED", True)
+KABOSU_VOICE_AGENT_ENABLED = _env_bool("KABOSU_VOICE_AGENT_ENABLED", False)
 
 
 def single_account_mode_enabled() -> bool:
@@ -265,6 +268,9 @@ async def schedule_upcoming_bots(db: AsyncSession) -> int:
                 "bot_name": KABOSU_BOT_NAME,
                 "language": KABOSU_BOT_LANGUAGE,
                 "voice_agent_enabled": KABOSU_VOICE_AGENT_ENABLED,
+                "automatic_leave": {
+                    "max_time_left_alone": KABOSU_POST_MEETING_AUTO_STOP_TIMEOUT_MS,
+                },
             }
             async with httpx.AsyncClient() as client:
                 resp = await client.post(
