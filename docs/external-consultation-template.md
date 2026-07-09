@@ -2,17 +2,18 @@
 
 ## Purpose
 
-Use this when an agent needs a second model as a review fortress, especially
-for L work, UX choices, fast-moving implementation options, or plan critique.
+Use this when an agent needs Fable as a second-model advisor, especially for L
+work, phase review, repeated failures, plan deviations, or final audit.
 
 This is advisory review evidence. It is not a deterministic gate result and is
 not a substitute for tests, source checks, or project evidence.
 
 ## Safety
 
-- authentication mode: existing browser session only
-- no harness-managed username, password, token, cookie, or API key
-- no login automation
+- provider: claude-fable-cli
+- invocation: `claude -p --model fable`
+- no Edit/Write/MultiEdit/NotebookEdit tools
+- no repository mutation by the advisor
 - no secrets, credentials, customer PII, private tokens, or unredacted proprietary data
 - redaction confirmed: yes/no
 
@@ -22,13 +23,15 @@ not a substitute for tests, source checks, or project evidence.
 - goal:
 - current plan:
 - decision under review:
+- plan step/checkpoint:
+- approaches tried and failure reasons:
+- current hypothesis:
 
-## Questions For GPT-Pro
+## Questions For Fable
 
-1. What is the strongest objection to this plan?
-2. What current best practice or trend could make this plan stale?
-3. Which option should win, and what evidence would change that decision?
-4. What should be verified locally before trusting this recommendation?
+1. What MUST-FIX issue, if any, should block this phase or commit?
+2. What SHOULD-FIX issue would materially improve quality without widening scope?
+3. Is this shippable if local verification passes?
 
 ## Context To Send
 
@@ -40,13 +43,22 @@ Paste only redacted context here.
 
 ## Required Output Shape
 
-Ask GPT-Pro to answer in this shape:
+Ask Fable to answer with concise JSON in this shape:
 
-```text
-Verdict:
-Top risks:
-Better option, if any:
-Claims that need verification:
-Sources or search terms to verify:
-Do not trust this response for:
+```json
+{
+  "verdict": "MUST_FIX|SHOULD_FIX|SHIP",
+  "summary": "...",
+  "confidence": "low|medium|high",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MUST_FIX|SHOULD_FIX|NOTE",
+      "title": "...",
+      "evidence": "...",
+      "recommendation": "..."
+    }
+  ],
+  "local_verification": ["..."]
+}
 ```

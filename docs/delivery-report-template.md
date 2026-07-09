@@ -1,32 +1,56 @@
-# Delivery Report
+# 納品報告
 
-## Summary
+## 言語ルール
 
-## Diff Hash
+この報告は日本語で書く。GitHub Issue / PR のタイトル、本文、コメント、
+レビュー返信、ユーザー向け要約も日本語で書く。コマンド、ファイルパス、
+JSON/schemaキー、ログ、引用文は必要に応じて原文のままでよいが、
+結果・判断・残リスクは日本語で説明する。
+
+## 要約
+
+## 差分ハッシュ
 
 ```text
 sha256:
 ```
 
-## Gate Results
+## ゲート結果
 
-| Gate | Result | Evidence |
+| ゲート | 結果 | 証跡 |
 |---|---|---|
 | preflight | pass/fail/block | |
 | qa-judge | pass/fail/needs_human | |
 
-## Tests
+## テスト
 
-| Command | Result | Evidence |
+| コマンド | 結果 | 証跡 |
 |---|---|---|
 | | | |
 
-## Approval
+## ユーザー向け整理
 
-Approval record:
+調査、計画上のトレードオフ、再利用される判断があるときに使う。
+非専門家にも読める平易さを保ちつつ、確信度、残リスク、結論が変わる条件は隠さない。
+
+```text
+元の依頼:
+問い直し:
+結論:
+将来KPI / 品質チェックポイント:
+この方針が適切な理由:
+変更内容:
+検証方法:
+残リスク:
+次の行動:
+```
+
+## 承認
+
+承認記録:
 
 ```text
 .pipeline/evidence/<issue-or-task>/approvals.jsonl
 ```
 
-## Residual Risk
+## 残リスク
