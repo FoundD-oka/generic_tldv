@@ -15,6 +15,13 @@ export interface LaneChunkOptions {
   laneLabel?: string;
   /** "participant-id" | "jsinstance" | "generated" | "stream" */
   laneIdSource?: string;
+  /**
+   * BUG-002 fix: ms between the mixed recording's start and this lane's
+   * recorder start. Sent as lane_start_offset_ms so meeting-api can
+   * re-align this lane's lane-relative segment timestamps onto the mixed
+   * master's timeline.
+   */
+  laneStartOffsetMs?: number;
 }
 
 /**
@@ -254,6 +261,7 @@ export class RecordingService {
         lane_id: lane.laneId,
         lane_label: lane.laneLabel,
         lane_id_source: lane.laneIdSource,
+        lane_start_offset_ms: lane.laneStartOffsetMs,
       } : {}),
     });
 

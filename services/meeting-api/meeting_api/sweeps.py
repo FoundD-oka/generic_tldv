@@ -441,6 +441,19 @@ async def recover_recordings_jsonb_from_storage(
         for (rec_id, media_type, media_format), chunk_keys in sorted(grouped.items()):
             chunk_keys = sorted(chunk_keys)
             recording_id = recording_id or rec_id
+            if is_lane_media_type(media_type):
+                # BUG-014 — lane_id/lane_label/lane_id_source only ever lived
+                # in upload metadata, never in the storage key, so a
+                # storage-only recovery cannot reconstruct the `lane` object.
+                # The solo-lane auto-confirm silently degrades to no name;
+                # log it so operators can see identity was lost, not just
+                # infer it from a missing lane_label.
+                logger.warning(
+                    "[finalizer-recovery] lane identity metadata lost for recovered "
+                    "entry meeting_id=%s media_type=%s — recovered from storage keys "
+                    "alone, no lane_label available (issue #25 BUG-014)",
+                    meeting.id, media_type,
+                )
             media_files.append({
                 "id": _new_recording_numeric_id(),
                 "type": media_type,
@@ -590,6 +603,17 @@ async def _sweep_unfinalized_recordings(
                 for (rec_id, media_type, media_format), chunk_keys in sorted(grouped.items()):
                     chunk_keys = sorted(chunk_keys)
                     recording_id = recording_id or rec_id
+                    if is_lane_media_type(media_type):
+                        # BUG-014 — see recover_recordings_jsonb_from_storage: this
+                        # sweep rebuilds from storage keys alone, so lane_label/
+                        # lane_id/lane_id_source can never be recovered here.
+                        logger.warning(
+                            "[sweep] unfinalized-recordings lane identity metadata lost "
+                            "for recovered entry meeting_id=%s media_type=%s — recovered "
+                            "from storage keys alone, no lane_label available "
+                            "(issue #25 BUG-014)",
+                            meeting.id, media_type,
+                        )
                     media_files.append({
                         "id": _new_recording_numeric_id(),
                         "type": media_type,

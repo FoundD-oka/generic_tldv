@@ -32,6 +32,7 @@ ${browserUtilsContent}
   window.VexaBrowserUtils = {
     BrowserAudioService: utils.BrowserAudioService,
     BrowserMediaRecorderPipeline: utils.BrowserMediaRecorderPipeline,
+    BrowserLaneRecorderManager: utils.BrowserLaneRecorderManager,
     BrowserWhisperLiveService: utils.BrowserWhisperLiveService,
     generateBrowserUUID: utils.generateBrowserUUID
   };
@@ -61,6 +62,7 @@ console.log(`✅ Browser utilities bundle created: ${outputPath}`);
 console.log('📦 Bundle includes:');
 console.log('  - BrowserAudioService');
 console.log('  - BrowserMediaRecorderPipeline');
+console.log('  - BrowserLaneRecorderManager');
 console.log('  - BrowserWhisperLiveService');
 console.log('  - generateBrowserUUID');
 console.log('  - window.VexaBrowserUtils');

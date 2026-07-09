@@ -1111,6 +1111,9 @@ async def request_bot(
         # Issue #25 — opt-in per-participant audio lanes (Google Meet).
         # Cost scales with participant count, so default off.
         "recordParticipantLanes": os.getenv("RECORD_PARTICIPANT_LANES", "false").lower() == "true",
+        # BUG-016 — carried through bot_config instead of relying on a
+        # bot-container env var that nothing sets; mirrors recordParticipantLanes.
+        "maxRecordingLanes": int(os.getenv("MAX_RECORDING_LANES", "8")),
     }
     if req.recording_enabled is not None:
         bot_config["recordingEnabled"] = bool(req.recording_enabled)

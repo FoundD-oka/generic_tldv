@@ -6,3 +6,19 @@ date	task_id	category	source	severity	note
 2026-07-08	speaker-attribution-voiceprint	jsonb-lost-update	tribunal	major	concurrent PATCH read-modify-write on meeting.data could drop corrections; fixed with SELECT FOR UPDATE
 2026-07-08	speaker-attribution-voiceprint	sync-migration-bypass	tribunal	major	schema-sync would build the new large-table index non-CONCURRENTLY at startup; fixed with online_only index skip
 2026-07-08	speaker-attribution-voiceprint	stale-ui-filter	tribunal	minor	speaker filter kept old names after merge; fixed by clearing filter on success
+2026-07-10	issue-25-audio-lanes	lane-bundle-export	tribunal	critical	BUG-001 BrowserLaneRecorderManager not exported in browser-utils bundle wrapper
+2026-07-10	issue-25-audio-lanes	lane-timestamp-offset	tribunal	critical	BUG-002 Lane segment timestamps lane-relative with no start offset
+2026-07-10	issue-25-audio-lanes	lane-completion-typeguard	tribunal	low	BUG-003 Lane is_final chunk would mark whole recording COMPLETED (dormant)
+2026-07-10	issue-25-audio-lanes	lane-flush-race	tribunal	medium	BUG-005 Last lane data chunk can be lost at shutdown
+2026-07-10	issue-25-audio-lanes	lane-capturestream-explosion	tribunal	medium	BUG-007 captureStream on rescan creates new tracks and lane explosion
+2026-07-10	issue-25-audio-lanes	lane-stopall-race	tribunal	medium	BUG-008 stopAll races in-flight scan leaving zombie recorders
+2026-07-10	issue-25-audio-lanes	lane-stt-memory	tribunal	high	BUG-010 _transcribe_lanes holds all lane WAVs in memory before budget check
+2026-07-10	issue-25-audio-lanes	lane-fallback-guard	tribunal	high	BUG-011 Lane fallback bypasses no-speaker-events replace guard
+2026-07-10	issue-25-audio-lanes	lane-allornothing-gap	tribunal	medium	BUG-012 Unfinalized lanes silently excluded violating all-or-nothing
+2026-07-10	issue-25-audio-lanes	lane-recovery-metadata	tribunal	low	BUG-014 Sweep recovery loses lane label metadata
+2026-07-10	issue-25-audio-lanes	lane-maxlanes-zero	tribunal	low	BUG-015 MAX_RECORDING_LANES=0 becomes 8
+2026-07-10	issue-25-audio-lanes	lane-env-wiring	tribunal	high	BUG-016 Three of four lane env knobs are dead-wired
+2026-07-10	issue-25-audio-lanes	lane-language-vote	tribunal	low	BUG-018 detected_language last-lane-wins
+2026-07-10	issue-25-audio-lanes	lane-label-resolution	tribunal	medium	BUG-020 laneLabelForElement DOM assumption fails for Meet audio elements
+2026-07-10	issue-25-audio-lanes	lane-startlane-throw	tribunal	low	BUG-021 pipeline.start throw leaves zombie lane entry
+2026-07-10	issue-25-audio-lanes	lane-provenance	tribunal	low	BUG-023 Lane transcripts record mixed-master provenance

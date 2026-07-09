@@ -354,6 +354,14 @@ export class BrowserMediaRecorderPipeline {
   private finalChunkPromise: Promise<void> | null = null;
   private resolveFinalChunk: (() => void) | null = null;
   private mimeType: string = "audio/webm";
+  /**
+   * BUG-005 fix: ondataavailable's async work (arrayBuffer + base64 encode +
+   * chunkCallback) can still be in flight when onstop fires — track every
+   * in-flight chunk task here so onstop can await them before resolving
+   * finalChunkPromise. Without this, stop() can resolve while the last data
+   * chunk is still on its way to the Node side.
+   */
+  private pendingChunkTasks: Set<Promise<void>> = new Set();
 
   constructor(opts: BrowserMediaRecorderPipelineOptions) {
     this.opts = opts;
@@ -403,7 +411,7 @@ export class BrowserMediaRecorderPipeline {
     this.recorder = recorder;
     this.mimeType = recorder.mimeType || chosen || "audio/webm";
 
-    recorder.ondataavailable = async (event: BlobEvent) => {
+    recorder.ondataavailable = (event: BlobEvent) => {
       if (!(event.data && event.data.size > 0)) {
         (window as any).logBot?.("[BrowserMediaRecorderPipeline] dataavailable fired with empty data (skipping)");
         return;
@@ -423,53 +431,74 @@ export class BrowserMediaRecorderPipeline {
 
       const seq = this.chunkSeq;
       this.chunkSeq = seq + 1;
+      const data = event.data;
 
-      try {
-        const arrBuffer = await event.data.arrayBuffer();
-        const bytes = new Uint8Array(arrBuffer);
-        let binary = "";
-        const encodeChunkSize = 0x8000;
-        for (let i = 0; i < bytes.length; i += encodeChunkSize) {
-          binary += String.fromCharCode(...bytes.subarray(i, i + encodeChunkSize));
-        }
-        const base64 = btoa(binary);
-
-        (window as any).logBot?.(
-          `[BrowserMediaRecorderPipeline] Uploading chunk ${seq} (${bytes.length} bytes)`
-        );
-
+      // BUG-005 fix: this async work (arrayBuffer + base64 encode + the
+      // chunkCallback round-trip) is registered in pendingChunkTasks so
+      // onstop can await it before resolving finalChunkPromise — otherwise
+      // stop() can resolve while this chunk is still in flight to Node.
+      const task = (async () => {
         try {
-          const ok = await this.opts.chunkCallback({
-            base64,
-            chunkSeq: seq,
-            isFinal: false,
-            mimeType: this.mimeType,
-          });
-          if (!ok) {
-            (window as any).logBot?.(
-              `[BrowserMediaRecorderPipeline] Chunk ${seq} callback returned false — sink rejected; reconciler will re-fetch`
-            );
+          const arrBuffer = await data.arrayBuffer();
+          const bytes = new Uint8Array(arrBuffer);
+          let binary = "";
+          const encodeChunkSize = 0x8000;
+          for (let i = 0; i < bytes.length; i += encodeChunkSize) {
+            binary += String.fromCharCode(...bytes.subarray(i, i + encodeChunkSize));
           }
-        } catch (cbErr: any) {
+          const base64 = btoa(binary);
+
           (window as any).logBot?.(
-            `[BrowserMediaRecorderPipeline] Chunk ${seq} callback threw: ${cbErr?.message || cbErr}; reconciler will re-fetch`
+            `[BrowserMediaRecorderPipeline] Uploading chunk ${seq} (${bytes.length} bytes)`
           );
-        } finally {
-          // Splice the chunk regardless of callback outcome — see Pack M.
-          const idx = this.pending.indexOf(event.data);
+
+          try {
+            const ok = await this.opts.chunkCallback({
+              base64,
+              chunkSeq: seq,
+              isFinal: false,
+              mimeType: this.mimeType,
+            });
+            if (!ok) {
+              (window as any).logBot?.(
+                `[BrowserMediaRecorderPipeline] Chunk ${seq} callback returned false — sink rejected; reconciler will re-fetch`
+              );
+            }
+          } catch (cbErr: any) {
+            (window as any).logBot?.(
+              `[BrowserMediaRecorderPipeline] Chunk ${seq} callback threw: ${cbErr?.message || cbErr}; reconciler will re-fetch`
+            );
+          } finally {
+            // Splice the chunk regardless of callback outcome — see Pack M.
+            const idx = this.pending.indexOf(data);
+            if (idx >= 0) this.pending.splice(idx, 1);
+          }
+        } catch (err: any) {
+          // Splice on encode failure too — chunk is unrecoverable.
+          const idx = this.pending.indexOf(data);
           if (idx >= 0) this.pending.splice(idx, 1);
+          (window as any).logBot?.(
+            `[BrowserMediaRecorderPipeline] Chunk ${seq} encode FAILED: ${err?.message || err}; spliced from buffer`
+          );
         }
-      } catch (err: any) {
-        // Splice on encode failure too — chunk is unrecoverable.
-        const idx = this.pending.indexOf(event.data);
-        if (idx >= 0) this.pending.splice(idx, 1);
-        (window as any).logBot?.(
-          `[BrowserMediaRecorderPipeline] Chunk ${seq} encode FAILED: ${err?.message || err}; spliced from buffer`
-        );
-      }
+      })();
+      this.pendingChunkTasks.add(task);
+      task.finally(() => {
+        this.pendingChunkTasks.delete(task);
+      });
     };
 
     recorder.onstop = async () => {
+      // BUG-005 fix: wait for every in-flight ondataavailable task (chunks
+      // still encoding/uploading) before emitting the final chunk, so
+      // stop() cannot resolve while the last real data chunk is still on
+      // its way to the Node side.
+      if (this.pendingChunkTasks.size > 0) {
+        (window as any).logBot?.(
+          `[BrowserMediaRecorderPipeline] onstop waiting for ${this.pendingChunkTasks.size} in-flight chunk task(s)`
+        );
+        await Promise.allSettled(Array.from(this.pendingChunkTasks));
+      }
       // Emit a final chunk (empty body OK — server treats isFinal=true as the
       // signal to flip Recording.status, regardless of payload size).
       try {
@@ -559,6 +588,12 @@ export interface LaneChunkPayload {
   laneId: string;
   laneLabel: string | null;
   laneIdSource: string;
+  /**
+   * BUG-002 fix: ms between the mixed recording's start (recordingStartedAtMs)
+   * and this lane's own recorder start. null when recordingStartedAtMs was not
+   * supplied (caller cannot align lane-relative timestamps in that case).
+   */
+  laneStartOffsetMs: number | null;
   base64: string;
   chunkSeq: number;
   isFinal: boolean;
@@ -573,12 +608,25 @@ export interface BrowserLaneRecorderManagerOptions {
   laneChunkCallback: (payload: LaneChunkPayload) => Promise<boolean>;
   /** Rescan cadence for late joiners / recreated elements. */
   rescanIntervalMs?: number;
+  /**
+   * BUG-002 fix: Date.now() captured right after the combined (mixed-master)
+   * pipeline starts. Each lane computes its start offset from this value so
+   * lane-relative segment timestamps can be re-aligned to the mixed master's
+   * timeline server-side.
+   */
+  recordingStartedAtMs?: number;
 }
 
 interface LaneEntry {
   laneKey: string;
   pipeline: BrowserMediaRecorderPipeline;
   track: MediaStreamTrack;
+  /**
+   * BUG-020: mutable so a rescan can resolve/attach a label that was null
+   * at lane start (label is re-checked on every rescan while still null).
+   */
+  label: string | null;
+  labelSource: string;
 }
 
 async function sha1Hex(input: string): Promise<string> {
@@ -596,6 +644,25 @@ export class BrowserLaneRecorderManager {
   private skippedOverCap = new Set<string>();
   private rescanTimer: number | null = null;
   private stopped = false;
+  /**
+   * BUG-008 fix: stopAll() must not snapshot this.lanes while a scan is
+   * still in flight (a scan can be suspended at an await and later add a
+   * lane stopAll never sees). Tracks the currently-running scan so stopAll
+   * can await it before taking its snapshot.
+   */
+  private scanInFlight: Promise<void> | null = null;
+  /**
+   * BUG-007 fix: elements we've already called captureStream() on. Per the
+   * MediaElement capture spec, captureStream() returns a NEW MediaStream
+   * (fresh track ids) on every call, so calling it again on every rescan
+   * for a srcObject-less element would start a brand-new lane every
+   * rescanIntervalMs until maxLanes is exhausted. We call captureStream()
+   * at most once per element; this WeakSet gates ONLY that fallback path —
+   * it must never gate the srcObject scan path (BUG-020(b): a srcObject
+   * identity change on an already-claimed element must still be able to
+   * start a lane for the new track).
+   */
+  private capturedElements = new WeakSet<HTMLMediaElement>();
 
   constructor(opts: BrowserLaneRecorderManagerOptions) {
     this.opts = opts;
@@ -607,14 +674,14 @@ export class BrowserLaneRecorderManager {
   }
 
   async start(initialElements: HTMLMediaElement[]): Promise<void> {
-    await this.scan(initialElements);
+    await this.runScan(initialElements);
     const interval = this.opts.rescanIntervalMs ?? 15000;
     this.rescanTimer = window.setInterval(() => {
       if (this.stopped) return;
       const els = Array.from(
         document.querySelectorAll("audio, video")
       ) as HTMLMediaElement[];
-      this.scan(els).catch((err: any) => {
+      this.runScan(els).catch((err: any) => {
         (window as any).logBot?.(
           `[LaneRecorder] rescan failed: ${err?.message || err}`
         );
@@ -622,10 +689,34 @@ export class BrowserLaneRecorderManager {
     }, interval);
   }
 
+  /** Wraps scan() so stopAll() can await any in-flight pass (BUG-008). */
+  private runScan(elements: HTMLMediaElement[]): Promise<void> {
+    const p = this.scan(elements);
+    this.scanInFlight = p;
+    const clear = () => {
+      if (this.scanInFlight === p) this.scanInFlight = null;
+    };
+    p.then(clear, clear);
+    return p;
+  }
+
   private laneLabelForElement(el: HTMLMediaElement): { label: string | null; source: string } {
     // Best-effort: the audio element may live inside (or near) a participant
     // tile. When it does not, the lane still records — the deferred stage
     // simply cannot auto-confirm it from a DOM name.
+    //
+    // BUG-020 known limitation: in Google Meet, remote audio is commonly
+    // played through detached <audio> elements that are NOT descendants of
+    // a participant tile (the combined pipeline's findMediaElements() scans
+    // ALL media elements for srcObject with no tile-ancestry requirement,
+    // for the same reason). When that holds, this returns label=null for
+    // most/all lanes and the deferred stage's solo-lane auto-confirm never
+    // fires — the lane falls back to the DOM-vote name instead. Full
+    // track→participant correlation (matching Meet's internal participant
+    // stream mapping) is out of scope here; see BUG-020 fix_suggestion /
+    // Phase 3 for that work. scan() re-resolves this on every rescan while
+    // the lane's stored label is still null, so a label becoming
+    // available later (tile mounts, DOM settles) is not permanently missed.
     const tile = el.closest?.("[data-participant-id]") as HTMLElement | null;
     if (tile) {
       const name = tile.querySelector?.("span.notranslate")?.textContent?.trim();
@@ -637,21 +728,47 @@ export class BrowserLaneRecorderManager {
   }
 
   private async scan(elements: HTMLMediaElement[]): Promise<void> {
+    if (this.stopped) return;
     for (const el of elements) {
+      if (this.stopped) return; // BUG-008: bail mid-pass once stopAll() ran
+
       let stream: MediaStream | null = null;
       try {
-        stream =
-          (el.srcObject as MediaStream) ||
-          ((el as any).captureStream && (el as any).captureStream()) ||
-          null;
+        if (el.srcObject instanceof MediaStream) {
+          stream = el.srcObject;
+        } else if (!this.capturedElements.has(el) && (el as any).captureStream) {
+          // BUG-007: captureStream() fallback runs AT MOST ONCE per element
+          // (see capturedElements doc above) — never on a rescan.
+          this.capturedElements.add(el);
+          stream = (el as any).captureStream() || null;
+        }
       } catch {
         stream = null;
       }
       if (!(stream instanceof MediaStream)) continue;
 
       for (const track of stream.getAudioTracks()) {
+        if (this.stopped) return; // BUG-008
         if (track.readyState === "ended") continue;
-        if (this.lanes.has(track.id)) continue;
+
+        const existing = this.lanes.get(track.id);
+        if (existing) {
+          // BUG-020: re-resolve the label on each rescan while it's still
+          // null so a lane that started before its tile/name was available
+          // eventually picks one up; later chunks carry the updated label
+          // (the server's metadata-inherit handles persistence).
+          if (existing.label === null) {
+            const resolved = this.laneLabelForElement(el);
+            if (resolved.label) {
+              existing.label = resolved.label;
+              existing.labelSource = resolved.source;
+              (window as any).logBot?.(
+                `[LaneRecorder] resolved label on rescan laneKey=${existing.laneKey} label=${resolved.label}`
+              );
+            }
+          }
+          continue;
+        }
 
         if (this.lanes.size >= this.opts.maxLanes) {
           if (!this.skippedOverCap.has(track.id)) {
@@ -664,7 +781,16 @@ export class BrowserLaneRecorderManager {
           continue;
         }
 
-        await this.startLane(el, stream, track);
+        // BUG-021: a single track's lane failing to start must not abort
+        // the rest of this scan pass — log and continue with the remaining
+        // elements/tracks.
+        try {
+          await this.startLane(el, stream, track);
+        } catch (err: any) {
+          (window as any).logBot?.(
+            `[LaneRecorder] startLane failed track=${track.id}: ${err?.message || err}`
+          );
+        }
       }
     }
   }
@@ -674,30 +800,46 @@ export class BrowserLaneRecorderManager {
     stream: MediaStream,
     track: MediaStreamTrack
   ): Promise<void> {
+    if (this.stopped) return; // BUG-008: bail before constructing anything
+
     const laneKey = (await sha1Hex(track.id)).slice(0, 10);
     const { label, source } = this.laneLabelForElement(el);
     const laneStream = new MediaStream([track]);
+    // BUG-002: fixed offset captured once at this lane's recorder start —
+    // ms between the mixed recording's start and this lane starting. The
+    // server uses it to re-align this lane's lane-relative segment
+    // timestamps onto the mixed master's timeline.
+    const laneStartOffsetMs =
+      typeof this.opts.recordingStartedAtMs === "number"
+        ? Date.now() - this.opts.recordingStartedAtMs
+        : null;
 
     const pipeline = new BrowserMediaRecorderPipeline({
       stream: laneStream,
       timesliceMs: this.opts.timesliceMs,
-      chunkCallback: (p) =>
-        this.opts.laneChunkCallback({
+      chunkCallback: (p) => {
+        // Read the current (possibly rescan-updated, BUG-020) label from the
+        // lane entry rather than the label captured at start time.
+        const entry = this.lanes.get(track.id);
+        return this.opts.laneChunkCallback({
           laneKey,
           laneId: track.id,
-          laneLabel: label,
-          laneIdSource: source,
+          laneLabel: entry ? entry.label : label,
+          laneIdSource: entry ? entry.labelSource : source,
+          laneStartOffsetMs,
           base64: p.base64,
           chunkSeq: p.chunkSeq,
           isFinal: p.isFinal,
           mimeType: p.mimeType,
-        }),
+        });
+      },
     });
 
-    this.lanes.set(track.id, { laneKey, pipeline, track });
+    this.lanes.set(track.id, { laneKey, pipeline, track, label, labelSource: source });
     (window as any).logBot?.(
       `[LaneRecorder] lane started laneKey=${laneKey} track=${track.id} ` +
-      `label=${label ?? "(none)"} lanes=${this.lanes.size}/${this.opts.maxLanes}`
+      `label=${label ?? "(none)"} offsetMs=${laneStartOffsetMs ?? "(none)"} ` +
+      `lanes=${this.lanes.size}/${this.opts.maxLanes}`
     );
 
     // Track death (participant left / stream torn down) ends the lane and
@@ -716,7 +858,20 @@ export class BrowserLaneRecorderManager {
       );
     });
 
-    await pipeline.start();
+    // BUG-021: BrowserMediaRecorderPipeline.start() swallows MediaRecorder
+    // construction failures (logs + returns, no throw), and
+    // recorder.start() itself can throw outside that guard. Either way,
+    // treat "no recorder after start()" as a start failure so the zombie
+    // lane entry is removed and the track can be retried on the next scan.
+    try {
+      await pipeline.start();
+      if (!pipeline.getMediaRecorder()) {
+        throw new Error("pipeline.start() did not produce a MediaRecorder");
+      }
+    } catch (err: any) {
+      this.lanes.delete(track.id);
+      throw err;
+    }
   }
 
   /** Stop every lane and flush final chunks. Called from stopBrowserCapture. */
@@ -725,6 +880,12 @@ export class BrowserLaneRecorderManager {
     if (this.rescanTimer !== null) {
       window.clearInterval(this.rescanTimer);
       this.rescanTimer = null;
+    }
+    // BUG-008: wait for any in-flight scan to finish before snapshotting —
+    // otherwise a scan suspended mid-pass can add a lane after we've
+    // already cleared the map, and that lane is never stopped.
+    if (this.scanInFlight) {
+      await this.scanInFlight.catch(() => {});
     }
     const entries = Array.from(this.lanes.values());
     this.lanes.clear();

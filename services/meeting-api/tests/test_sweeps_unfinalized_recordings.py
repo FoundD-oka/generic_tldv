@@ -73,6 +73,57 @@ async def test_sweep_unfinalized_recordings_recovers_missing_jsonb_from_storage_
 
 
 @pytest.mark.asyncio
+async def test_sweep_unfinalized_recordings_logs_lost_lane_identity(caplog):
+    """BUG-014: recovering a lane-* entry from storage keys alone can never
+    reconstruct lane_id/lane_label/lane_id_source (they only ever lived in
+    upload metadata) — the sweep must log this loudly instead of silently
+    producing a lane entry with no `lane` object."""
+    meeting = make_meeting(
+        id=10070,
+        user_id=1523,
+        status=MeetingStatus.COMPLETED.value,
+        data={"recording_enabled": True},
+        created_at=datetime.utcnow() - timedelta(minutes=10),
+    )
+    session = make_session(
+        meeting_id=10070,
+        session_uid="lane-sess-1",
+    )
+
+    db = AsyncMock()
+    db.execute = AsyncMock(
+        side_effect=[
+            FetchAllResult([(10070,)]),
+            MockResult(items=[meeting]),
+            MockResult(items=[session]),
+        ]
+    )
+    db.commit = AsyncMock()
+    db.rollback = AsyncMock()
+
+    @asynccontextmanager
+    async def db_session_factory():
+        yield db
+
+    storage = MagicMock()
+    storage.list_objects_bounded.return_value = [
+        "recordings/1523/735125303970/lane-sess-1/lane-aaaaaaaaaa/000000.webm",
+    ]
+
+    with patch.object(sweeps, "_get_default_storage_client", return_value=storage), \
+         patch("meeting_api.recording_finalizer.finalize_recording_master", new=AsyncMock()), \
+         patch.object(sweeps.attributes, "flag_modified", new=MagicMock()), \
+         caplog.at_level("WARNING", logger="meeting_api.sweeps"):
+        swept = await sweeps._sweep_unfinalized_recordings(db_session_factory)
+
+    assert swept == 1
+    lane_mf = meeting.data["recordings"][0]["media_files"][0]
+    assert lane_mf["type"] == "lane-aaaaaaaaaa"
+    assert "lane" not in lane_mf, "storage-only recovery cannot reconstruct the lane object"
+    assert any("lane identity metadata lost" in r.message for r in caplog.records)
+
+
+@pytest.mark.asyncio
 async def test_sweep_unfinalized_recordings_finalizes_existing_jsonb_without_storage_recovery():
     meeting = make_meeting(
         id=10063,

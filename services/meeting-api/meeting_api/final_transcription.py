@@ -224,6 +224,10 @@ class LaneTranscriptionSource:
     lane_key: str
     lane_label: Optional[str]
     lane_id_source: Optional[str]
+    # BUG-002 — ms between the mixed recording's start and this lane's own
+    # recorder start (0.0 for lanes present from t=0). A late joiner's lane
+    # otherwise has its own t=0 mid-meeting on the merged timeline.
+    start_offset_seconds: float = 0.0
 
 
 class LaneTranscriptionFallback(Exception):
@@ -233,7 +237,32 @@ class LaneTranscriptionFallback(Exception):
     never mix)."""
 
 
-def _lane_master_sources(meeting: Meeting) -> List[LaneTranscriptionSource]:
+def _lane_start_offset_seconds(lane: Dict[str, Any]) -> float:
+    offset_ms = lane.get("lane_start_offset_ms")
+    if offset_ms is None:
+        return 0.0
+    try:
+        return float(offset_ms) / 1000.0
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _lane_master_sources(
+    meeting: Meeting,
+    *,
+    recording_session_uid: Optional[str] = None,
+) -> List[LaneTranscriptionSource]:
+    """Collect finalized per-participant lane masters (issue #25).
+
+    All-or-nothing at the lane-set level (BUG-012): if ANY lane-* media_files
+    entry (in the matched recording) is not yet finalized, the lane path as a
+    whole is unavailable — silently transcribing a subset would drop that
+    participant's speech from the transcript with no error. When
+    `recording_session_uid` is given, only that recording's lanes are
+    considered (BUG-012/BUG-023 — lanes must ride the same recording/session
+    as the chosen mixed master; lanes from a different bot session must never
+    merge onto one timeline).
+    """
     data = _meeting_data(meeting)
     recordings = data.get("recordings") or []
     if isinstance(recordings, dict):
@@ -242,6 +271,8 @@ def _lane_master_sources(meeting: Meeting) -> List[LaneTranscriptionSource]:
     for rec in recordings:
         if not isinstance(rec, dict) or rec.get("status") == "failed":
             continue
+        if recording_session_uid is not None and rec.get("session_uid") != recording_session_uid:
+            continue
         for mf in rec.get("media_files") or []:
             if not isinstance(mf, dict):
                 continue
@@ -249,7 +280,10 @@ def _lane_master_sources(meeting: Meeting) -> List[LaneTranscriptionSource]:
             if not is_lane_media_type(mf_type):
                 continue
             if mf.get("finalized_by") != "recording_finalizer.master":
-                continue
+                raise LaneTranscriptionFallback(
+                    f"lane {mf_type} not finalized yet — lane path unavailable "
+                    f"for recording {rec.get('id')!r} (all-or-nothing)"
+                )
             storage_path = str(mf.get("storage_path") or "")
             if not storage_path or not _is_audio_master_path(storage_path):
                 continue
@@ -262,8 +296,19 @@ def _lane_master_sources(meeting: Meeting) -> List[LaneTranscriptionSource]:
                 lane_key=mf_type[len("lane-"):],
                 lane_label=(str(lane.get("lane_label")).strip() or None) if lane.get("lane_label") else None,
                 lane_id_source=lane.get("lane_id_source"),
+                start_offset_seconds=_lane_start_offset_seconds(lane),
             ))
     return sources
+
+
+def _lane_masters_available(meeting: Meeting) -> bool:
+    """Best-effort presence check — used only to decide whether the
+    no-speaker-events replace guard (BUG-011) is unnecessary. A lane path
+    that would raise LaneTranscriptionFallback anyway is not "available"."""
+    try:
+        return bool(_lane_master_sources(meeting))
+    except LaneTranscriptionFallback:
+        return False
 
 
 def _apply_lane_identity(
@@ -292,6 +337,41 @@ def _apply_lane_identity(
                 seg["speaker_cluster"] = f"lane:{lane.lane_key}:{cluster}"
     for seg in segments:
         seg["_lane_key"] = lane.lane_key
+        # BUG-023 — each lane segment carries its OWN recording's session_uid
+        # so persisted Transcription rows are stamped correctly even when
+        # lanes span a multi-session (bot rejoin) meeting.
+        seg["_lane_session_uid"] = lane.session_uid
+
+
+def _shift_speaker_events(
+    speaker_events: List[Dict[str, Any]], offset_seconds: float
+) -> List[Dict[str, Any]]:
+    """Return a COPY of speaker_events shifted by -offset (ms).
+
+    BUG-002: speaker_events are timestamped relative to the mixed
+    recording's start, but a lane's STT segments are relative to that
+    lane's OWN recorder start. Shifting a copy of the events into the
+    lane's local clock (instead of mutating the shared list) is what lets
+    _parse_segments' DOM cluster-naming vote line up with lane-relative
+    segment times without corrupting the events for other lanes.
+    """
+    if not offset_seconds:
+        return speaker_events
+    offset_ms = offset_seconds * 1000.0
+    return [
+        {**event, "relative_timestamp_ms": event.get("relative_timestamp_ms", 0) - offset_ms}
+        for event in speaker_events
+    ]
+
+
+def _shift_segment_times(segments: List[Dict[str, Any]], offset_seconds: float) -> None:
+    """Shift each segment's start/end by +offset so the merged transcript
+    lands on the master (mixed-recording) timeline (BUG-002)."""
+    if not offset_seconds:
+        return
+    for seg in segments:
+        seg["start"] = float(seg.get("start", 0)) + offset_seconds
+        seg["end"] = float(seg.get("end", 0)) + offset_seconds
 
 
 async def _transcribe_lanes(
@@ -304,6 +384,14 @@ async def _transcribe_lanes(
 
     Raises LaneTranscriptionFallback when any lane fails or the duration
     budget is exceeded — the caller then runs the unchanged mixed-master path.
+
+    BUG-010: lanes are downloaded/converted under a bounded semaphore and the
+    running duration total is checked as each lane finishes, so a
+    meeting that is already over budget aborts (and cancels any lanes not
+    yet downloaded) before paying full download+ffmpeg cost for every lane.
+    Decoded audio is dropped from `prepared` before transcription starts, so
+    at most one lane's buffer is referenced per in-flight STT call instead of
+    every lane's audio staying resident for the whole all-lanes STT gather.
     """
     semaphore = asyncio.Semaphore(LANE_STT_CONCURRENCY)
 
@@ -322,50 +410,96 @@ async def _transcribe_lanes(
             duration = _audio_duration_seconds(audio, fmt) or 0.0
             return lane, audio, fmt, duration
 
-    prepared = await asyncio.gather(
-        *(_prepare(lane) for lane in lane_sources), return_exceptions=True
-    )
-    errors = [p for p in prepared if isinstance(p, BaseException)]
-    if errors:
-        raise LaneTranscriptionFallback(
-            f"lane download/convert failed for {len(errors)}/{len(lane_sources)} lanes: {errors[0]}"
-        )
+    pending = {asyncio.ensure_future(_prepare(lane)): lane for lane in lane_sources}
+    prepared: List[tuple] = []
+    total_duration = 0.0
+    budget_reason: Optional[str] = None
+    try:
+        for task in asyncio.as_completed(list(pending.keys())):
+            try:
+                result = await task
+            except Exception as exc:
+                lane = pending.get(task)
+                raise LaneTranscriptionFallback(
+                    f"lane download/convert failed for {lane.lane_key if lane else '?'}: {exc}"
+                ) from exc
+            prepared.append(result)
+            total_duration += result[3]
+            if total_duration > MAX_LANE_TOTAL_DURATION_SECONDS:
+                # Cap already breached by lanes measured so far — stop the
+                # loop immediately instead of waiting for every remaining
+                # lane to finish downloading; `finally` below cancels
+                # whatever is still in flight so we stop paying ffmpeg cost
+                # for lanes we already know we will not transcribe.
+                budget_reason = (
+                    f"lane duration budget exceeded: {total_duration:.0f}s > "
+                    f"{MAX_LANE_TOTAL_DURATION_SECONDS:.0f}s"
+                )
+                break
+    finally:
+        for task in pending:
+            if not task.done():
+                task.cancel()
+        # Retrieve every task's result/exception exactly once, even the ones
+        # we abandoned above — otherwise asyncio logs "exception was never
+        # retrieved" for a sibling lane that also failed/was cancelled.
+        await asyncio.gather(*pending.keys(), return_exceptions=True)
 
-    # Budget check BEFORE any STT call — the cap exists to bound STT cost.
-    total_duration = sum(duration for _, _, _, duration in prepared)
-    if total_duration > MAX_LANE_TOTAL_DURATION_SECONDS:
-        raise LaneTranscriptionFallback(
-            f"lane duration budget exceeded: {total_duration:.0f}s > "
-            f"{MAX_LANE_TOTAL_DURATION_SECONDS:.0f}s"
-        )
+    if budget_reason:
+        raise LaneTranscriptionFallback(budget_reason)
 
-    async def _transcribe(lane, audio, fmt, duration):
+    async def _transcribe(lane: LaneTranscriptionSource, audio: bytes, fmt: str, duration: float):
         async with semaphore:
             tx = await _call_transcription_service(audio, fmt, language=language)
+            shifted_events = _shift_speaker_events(speaker_events, lane.start_offset_seconds)
             segments, detected = _parse_segments(
                 tx,
                 language=language,
-                speaker_events=speaker_events,
+                speaker_events=shifted_events,
                 fallback_duration=duration,
             )
             _apply_lane_identity(lane, segments)
+            _shift_segment_times(segments, lane.start_offset_seconds)
             return segments, detected
 
-    results = await asyncio.gather(
-        *(_transcribe(*p) for p in prepared), return_exceptions=True
-    )
-    errors = [r for r in results if isinstance(r, BaseException)]
+    transcribe_tasks = {
+        asyncio.ensure_future(_transcribe(lane, audio, fmt, duration)): lane
+        for lane, audio, fmt, duration in prepared
+    }
+    prepared.clear()  # drop the (lane, audio, ...) tuples; each task's own
+    # frame is now the only thing keeping its audio buffer alive, so it is
+    # released as soon as that lane's own STT call returns — not held until
+    # every lane's transcription finishes.
+
+    errors: List[BaseException] = []
+    merged: List[Dict[str, Any]] = []
+    # BUG-018 — duration-weighted vote across lanes instead of last-lane-wins:
+    # one minority-language participant should not flip the whole meeting's
+    # recorded language.
+    language_durations: Dict[str, float] = {}
+    for task in asyncio.as_completed(list(transcribe_tasks.keys())):
+        try:
+            segments, detected = await task
+        except Exception as exc:
+            errors.append(exc)
+            continue
+        merged.extend(segments)
+        if detected and detected != "unknown":
+            lane_duration = sum(
+                max(0.0, float(seg.get("end", 0)) - float(seg.get("start", 0)))
+                for seg in segments
+            )
+            language_durations[detected] = language_durations.get(detected, 0.0) + lane_duration
     if errors:
         raise LaneTranscriptionFallback(
             f"lane STT failed for {len(errors)}/{len(lane_sources)} lanes: {errors[0]}"
         )
 
-    merged: List[Dict[str, Any]] = []
-    detected_language = language or "unknown"
-    for segments, detected in results:
-        merged.extend(segments)
-        if detected and detected != "unknown":
-            detected_language = detected
+    detected_language = (
+        max(language_durations.items(), key=lambda kv: kv[1])[0]
+        if language_durations
+        else (language or "unknown")
+    )
     merged.sort(key=lambda s: (float(s.get("start", 0)), str(s.get("_lane_key", ""))))
     return merged, detected_language
 
@@ -730,6 +864,46 @@ def _is_retryable_http_error(exc: HTTPException) -> bool:
     return exc.status_code in {500, 502, 503, 504}
 
 
+async def _skip_no_speaker_events(
+    meeting: Meeting,
+    db: AsyncSession,
+    meeting_id: int,
+    *,
+    triggered_by: str,
+) -> DeferredTranscriptionResult:
+    """Abort mode="replace" without touching existing rows.
+
+    Shared by the pre-flight guard and the BUG-011 post-lane-fallback guard:
+    both protect the same invariant (never rewrite meaningful existing
+    speaker labels to "Unknown" when no speaker_events are available to
+    re-derive them, and no lane master identity will stand in for them).
+    """
+    _set_final_transcription_state(
+        meeting,
+        status="skipped_no_speaker_events",
+        skipped_at=_utcnow_iso(),
+        updated_at=_utcnow_iso(),
+        skipped_reason="no_speaker_events",
+        segment_count=0,
+        replaced_realtime_count=0,
+        retryable=False,
+        triggered_by=triggered_by,
+    )
+    queue_drive_export_if_needed(meeting, triggered_by=triggered_by)
+    await db.commit()
+    logger.warning(
+        "Deferred final transcription skipped for meeting %s: no speaker_events; existing speaker labels preserved",
+        meeting_id,
+    )
+    return DeferredTranscriptionResult(
+        meeting_id=meeting_id,
+        segment_count=0,
+        speakers=[],
+        source_recording_path="",
+        replaced_realtime_count=0,
+    )
+
+
 async def run_deferred_transcription(
     meeting_id: int,
     db: AsyncSession,
@@ -776,34 +950,13 @@ async def run_deferred_transcription(
         and existing_count > 0
         and not speaker_events
         # Lane masters carry their own identity (lane_label), so the
-        # no-speaker-events protection is unnecessary when lanes exist.
-        and not _lane_master_sources(meeting)
+        # no-speaker-events protection is unnecessary when lanes exist AND
+        # are actually usable (BUG-011/BUG-012: an unfinalized lane makes
+        # the lane path unavailable too — see _lane_masters_available).
+        and not _lane_masters_available(meeting)
         and await _has_meaningful_existing_speakers(db, meeting_id)
     ):
-        _set_final_transcription_state(
-            meeting,
-            status="skipped_no_speaker_events",
-            skipped_at=_utcnow_iso(),
-            updated_at=_utcnow_iso(),
-            skipped_reason="no_speaker_events",
-            segment_count=0,
-            replaced_realtime_count=0,
-            retryable=False,
-            triggered_by=triggered_by,
-        )
-        queue_drive_export_if_needed(meeting, triggered_by=triggered_by)
-        await db.commit()
-        logger.warning(
-            "Deferred final transcription skipped for meeting %s: no speaker_events; existing speaker labels preserved",
-            meeting_id,
-        )
-        return DeferredTranscriptionResult(
-            meeting_id=meeting_id,
-            segment_count=0,
-            speakers=[],
-            source_recording_path="",
-            replaced_realtime_count=0,
-        )
+        return await _skip_no_speaker_events(meeting, db, meeting_id, triggered_by=triggered_by)
 
     source = await find_final_transcription_source(meeting, db)
     if source is None:
@@ -837,7 +990,6 @@ async def run_deferred_transcription(
     )
     await db.commit()
 
-    lane_sources = _lane_master_sources(meeting)
     lane_used = False
     lane_fallback_reason: Optional[str] = None
     try:
@@ -848,6 +1000,15 @@ async def run_deferred_transcription(
 
         segments: List[Dict[str, Any]] = []
         detected_language = resolved_language or "unknown"
+
+        lane_sources: List[LaneTranscriptionSource] = []
+        try:
+            # BUG-012/BUG-023 — restrict lanes to the SAME recording/session
+            # as the chosen mixed source; lanes from a different bot session
+            # (rejoin) must never merge onto this transcript's timeline.
+            lane_sources = _lane_master_sources(meeting, recording_session_uid=source.session_uid)
+        except LaneTranscriptionFallback as exc:
+            lane_fallback_reason = str(exc)
 
         # Issue #25 — lane-first: when finalized per-participant lane masters
         # exist, transcribe each lane (solo lane ⇒ auto-named). All-or-nothing:
@@ -875,6 +1036,20 @@ async def run_deferred_transcription(
                 )
 
         if not lane_used:
+            if (
+                # BUG-011 — the lane path failed AFTER the pre-flight guard
+                # already decided lanes would preserve speaker identity, so
+                # that protection must still apply here: without it, the
+                # mixed path below would delete good existing speaker labels
+                # and rewrite them mostly as "Unknown" (no speaker_events).
+                lane_fallback_reason
+                and mode == "replace"
+                and not force
+                and not speaker_events
+                and await _has_meaningful_existing_speakers(db, meeting_id)
+            ):
+                return await _skip_no_speaker_events(meeting, db, meeting_id, triggered_by=triggered_by)
+
             audio_data = await _download_recording_audio(source)
             audio_data, media_format = await asyncio.to_thread(
                 _convert_audio_to_wav,
@@ -969,7 +1144,10 @@ async def run_deferred_transcription(
             speaker_cluster=seg.get("speaker_cluster"),
             speaker_auto=seg.get("speaker_auto"),
             language=detected_language,
-            session_uid=source.session_uid,
+            # BUG-023 — a lane segment is stamped with its OWN recording's
+            # session_uid, not the mixed source's; they can differ for a
+            # multi-session (bot rejoin) meeting.
+            session_uid=seg.get("_lane_session_uid") or source.session_uid,
             segment_id=segment_id,
             created_at=datetime.utcnow(),
         ))
@@ -994,6 +1172,10 @@ async def run_deferred_transcription(
         "source": "deferred_lane_masters" if lane_used else "deferred_recording_master",
         "lane_count": len(lane_sources) if lane_used else 0,
         "lane_keys": [lane.lane_key for lane in lane_sources] if lane_used else [],
+        # BUG-023 — lane master storage paths, so an operator auditing "which
+        # audio produced this transcript" isn't pointed at the (unused, in
+        # the lane_used branch) mixed master path alone.
+        "source_lane_paths": [lane.storage_path for lane in lane_sources] if lane_used else [],
         "lane_fallback_reason": lane_fallback_reason,
         "source_recording_path": source.storage_path,
         "source_recording_backend": source.storage_backend,

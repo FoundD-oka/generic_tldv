@@ -48,13 +48,28 @@ export async function startGoogleRecording(page: Page, botConfig: BotConfig): Pr
       // Issue #25 — per-participant lane recording. Opt-in (cost scales with
       // participant count); default off keeps the bot byte-identical to the
       // pre-lane behavior.
-      const recordLanes =
+      const recordLanesRequested =
         botConfig.recordParticipantLanes === true ||
         String(process.env.RECORD_PARTICIPANT_LANES || "").toLowerCase() === "true";
-      const maxLanes = Math.max(
-        1,
-        parseInt(process.env.MAX_RECORDING_LANES || "8", 10) || 8,
-      );
+      // BUG-015/016 fix: prefer botConfig.maxRecordingLanes (wired through
+      // bot_config by meeting-api, unlike MAX_RECORDING_LANES which nothing
+      // sets in the bot container) over the env var. Parse explicitly with
+      // Number.isFinite so an operator-set 0 means "lanes disabled" instead
+      // of falling back to the maximum default — the old
+      // `parseInt(...) || 8` mapped an explicit 0 (falsy) to 8.
+      const configuredMaxLanes = botConfig.maxRecordingLanes;
+      let maxLanes: number;
+      if (typeof configuredMaxLanes === "number" && Number.isFinite(configuredMaxLanes)) {
+        maxLanes = Math.max(0, Math.trunc(configuredMaxLanes));
+      } else {
+        const envRaw = process.env.MAX_RECORDING_LANES;
+        const envParsed = envRaw !== undefined ? parseInt(envRaw, 10) : NaN;
+        maxLanes = Number.isFinite(envParsed) ? Math.max(0, envParsed) : 8;
+      }
+      const recordLanes = recordLanesRequested && maxLanes > 0;
+      if (recordLanesRequested && maxLanes === 0) {
+        log("[Google Recording] Participant lane recording requested but maxLanes=0 — lanes disabled.");
+      }
 
       // CRITICAL: inject browser-utils bundle BEFORE constructing the
       // MediaRecorderCapture pipeline. The pipeline's startBrowserCapture
@@ -122,6 +137,11 @@ export async function startGoogleRecording(page: Page, botConfig: BotConfig): Pr
             // change handlers in the speaker-detection page.evaluate below).
             await pipeline.start();
             (window as any).__vexaMediaRecorder = pipeline.getMediaRecorder();
+            // BUG-002: capture t=0 of the mixed master right after its
+            // pipeline starts. Every lane's start offset (lane_start_offset_ms)
+            // is computed relative to this value so meeting-api can re-align
+            // lane-relative segment timestamps onto the mixed master's timeline.
+            const recordingStartedAtMs = Date.now();
             // Signal Node.js that recording started — re-aligns segment timestamps
             (window as any).__vexaRecordingStarted?.();
 
@@ -129,18 +149,32 @@ export async function startGoogleRecording(page: Page, botConfig: BotConfig): Pr
             // parallel with the combined pipeline above and never touches
             // it: lanes upload under media_type "lane-{laneKey}", which the
             // server stores outside the mixed master's /audio/ prefix.
+            //
+            // BUG-001: any lane-path failure (missing browser util, manager
+            // construction, or start()) must never abort the mixed-master
+            // pipeline started above — the whole block is wrapped so a
+            // rejection here only disables lanes, logged clearly.
             if (recordLanes) {
-              const laneManager = new u.BrowserLaneRecorderManager({
-                timesliceMs,
-                maxLanes,
-                laneChunkCallback: (window as any).__vexaSaveLaneChunk,
-              });
-              (window as any).__vexaLaneRecorderManager = laneManager;
-              await laneManager.start(mediaElements);
-              (window as any).logBot(
-                `[Google Recording] Participant lane recording enabled ` +
-                `(lanes=${laneManager.laneCount()}, max=${maxLanes})`
-              );
+              try {
+                const laneManager = new u.BrowserLaneRecorderManager({
+                  timesliceMs,
+                  maxLanes,
+                  laneChunkCallback: (window as any).__vexaSaveLaneChunk,
+                  recordingStartedAtMs,
+                });
+                (window as any).__vexaLaneRecorderManager = laneManager;
+                await laneManager.start(mediaElements);
+                (window as any).logBot(
+                  `[Google Recording] Participant lane recording enabled ` +
+                  `(lanes=${laneManager.laneCount()}, max=${maxLanes})`
+                );
+              } catch (laneErr: any) {
+                (window as any).logBot(
+                  `[Google Recording] Participant lane recording failed to start — ` +
+                  `continuing WITHOUT lanes (mixed master recording is unaffected): ` +
+                  `${laneErr?.message || laneErr}`
+                );
+              }
             }
 
             // Initialize the audio data processor for the

@@ -306,6 +306,13 @@ services:
       - RECORDING_ENABLED=${RECORDING_ENABLED:-true}
       - CAPTURE_MODES=${CAPTURE_MODES:-audio}
       - RECORD_PARTICIPANT_LANES=${RECORD_PARTICIPANT_LANES:-false}
+      - MAX_RECORDING_LANES=${MAX_RECORDING_LANES:-8}
+      # Issue #25 BUG-016 — these bound the deferred lane-STT cost cap; were
+      # previously read via os.getenv in final_transcription.py but never
+      # wired into this service's environment, so operator .env values were
+      # silently ignored and the hardcoded defaults always applied.
+      - LANE_STT_CONCURRENCY=${LANE_STT_CONCURRENCY:-2}
+      - MAX_LANE_TOTAL_DURATION_SECONDS=${MAX_LANE_TOTAL_DURATION_SECONDS:-14400}
       - TRANSCRIPTION_SERVICE_URL=${TRANSCRIPTION_SERVICE_URL:-}
       - TRANSCRIPTION_SERVICE_TOKEN=${TRANSCRIPTION_SERVICE_TOKEN:-}
       # Deferred (post-meeting) STT model; stt-async-* routes to the Soniox
