@@ -502,6 +502,36 @@ export async function startGoogleRecording(page: Page, botConfig: BotConfig): Pr
           (window as any).logBot("Initializing participant counting (data-participant-id + leave-button fallback)...");
 
           let lastKnownParticipantCount = 0;
+          let zeroTileFallbackStartedAt = 0;
+          let zeroTileFallbackNoticeLogged = false;
+          const ZERO_TILE_FALLBACK_GRACE_MS = 120000;
+
+          const normalizeParticipantText = (value: string | null | undefined): string =>
+            (value || "").replace(/\s+/g, " ").trim().toLowerCase();
+          const botIdentityNeedles = Array.from(new Set([
+            normalizeParticipantText((botConfigData as any)?.botName),
+            normalizeParticipantText((botConfigData as any)?.name),
+            "vexa bot",
+            "vexabot",
+            "カボス",
+            "録画エージェント",
+            "recording agent",
+            "transcription bot",
+          ].filter(Boolean)));
+
+          const participantDisplayText = (el: Element): string => {
+            const explicitName = el.querySelector?.("span.notranslate")?.textContent;
+            const aria = el.getAttribute("aria-label");
+            const tooltip = el.querySelector?.("[data-tooltip]")?.getAttribute("data-tooltip");
+            const selfName = el.getAttribute("data-self-name");
+            return normalizeParticipantText(explicitName || aria || tooltip || selfName || el.textContent || "");
+          };
+
+          const isBotParticipantTile = (el: Element): boolean => {
+            const text = participantDisplayText(el);
+            if (!text) return false;
+            return botIdentityNeedles.some((needle) => needle && text.includes(needle));
+          };
 
           // v0.10.5 #285 Layer 1 — multi-selector fallback for participant counting.
           // Single-selector `[data-participant-id]` is fragile to GMeet UI changes;
@@ -511,28 +541,54 @@ export async function startGoogleRecording(page: Page, botConfig: BotConfig): Pr
           //   - `[role="region"][aria-label*="articipant"]` — tile region heuristic
           //     (matches "participant" / "Participant" / "participants")
           //   - `[data-self-name]` — bot's own self-tile (always present once admitted)
-          const countParticipantTiles = (): number => {
-            const ids = new Set<string>();
+          type ParticipantCount = {
+            count: number;
+            rawTileCount: number;
+            nonBotCount: number;
+            botTileCount: number;
+          };
+          const countParticipantTiles = (): ParticipantCount => {
+            const rawIds = new Set<string>();
+            const nonBotIds = new Set<string>();
+            const botIds = new Set<string>();
+            const addParticipant = (key: string, el: Element) => {
+              rawIds.add(key);
+              if (isBotParticipantTile(el)) {
+                botIds.add(key);
+              } else {
+                nonBotIds.add(key);
+              }
+            };
             // Primary: data-participant-id tiles
             document.querySelectorAll('[data-participant-id]').forEach((el: Element) => {
               const id = el.getAttribute('data-participant-id');
-              if (id) ids.add(id);
+              if (id) addParticipant(id, el);
             });
             // Fallback 1: aria-labelled participant regions
             try {
               document.querySelectorAll('[role="region"][aria-label*="articipant"]').forEach((el: Element, idx: number) => {
                 const label = el.getAttribute('aria-label') || `region-${idx}`;
-                ids.add(`region-fallback:${label}`);
+                addParticipant(`region-fallback:${label}`, el);
               });
             } catch {}
             // Fallback 2: self-name marker — always present after admission
             try {
               document.querySelectorAll('[data-self-name]').forEach((el: Element) => {
                 const name = el.getAttribute('data-self-name') || 'self';
-                ids.add(`self-fallback:${name}`);
+                addParticipant(`self-fallback:${name}`, el);
               });
             } catch {}
-            return ids.size;
+            const rawTileCount = rawIds.size;
+            const nonBotCount = nonBotIds.size;
+            const botTileCount = botIds.size;
+            if (rawTileCount === 0) {
+              return { count: 0, rawTileCount, nonBotCount, botTileCount };
+            }
+            const inMeeting = document.querySelector('button[aria-label*="Leave call"]') !== null;
+            const count = inMeeting
+              ? Math.max(1, nonBotCount + 1)
+              : rawTileCount;
+            return { count, rawTileCount, nonBotCount, botTileCount };
           };
 
           const isBotStillInMeeting = (): boolean => {
@@ -542,16 +598,41 @@ export async function startGoogleRecording(page: Page, botConfig: BotConfig): Pr
           };
 
           (window as any).getGoogleMeetActiveParticipants = () => {
-            const tileCount = countParticipantTiles();
+            const participantSnapshot = countParticipantTiles();
+            const tileCount = participantSnapshot.count;
+            const rawTileCount = participantSnapshot.rawTileCount;
             const inMeeting = isBotStillInMeeting();
             // If tiles show 0 but we're still in the meeting (e.g. screen share mode),
-            // keep the last known count (minimum 2) to avoid false "alone" triggers
-            if (tileCount === 0 && inMeeting && lastKnownParticipantCount > 1) {
-              (window as any).logBot(`🔍 [Google Meet Participants] 0 tiles but Leave button present — keeping last count ${lastKnownParticipantCount} (screen share mode)`);
-              return new Array(lastKnownParticipantCount).fill('placeholder');
+            // briefly keep the last known count to avoid false "alone" triggers.
+            // Do not keep it forever: after Google Meet ends it can leave the
+            // button visible while removing participant tiles, which would block
+            // automatic leave indefinitely.
+            if (rawTileCount === 0 && inMeeting && lastKnownParticipantCount > 1) {
+              const now = Date.now();
+              if (!zeroTileFallbackStartedAt) {
+                zeroTileFallbackStartedAt = now;
+                zeroTileFallbackNoticeLogged = false;
+                (window as any).logBot(`[Google Meet Participants] 0 tiles but Leave button present - temporarily keeping last count ${lastKnownParticipantCount}`);
+              }
+              const elapsedMs = now - zeroTileFallbackStartedAt;
+              if (elapsedMs < ZERO_TILE_FALLBACK_GRACE_MS) {
+                return new Array(lastKnownParticipantCount).fill('placeholder');
+              }
+              if (!zeroTileFallbackNoticeLogged) {
+                (window as any).logBot(`[Google Meet Participants] 0 tiles persisted for ${Math.round(elapsedMs / 1000)}s - treating bot as alone`);
+                zeroTileFallbackNoticeLogged = true;
+              }
+              return new Array(1).fill('placeholder');
             }
-            if (tileCount > 0) {
+            if (rawTileCount > 0) {
+              if (tileCount !== lastKnownParticipantCount) {
+                (window as any).logBot(
+                  `[Google Meet Participants] adjusted=${tileCount}, raw=${rawTileCount}, nonBot=${participantSnapshot.nonBotCount}, bot=${participantSnapshot.botTileCount}, inMeeting=${inMeeting}`
+                );
+              }
               lastKnownParticipantCount = tileCount;
+              zeroTileFallbackStartedAt = 0;
+              zeroTileFallbackNoticeLogged = false;
             }
             // Only log participant count changes, not every poll
             if (tileCount !== lastKnownParticipantCount) {

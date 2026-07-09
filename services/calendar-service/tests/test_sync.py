@@ -72,7 +72,10 @@ async def test_schedule_upcoming_bots_uses_kabosu_defaults_and_attaches_calendar
     assert scheduled == 1
     assert captured["json"]["bot_name"] == "カボス"
     assert captured["json"]["language"] == "ja"
-    assert captured["json"]["voice_agent_enabled"] is True
+    assert captured["json"]["voice_agent_enabled"] is False
+    assert captured["json"]["automatic_leave"] == {
+        "max_time_left_alone": sync.KABOSU_POST_MEETING_AUTO_STOP_TIMEOUT_MS,
+    }
     assert captured["json"]["native_meeting_id"] == "abc-defg-hij"
     assert captured["headers"]["X-API-Key"] == sync.BOT_API_TOKEN
     assert captured["headers"]["X-User-ID"] == str(sync.KABOSU_BOT_OWNER_USER_ID)

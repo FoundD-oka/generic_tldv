@@ -1,0 +1,8 @@
+{
+  "schema_version": "1.0",
+  "task_id": "calendar-wakeword-toggle",
+  "verdict": "pass",
+  "reviewer": "claude-code",
+  "summary": "Verification contract commands re-executed independently of the implementing runtime (Codex App): calendar-service sync tests 2 passed, dashboard export/bot-defaults tests 6 passed, tsc --noEmit clean. GitNexus detect-changes shows only expected symbols. Live Meet alone-detection behavior (zero-tile 120s grace) remains environment-dependent and was not exercised end-to-end.",
+  "blocking_findings": []
+}
