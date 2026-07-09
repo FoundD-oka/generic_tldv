@@ -228,6 +228,31 @@ async def _get_assistant_chat_messages(
     ]
 
 
+# Issue #26 — lane SUB-cluster shape: "lane:{laneKey}:{cluster}". A solo
+# lane's own cluster id ("lane:{laneKey}", no second colon) is NOT a
+# sub-cluster and must not be flagged.
+_LANE_SUB_CLUSTER_RE = re.compile(r"^lane:[^:]+:.+$")
+
+
+def _derive_speaker_mapping_status(
+    speaker_cluster: Optional[str], speaker: Optional[str]
+) -> Optional[str]:
+    """Read-time derivation (no DB column, no migration — issue #26 ARC-3):
+    a lane sub-cluster segment with no confirmed speaker name is
+    "needs_review". This mirrors the K_stable>=2 shared-mic branch of
+    `_apply_lane_identity` (services/meeting-api/meeting_api/
+    final_transcription.py), which forces `speaker=None` on every
+    shared-mic sub-cluster segment so a DOM-vote guess never survives as
+    the sub-speaker's identity (AC5); once a human renames the cluster via
+    the correction API, `speaker` is set and this stops flagging it.
+    """
+    if not speaker_cluster or not _LANE_SUB_CLUSTER_RE.match(speaker_cluster):
+        return None
+    if speaker and speaker.strip():
+        return None
+    return "needs_review"
+
+
 async def _get_full_transcript_segments(
     internal_meeting_id: int,
     db: AsyncSession,
@@ -273,6 +298,7 @@ async def _get_full_transcript_segments(
             abs_start = abs_end = None
 
         try:
+            pg_speaker_cluster = getattr(seg, "speaker_cluster", None)
             merged[key] = TranscriptionSegment(
                 start_time=seg.start_time, end_time=seg.end_time,
                 text=seg.text, language=seg.language, speaker=seg.speaker,
@@ -280,8 +306,11 @@ async def _get_full_transcript_segments(
                 absolute_start_time=abs_start, absolute_end_time=abs_end,
                 segment_id=seg.segment_id,
                 session_uid=seg.session_uid,
-                speaker_cluster=getattr(seg, "speaker_cluster", None),
+                speaker_cluster=pg_speaker_cluster,
                 speaker_auto=getattr(seg, "speaker_auto", None),
+                speaker_mapping_status=_derive_speaker_mapping_status(
+                    pg_speaker_cluster, seg.speaker
+                ),
             )
         except Exception as e:
             logger.error(f"[Segments] PG segment error {key}: {e}")

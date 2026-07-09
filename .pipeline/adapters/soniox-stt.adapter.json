@@ -20,7 +20,8 @@
       "SONIOX_API_KEY env"
     ],
     "outputs": [
-      "stt.v1 verbose_json response with optional per-segment `speaker` string cluster id (contracts/stt/v1)"
+      "stt.v1 verbose_json response with optional per-segment `speaker` string cluster id (contracts/stt/v1)",
+      "optional per-segment `token_count` integer (number of STT tokens folded into the segment, additive false-split guard signal, contracts/stt/v1)"
     ],
     "evidence": [
       "contracts/stt/v1/examples/golden-2-diarization.soniox-tokens.json",
@@ -45,7 +46,8 @@
     "checks": [
       "manifest validates against schemas/harness-adapter.schema.json",
       "golden token payload folds byte-identically into golden response (unit test)",
-      "backends without diarization omit `speaker` (backward compatibility test)"
+      "backends without diarization omit `speaker` (backward compatibility test)",
+      "folded segments carry `token_count` equal to the number of tokens folded into them (unit test)"
     ],
     "minimum_artifacts": [
       "contracts/stt/v1/examples/golden-2-diarization.response.json",

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { cn, parseUTCTimestamp } from "@/lib/utils";
 import { Play, Pencil } from "lucide-react";
 import type { TranscriptSegment as TranscriptSegmentType, SpeakerColor } from "@/types/vexa";
+import { Badge } from "@/components/ui/badge";
 
 interface TranscriptSegmentProps {
   segment: TranscriptSegmentType;
@@ -199,6 +200,17 @@ export function TranscriptSegment({
                   <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-60 transition-opacity" />
                 )}
               </span>
+            )}
+            {/* 同室共有マイクの未命名サブ話者（issue #26 Phase 3）:
+                クリックして話者名を確定すると消える。 */}
+            {!isEditing && segment.speaker_mapping_status === "needs_review" && (
+              <Badge
+                variant="outline"
+                className="text-[10px] h-4 px-1.5 border-amber-300 dark:border-amber-700 text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30"
+                title="同じマイクに複数人の声が入っています。クリックして話者名を確定してください。"
+              >
+                要確認
+              </Badge>
             )}
             <span className="text-xs text-muted-foreground">
               {displayTimestamp}
