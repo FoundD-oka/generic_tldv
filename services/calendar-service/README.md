@@ -34,7 +34,7 @@ In `single_account` mode, upcoming events with meeting URLs are scheduled with:
 
 - `bot_name=カボス`
 - `language=ja`
-- `voice_agent_enabled=true`
+- `voice_agent_enabled=false` by default, so calendar-created joins do not wake Kabosu unless `KABOSU_VOICE_AGENT_ENABLED=true` is set.
 
 After bot creation, the service stores `meeting.data.calendar_event` so meeting-api can export only calendar-origin meetings to Google Drive after final transcription finishes.
 

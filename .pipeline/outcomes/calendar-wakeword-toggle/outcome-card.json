@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "task_id": "calendar-wakeword-toggle",
+  "runtime_profile": "codex-app",
+  "size": "S",
+  "result": {
+    "at_pass": true,
+    "fp_pass": true,
+    "nft_pass": true,
+    "hd_resolved": true,
+    "blocking_findings": 0
+  },
+  "evidence": {
+    "verification": [
+      "cd services/dashboard && npm run lint -- src/components/join/join-modal.tsx src/lib/dashboard-copy.ts tests/test_export_and_bot_defaults.test.ts",
+      "cd services/dashboard && npm test -- test_export_and_bot_defaults.test.ts",
+      "cd services/dashboard && npx tsc --noEmit --pretty false",
+      "PYTHONPATH=/tmp/generic_tldv_calendar_testdeps:services/calendar-service:services/meeting-api:libs/admin-models python -m pytest services/calendar-service/tests/test_sync.py -q",
+      "HARNESS_TASK_ID=calendar-wakeword-toggle bash .claude/hooks/harness-residency.sh",
+      "HARNESS_TASK_ID=calendar-wakeword-toggle bash .claude/hooks/preflight.sh --full",
+      "HARNESS_TASK_ID=calendar-wakeword-toggle bash .claude/hooks/hd-gate.sh",
+      "HARNESS_TASK_ID=calendar-wakeword-toggle bash .claude/hooks/adapter-validate.sh",
+      "node .gitnexus/run.cjs detect-changes --repo generic_tldv"
+    ]
+  },
+  "notes": [
+    "Manual join modal now exposes a Kabosu wake-word toggle and passes it through voice_agent_enabled.",
+    "Calendar-created joins default voice_agent_enabled to false unless KABOSU_VOICE_AGENT_ENABLED=true is set.",
+    "GitNexus detect-changes reported HIGH because the working tree already contained unrelated dirty files outside this task."
+  ]
+}

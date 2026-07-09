@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Video, Loader2, Sparkles, Monitor, UserCheck, Info } from "lucide-react";
+import { Video, Loader2, Sparkles, Monitor, UserCheck, Info, Mic } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -74,6 +74,7 @@ export function JoinModal() {
   const [platform, setPlatform] = useState<Platform>("google_meet");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [passcode, setPasscode] = useState("");
+  const [wakeWordEnabled, setWakeWordEnabled] = useState(true);
   const [videoRecordingEnabled, setVideoRecordingEnabled] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
 
@@ -85,6 +86,7 @@ export function JoinModal() {
       setPlatform("google_meet");
       setIsSubmitting(false);
       setPasscode("");
+      setWakeWordEnabled(true);
       setVideoRecordingEnabled(false);
       setAuthenticated(false);
     }
@@ -149,6 +151,7 @@ export function JoinModal() {
       withPostMeetingAutoStop({
         platform: effectivePlatform!,
         native_meeting_id: parsedInput.meetingId || "",
+        voice_agent_enabled: wakeWordEnabled,
       }),
       config
     );
@@ -232,6 +235,7 @@ export function JoinModal() {
     parsedInput,
     platform,
     passcode,
+    wakeWordEnabled,
     videoRecordingEnabled,
     authenticated,
     brand.locale,
@@ -280,7 +284,7 @@ export function JoinModal() {
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && closeModal()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
@@ -502,6 +506,24 @@ export function JoinModal() {
                 </span>
               </div>
             )}
+          </div>
+
+          {/* Wake Word Toggle */}
+          <div className="space-y-1.5 rounded-lg border bg-muted/30 p-3">
+            <div className="flex items-center justify-between gap-4">
+              <Label htmlFor="modalWakeWordEnabled" className="text-sm flex items-center gap-2 cursor-pointer">
+                <Mic className="h-3.5 w-3.5" />
+                {copy.wakeWordLabel}
+              </Label>
+              <Switch
+                id="modalWakeWordEnabled"
+                checked={wakeWordEnabled}
+                onCheckedChange={setWakeWordEnabled}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {wakeWordEnabled ? copy.wakeWordEnabledHelp : copy.wakeWordDisabledHelp}
+            </p>
           </div>
 
           {/* Video Recording Toggle */}

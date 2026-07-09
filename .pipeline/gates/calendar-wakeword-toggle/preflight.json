@@ -1,0 +1,21 @@
+{
+  "timestamp": "2026-07-08T04:06:01.031193+00:00",
+  "status": "pass",
+  "diff_hash": "sha256:3ef0e1c37e30be883894d99048a4c0521ea2a45ef25e6fc2448b55fddcda5473",
+  "changed_files": [
+    "AGENTS.md",
+    "CLAUDE.md",
+    "deploy/compose/README.md",
+    "deploy/compose/docker-compose.yml",
+    "deploy/env-example",
+    "services/calendar-service/README.md",
+    "services/calendar-service/app/sync.py",
+    "services/calendar-service/tests/test_sync.py",
+    "services/dashboard/src/components/join/join-modal.tsx",
+    "services/dashboard/src/lib/dashboard-copy.ts",
+    "services/dashboard/tests/test_export_and_bot_defaults.test.ts",
+    "services/vexa-bot/core/src/platforms/googlemeet/recording.ts"
+  ],
+  "flags": [],
+  "blocks": []
+}

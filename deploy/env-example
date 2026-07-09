@@ -102,7 +102,7 @@ KABOSU_BOT_OWNER_USER_ID=
 KABOSU_DRIVE_FOLDER_ID=
 KABOSU_BOT_NAME=カボス
 KABOSU_BOT_LANGUAGE=ja
-KABOSU_VOICE_AGENT_ENABLED=true
+KABOSU_VOICE_AGENT_ENABLED=false
 KABOSU_DRIVE_EXPORT_ENABLED=true
 # Set to true to export only Google Calendar-origin meetings.
 # Default (false) exports every completed meeting, including manual joins.
