@@ -15,6 +15,8 @@ Claude Code / Codex CLI / Codex App / Codex GitHub Action は、同じ core mode
 
 ```text
 Task
+  -> Context Scout / Research Scout
+  -> KPI Backcast Roadmap when future KPIs or multi-step checkpoints are needed
   -> Plan Relay
   -> S/M/L Sizing
   -> Agent Profile
@@ -119,6 +121,7 @@ agent の自己申告ではなく、shell script / tests / schema validation / r
 
 - `harness-doctor`
 - `adapter-validate`
+- `external-consultation-validate`
 - `feedback-prune`
 - `outcome-judge`
 - `pr-ready-gate`
@@ -168,7 +171,7 @@ Codex は clone runtime ではなく、repo-local execution runtime として設
 |---|---|---|
 | S | AGENTS + task brief + mandatory verification | optional session summary |
 | M | Agent profile + environment profile + adapter validation + outcome card | `events.jsonl`, `outcome-card.json` |
-| L | M + sidechain review + feedback / HD governance | sidechain synthesis, feedback prune report |
+| L | M + sidechain review + Fable consultation + feedback / HD governance | sidechain synthesis, external consultation summary, feedback prune report |
 
 L task では `plan_why` を実装 runtime に渡さない。実装 runtime は `plan_how` と
 task contract だけを見る。QA runtime は `plan_why` と evidence / outcome を見る。
@@ -177,6 +180,7 @@ task contract だけを見る。QA runtime は `plan_why` と evidence / outcome
 
 - credentials は sandbox 内の generated code から直接読める場所に置かない。
 - adapter が credentials を扱う場合は、entrypoint と evidence contract を明示する。
+- Fable consultation uses bounded `claude -p --model fable` review and must not mutate repository state.
 - hooks は補助 enforcement として使い、最終判定は deterministic gate に置く。
 - session ledger は append-only とし、後から都合よく上書きしない。
 - runtime profile は task ごとに選び、profile をまたいだ責務混在を避ける。
@@ -195,12 +199,18 @@ task contract だけを見る。QA runtime は `plan_why` と evidence / outcome
 scripts/harness/
   codex-session-ledger.sh
   outcome-judge.sh
+  backcast-state.sh
+  worktree.sh
+  build.sh
+  codex-build.sh
+  full-loop-smoke.sh
   validate-runtime-profile.sh
 schemas/
   harness-agent.schema.json
   harness-environment.schema.json
   harness-adapter.schema.json
   outcome-card.schema.json
+  codex-build-result.schema.json
 ```
 
 Claude Code runtime は既存の `.claude/agents` と `.claude/skills` を継続利用する。

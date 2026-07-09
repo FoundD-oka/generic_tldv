@@ -1,5 +1,11 @@
 # Option Matrix
 
+## Language
+
+この選択肢比較は日本語で書く。選択肢名、API名、コマンド、引用などは
+必要に応じて原文のままでよいが、比較理由、採用理由、却下理由、
+確信度、見直し条件は日本語で説明する。
+
 ## Decision
 
 - What choice is being made:

@@ -74,6 +74,14 @@ if external_policy not in {"optional", "required", "required_for_l"}:
     raise SystemExit(2)
 
 root = pathlib.Path.cwd()
+config_path = root / ".pipeline" / "config.json"
+provider = "claude-fable-cli"
+try:
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    quality = config.get("quality") if isinstance(config.get("quality"), dict) else {}
+    provider = str(quality.get("external_consultation_provider", provider))
+except Exception:
+    pass
 plans = root / ".pipeline" / "plans" / task_id
 checkpoint_path = plans / "checkpoint-contract.json"
 decision_path = plans / "sml-decision.json"
@@ -126,7 +134,7 @@ if write_contract or not contract_path.exists():
         "",
         f"- size: {size}",
         f"- external consultation required: {'yes' if external_policy == 'required' or (external_policy == 'required_for_l' and size == 'L') else 'no'}",
-        f"- external consultation provider: {'chatgpt-pro-web' if external_policy != 'optional' else 'not needed'}",
+        f"- external consultation provider: {provider if external_policy != 'optional' else 'not needed'}",
         "",
         "## Required Commands",
     ]

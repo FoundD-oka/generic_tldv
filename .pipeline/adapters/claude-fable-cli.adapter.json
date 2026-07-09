@@ -1,0 +1,81 @@
+{
+  "schema_version": "1.0",
+  "id": "claude-fable-cli",
+  "name": "Claude Fable CLI Consultation",
+  "kind": "evaluation-harness",
+  "source": {
+    "upstream": "Claude Code CLI",
+    "docs": "https://code.claude.com/docs/en/cli-reference",
+    "license": "Anthropic terms"
+  },
+  "entrypoints": {
+    "run": "scripts/harness/external-consultation.sh run <task-id> --mode review",
+    "prepare": "scripts/harness/external-consultation.sh prepare <task-id>",
+    "record": "scripts/harness/external-consultation.sh record <task-id> --response-file <path>",
+    "classify": "scripts/harness/external-consultation.sh classify <task-id> --finding <id> --status adopted|rejected|deferred|already_handled|invalid",
+    "validate": ".claude/hooks/external-consultation-validate.sh <task-id>"
+  },
+  "contracts": {
+    "inputs": [
+      "structured consultation brief with task, plan step, failed attempts, hypothesis, and focused questions",
+      "plan and verification contract artifacts when available",
+      "current diff excerpt excluding .pipeline bookkeeping",
+      "no secrets, credentials, customer PII, private tokens, or unredacted proprietary data"
+    ],
+    "outputs": [
+      ".pipeline/plans/<task-id>/consultation-brief.md",
+      ".pipeline/evidence/<task-id>/external-consultation/fable.md",
+      ".pipeline/evidence/<task-id>/external-consultation/fable-*.raw.json",
+      ".pipeline/evidence/<task-id>/external-consultation/consultation-summary.json",
+      ".pipeline/evidence/<task-id>/external-consultation/consultation-events.jsonl",
+      ".pipeline/gates/<task-id>/external-consultation.json"
+    ],
+    "evidence": [
+      "prompt hash",
+      "response hash",
+      "provider and model label",
+      "Fable session id for resume",
+      "MUST_FIX / SHOULD_FIX / SHIP verdict",
+      "finding-level adoption status",
+      "adopted points",
+      "rejected points",
+      "needs verification points",
+      "not_source_of_truth=true"
+    ]
+  },
+  "safety": {
+    "authentication": "local Claude Code CLI auth only",
+    "credential_policy": "no harness-managed username, password, token, cookie, API key, or login automation",
+    "boundaries": [
+      "use claude -p as an advisory reviewer only",
+      "grant Read and read-only Bash inspection; do not grant Edit, Write, MultiEdit, or NotebookEdit",
+      "do not let the advisor commit, push, install dependencies, or mutate repository state",
+      "redact private secrets, customer data, and proprietary identifiers before sending extra context",
+      "treat the response as advisory review evidence, never deterministic proof",
+      "verify adopted claims with source checks, tests, or project evidence"
+    ],
+    "forbidden_claims": [
+      "Fable approved the work",
+      "safe to merge based only on Fable output",
+      "latest knowledge verified without source evidence",
+      "advisor output replaces local verification"
+    ]
+  },
+  "validation": {
+    "checks": [
+      "consultation-summary.json is valid JSON",
+      "provider is claude-fable-cli",
+      "not_source_of_truth is true",
+      "redaction_confirmed is true",
+      "prompt_hash and response_hash are present",
+      "verdict is MUST_FIX, SHOULD_FIX, or SHIP",
+      "open_must_fix_count is zero before PR readiness",
+      "needs_verification is present for claims that require proof"
+    ],
+    "minimum_artifacts": [
+      ".pipeline/plans/<task-id>/consultation-brief.md",
+      ".pipeline/evidence/<task-id>/external-consultation/fable.md",
+      ".pipeline/evidence/<task-id>/external-consultation/consultation-summary.json"
+    ]
+  }
+}
