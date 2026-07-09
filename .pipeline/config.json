@@ -14,12 +14,14 @@
   ],
   "core_flow": [
     "task",
+    "backcast_checkpoint",
     "plan_relay",
     "sml_sizing",
     "agent_profile",
     "environment_profile",
     "session_ledger",
     "adapter_contract",
+    "external_consultation",
     "deterministic_gates",
     "outcome_judgment",
     "approval"
@@ -31,6 +33,7 @@
     "residency_check": true,
     "adapter_contract": true,
     "evidence_pack": true,
+    "backcast_contracts": "optional",
     "hash_bound_approval": true,
     "pr_ready_gate": true,
     "feedback_governance": true
@@ -39,6 +42,15 @@
     "hd_gate": true,
     "tribunal": "required_for_l",
     "sidechain_review": "accepted_for_l",
+    "external_consultation": "required_for_l",
+    "external_consultation_provider": "claude-fable-cli",
+    "fable_max_calls_per_task": 5,
+    "fable_m_plus_triggers": [
+      "phase_review",
+      "same_test_failed_twice",
+      "plan_deviation",
+      "final_audit"
+    ],
     "doc_staleness": true
   },
   "support": {
@@ -69,6 +81,7 @@
   "gates": {
     "runtime_profile_validation": "scripts/harness/validate-runtime-profile.sh",
     "codex_session_ledger": "scripts/harness/codex-session-ledger.sh",
-    "outcome_judge": "scripts/harness/outcome-judge.sh"
+    "outcome_judge": "scripts/harness/outcome-judge.sh",
+    "external_consultation": ".claude/hooks/external-consultation-validate.sh"
   }
 }

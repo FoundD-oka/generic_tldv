@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0",
+  "task_id": "calendar-wakeword-toggle",
+  "checkpoint_id": "",
+  "size": "M",
+  "decided_at": "2026-07-09T18:26:16.471478+00:00",
+  "basis": {
+    "residual_uncertainty": "12 files / ~180 lines across dashboard, calendar-service, vexa-bot and deploy config; no schema/auth/PII paths; implementation already verified per outcome-card",
+    "not_based_on": "issue title or diff size alone"
+  },
+  "quality_gates": {
+    "required": [
+      "residency",
+      "preflight",
+      "hd-gate",
+      "doc-staleness",
+      "adapter-contract",
+      "backcast-contracts",
+      "evidence-pack",
+      "qa-judgment"
+    ],
+    "external_consultation": "required_for_l"
+  }
+}

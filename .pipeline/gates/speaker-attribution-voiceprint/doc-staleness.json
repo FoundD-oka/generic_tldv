@@ -1,6 +1,6 @@
 {
-  "timestamp": "2026-07-08T01:14:24.635258+00:00",
-  "status": "warn",
+  "timestamp": "2026-07-08T01:17:41.758445+00:00",
+  "status": "pass",
   "documents": [
     {
       "doc": ".ai/BUILD.md",
@@ -9,10 +9,8 @@
     },
     {
       "doc": ".ai/DOCS.md",
-      "status": "warn",
-      "issues": [
-        "watch-path drift: current diff touches AGENTS.md, CLAUDE.md but doc was not updated"
-      ]
+      "status": "pass",
+      "issues": []
     },
     {
       "doc": ".ai/HARNESS.md",

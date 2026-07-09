@@ -22,14 +22,34 @@ required_paths=(
   ".pipeline/environments/ci-readonly.environment.json"
   ".pipeline/adapters/codex-cli.adapter.json"
   ".pipeline/adapters/github.adapter.json"
+  ".pipeline/adapters/claude-fable-cli.adapter.json"
+  ".pipeline/rules/backcast-state-machine.json"
   "docs/managed-agent-harness-architecture.md"
+  "docs/fable-consultation.md"
   "schemas/harness-agent.schema.json"
   "schemas/harness-environment.schema.json"
   "schemas/harness-adapter.schema.json"
   "schemas/outcome-card.schema.json"
   "schemas/session-event.schema.json"
+  "schemas/codex-build-result.schema.json"
+  "schemas/checkpoint-contract.schema.json"
+  "schemas/evidence-manifest.schema.json"
+  "schemas/approval-decision.schema.json"
+  "schemas/state-machine.schema.json"
+  "schemas/external-consultation.schema.json"
   "scripts/harness/codex-session-ledger.sh"
   "scripts/harness/outcome-judge.sh"
+  "scripts/harness/backcast-checkpoint.sh"
+  "scripts/harness/sml-decision.sh"
+  "scripts/harness/backcast-state.sh"
+  "scripts/harness/worktree.sh"
+  "scripts/harness/build.sh"
+  "scripts/harness/codex-build.sh"
+  "scripts/harness/full-loop-smoke.sh"
+  "scripts/harness/backcast-manifest.sh"
+  "scripts/harness/backcast-evidence-pack.sh"
+  "scripts/harness/backcast-approval.sh"
+  "scripts/harness/external-consultation.sh"
 )
 
 missing=0
@@ -83,7 +103,7 @@ except Exception as exc:
     sys.exit(1)
 ' ".codex/config.toml"
 
-for executable in scripts/harness/codex-session-ledger.sh scripts/harness/outcome-judge.sh; do
+for executable in scripts/harness/codex-session-ledger.sh scripts/harness/outcome-judge.sh scripts/harness/backcast-checkpoint.sh scripts/harness/sml-decision.sh scripts/harness/backcast-state.sh scripts/harness/worktree.sh scripts/harness/build.sh scripts/harness/codex-build.sh scripts/harness/full-loop-smoke.sh scripts/harness/backcast-manifest.sh scripts/harness/backcast-evidence-pack.sh scripts/harness/backcast-approval.sh scripts/harness/external-consultation.sh; do
   if [[ ! -x "$executable" ]]; then
     echo "not executable: $executable" >&2
     exit 1

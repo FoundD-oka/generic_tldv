@@ -21,8 +21,8 @@ This project uses the Managed Agent Harness model. Claude Code, Codex CLI,
 Codex App, and Codex GitHub Action are runtime profiles over the same core flow.
 
 ```text
-Task -> Plan Relay -> S/M/L -> Agent Profile -> Environment Profile
-  -> Session Ledger -> Adapter Contract -> Gates -> Outcome -> Approval
+Task -> Context Scout -> Research Scout -> KPI Backcast -> Plan Relay -> S/M/L -> Agent Profile -> Environment Profile
+  -> Worktree -> Build Runner -> Evidence -> External Consultation -> Gates -> Outcome -> Approval
 ```
 
 | profile | role |
@@ -37,12 +37,45 @@ Read `docs/managed-agent-harness-architecture.md` before changing runtime profil
 ## Codex Runtime Rules
 
 - Codex implementation reads `AGENTS.md`, task brief, and approved `plan_how` only.
+- Planning must include `research-brief.md` and `option-matrix.md` when the task
+  depends on current UX patterns, libraries, APIs, regulations, security
+  guidance, AI-tool behavior, or market/user expectations. If skipped, the plan
+  must say why.
+- Research Scout reframes the request when needed, defines critical questions,
+  writes hypotheses before source checks, looks first for disconfirming
+  evidence, and records confidence plus overturning conditions.
+- KPI Backcast is required when the task needs future-state KPIs,
+  multi-category delivery, scheduling, or stable checkpoints. It writes
+  `kpi-backcast-roadmap.md` and converts KPIs into checkpoint
+  `quality_conditions`, deliverable destinations, and verification evidence.
+- S work normally does not call Fable. M/L work may call Fable at phase review,
+  same-test-failed-twice, plan-deviation, or final-audit points.
+- L work requires Fable CLI external consultation evidence unless the task has
+  already hit the configured Fable max-call fallback. Use
+  `scripts/harness/external-consultation.sh run <task-id> --mode review`.
 - Do not pass `plan_why` to implementation runtime. QA runtime reads it later.
 - M/L work must preserve `.pipeline/sessions/<task-id>/events.jsonl`.
 - M/L work must produce `.pipeline/outcomes/<task-id>/outcome-card.json`.
 - Run `scripts/harness/outcome-judge.sh <task-id>` before claiming completion.
+- Use `scripts/harness/worktree.sh create <task-id>` before non-trivial implementation.
+- Use `scripts/harness/sml-decision.sh <task-id> --size S|M|L` when Plan Relay did not already write `sml-decision.json`.
+- Use `scripts/harness/build.sh <task-id> --worktree <path> -- <command>` to bind implementation, verification, manifest, and evidence pack into one run.
+- Use `scripts/harness/codex-build.sh <task-id> --worktree <path>` when Codex CLI should perform the implementation.
+- Use `scripts/harness/full-loop-smoke.sh` to prove the installed harness can reach PR Ready in a disposable fixture.
 - Hooks are early warning. Final state is decided by deterministic gates and outcome cards.
 - Keep credentials out of generated-code-readable sandbox state.
+
+## Human-Facing Language
+
+Write every artifact meant for a human reader in Japanese. This includes
+progress/completion reports, plan summaries, research summaries, option
+matrices, delivery reports, GitHub Issue titles/bodies/comments, GitHub PR
+titles/bodies/comments, review notes, and final user replies.
+
+Machine-readable JSON/schema keys, adapter IDs, commands, file paths, logs, and
+quoted external source text may stay in their required/original language. When
+they appear in a human-facing artifact, explain the meaning or conclusion in
+Japanese.
 
 ## Done Definition
 
@@ -50,7 +83,7 @@ Read `docs/managed-agent-harness-architecture.md` before changing runtime profil
 |---|---|
 | S | targeted change, relevant test or smoke check, residency + preflight + hd-gate + adapter validation pass |
 | M | approved plan, verification contract, tests pass, S gates pass, evidence pack, QA judgment |
-| L | M plus tribunal or sidechain synthesis, independent QA judgment, and hash-bound human approval before PR |
+| L | M plus tribunal or sidechain synthesis, Fable consultation summary, independent QA judgment, and hash-bound approval before PR |
 
 PR readiness for every size is decided by `bash .claude/hooks/pr-ready-gate.sh`.
 
@@ -60,9 +93,13 @@ Use:
 
 ```text
 .pipeline/plans/<issue-or-task>/
+.pipeline/plans/<issue-or-task>/research-brief.md
+.pipeline/plans/<issue-or-task>/option-matrix.md
+.pipeline/plans/<issue-or-task>/kpi-backcast-roadmap.md
 .pipeline/evidence/<issue-or-task>/
 .pipeline/gates/<issue-or-task>/
 .pipeline/adapters/
+.pipeline/evidence/<issue-or-task>/external-consultation/
 .pipeline/feedback/
 .pipeline/sessions/<issue-or-task>/events.jsonl
 .pipeline/outcomes/<issue-or-task>/outcome-card.json
@@ -76,12 +113,13 @@ Use:
 - Do not mark approval unless the target hash is recorded.
 - Do not close a recurring finding category without an HD resolution record.
 - Do not skip tribunal or sidechain evidence for L work.
+- Do not claim Fable output is proof; it is advisory consultation until locally verified.
 - Do not add or promote harness rules without feedback pruning when core harness files changed.
 
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **generic_tldv** (15168 symbols, 26683 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **generic_tldv** (15386 symbols, 27125 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > Index stale? Run `node .gitnexus/run.cjs analyze` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? `npx gitnexus analyze` (npm 11 crash → `npm i -g gitnexus`; #1939).
 

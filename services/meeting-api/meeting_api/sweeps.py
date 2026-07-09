@@ -61,6 +61,13 @@ sweep_last_iteration_at: float = 0.0
 _stop_event: Optional[asyncio.Event] = None
 
 
+def _get_default_storage_client():
+    """Reuse the recordings singleton so sweeps do not re-open storage clients."""
+    from .recordings import get_storage_client
+
+    return get_storage_client()
+
+
 async def _sweep_stale_stopping(
     db_session_factory: Callable[[], AsyncSession],
 ) -> int:
@@ -367,8 +374,6 @@ async def recover_recordings_jsonb_from_storage(
 
     Returns True if at least one recording was seeded.
     """
-    from .storage import create_storage_client
-
     data = dict(meeting.data or {}) if isinstance(meeting.data, dict) else {}
     if data.get("recording_enabled") is False:
         return False
@@ -379,7 +384,7 @@ async def recover_recordings_jsonb_from_storage(
     if not sessions:
         return False
 
-    storage = create_storage_client()
+    storage = None
     now = datetime.utcnow().isoformat()
     recordings = list(data.get("recordings") or [])
     existing_sessions = {
@@ -394,6 +399,8 @@ async def recover_recordings_jsonb_from_storage(
             continue
         prefix = f"recordings/{meeting.user_id}/"
         try:
+            if storage is None:
+                storage = _get_default_storage_client()
             keys = storage.list_objects_bounded(prefix)
         except Exception as e:
             logger.warning(
@@ -480,12 +487,10 @@ async def _sweep_unfinalized_recordings(
     """
     from datetime import datetime, timedelta
     from .recording_finalizer import finalize_recording_master
-    from .storage import create_storage_client
 
     cutoff = datetime.utcnow() - timedelta(seconds=UNFINALIZED_RECORDINGS_MIN_AGE_SECONDS)
     swept = 0
-
-    storage = create_storage_client()
+    storage = None
 
     async with db_session_factory() as db:
         id_rows = (await db.execute(
@@ -537,6 +542,8 @@ async def _sweep_unfinalized_recordings(
 
                 prefix = f"recordings/{meeting.user_id}/"
                 try:
+                    if storage is None:
+                        storage = _get_default_storage_client()
                     keys = storage.list_objects_bounded(prefix)
                 except Exception as e:
                     logger.warning(
