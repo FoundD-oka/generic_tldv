@@ -1,0 +1,11 @@
+{
+  "timestamp": "2026-07-09T23:31:33.039046+00:00",
+  "status": "pass",
+  "window_tasks": [
+    "speaker-attribution-voiceprint",
+    "issue-25-audio-lanes",
+    "issue-26-lane-diarization"
+  ],
+  "triggered_categories": [],
+  "unresolved_categories": []
+}

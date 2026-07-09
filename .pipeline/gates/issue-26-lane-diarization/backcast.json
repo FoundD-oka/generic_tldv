@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-07-09T23:31:33.162668+00:00",
+  "task_id": "issue-26-lane-diarization",
+  "status": "pass",
+  "mode": "not_applicable",
+  "details": {
+    "checkpoint_contract": ".pipeline/plans/issue-26-lane-diarization/checkpoint-contract.json",
+    "evidence_manifest": ".pipeline/evidence/issue-26-lane-diarization/evidence-manifest.json",
+    "approval_decision": ".pipeline/approvals/issue-26-lane-diarization/approval-decision.json",
+    "state_machine": ".pipeline/rules/backcast-state-machine.json",
+    "mode": "optional"
+  },
+  "errors": [],
+  "warnings": []
+}
