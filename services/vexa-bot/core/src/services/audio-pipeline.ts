@@ -119,14 +119,38 @@ export interface AudioCaptureSource extends EventEmitter {
   //                pipeline init by 20-30s; without re-aligning here, segment
   //                timestamps map past the end of the audio file in the dashboard).
   //   'error'    — capture-side errors
+  //   'laneChunk' — issue #25: a per-participant lane chunk (sources that
+  //                 support lane recording only; carries lane identity)
   on(event: "chunk", listener: (chunk: AudioChunk) => void): this;
+  on(event: "laneChunk", listener: (chunk: LaneAudioChunk) => void): this;
   on(event: "started", listener: () => void): this;
   on(event: "error", listener: (err: Error) => void): this;
   on(event: string | symbol, listener: (...args: any[]) => void): this;
   emit(event: "chunk", chunk: AudioChunk): boolean;
+  emit(event: "laneChunk", chunk: LaneAudioChunk): boolean;
   emit(event: "started"): boolean;
   emit(event: "error", err: Error): boolean;
   emit(event: string | symbol, ...args: any[]): boolean;
+}
+
+/** Issue #25 — an AudioChunk carrying per-participant lane identity. */
+export interface LaneAudioChunk {
+  laneKey: string;
+  laneId: string;
+  laneLabel: string | null;
+  laneIdSource: string;
+  /**
+   * BUG-002 fix: ms between the mixed recording's start and this lane's
+   * recorder start. Carried through to the upload metadata's
+   * lane_start_offset_ms field so meeting-api can re-align lane-relative
+   * segment timestamps onto the mixed master's timeline. null when the
+   * browser side had no recordingStartedAtMs to compute it from.
+   */
+  laneStartOffsetMs: number | null;
+  format: "webm" | "wav";
+  data: Buffer;
+  seq: number;
+  isFinal: boolean;
 }
 
 // ───────────────────────────────────────────────────────────────────────
@@ -175,6 +199,8 @@ export class UnifiedRecordingPipeline {
   private stopping = false;
   private uploadsInFlight = 0;
   private uploadQueue: Promise<void> = Promise.resolve();
+  /** Issue #25 — laneKey → serialized upload queue for that lane. */
+  private laneQueues = new Map<string, Promise<void>>();
 
   constructor(opts: UnifiedRecordingPipelineOptions) {
     this.source = opts.source;
@@ -215,6 +241,21 @@ export class UnifiedRecordingPipeline {
         platform: this.platform,
         error_message: err?.message,
         error_name: err?.name,
+      });
+    });
+
+    // Issue #25 — lane chunks ride their own per-lane upload queues so a
+    // slow lane never blocks the mixed-master chunk queue (and vice versa).
+    this.source.on("laneChunk", (chunk: any) => {
+      this._handleLaneChunk(chunk).catch((err) => {
+        logJSON({
+          level: "error",
+          msg: "[audio-pipeline] lane-chunk-handler unhandled error",
+          platform: this.platform,
+          lane_key: chunk?.laneKey,
+          chunk_seq: chunk?.seq,
+          error_message: err?.message,
+        });
       });
     });
 
@@ -272,12 +313,68 @@ export class UnifiedRecordingPipeline {
     // before the bot exits.
     await this.uploadQueue;
 
+    // Lane queues drain too (issue #25) — lane final chunks were emitted by
+    // the browser side during source.stop(), so they are already enqueued.
+    await Promise.all(Array.from(this.laneQueues.values()));
+
     logJSON({
       level: "info",
       msg: "[audio-pipeline] stopped",
       platform: this.platform,
       total_uploaded: this.uploadsInFlight === 0 ? "drained" : `${this.uploadsInFlight} still in-flight`,
     });
+  }
+
+  private async _handleLaneChunk(chunk: {
+    laneKey: string;
+    laneId: string;
+    laneLabel: string | null;
+    laneIdSource: string;
+    laneStartOffsetMs: number | null;
+    format: "webm" | "wav";
+    data: Buffer;
+    seq: number;
+    isFinal: boolean;
+  }): Promise<void> {
+    if (!chunk.data || chunk.data.length === 0) {
+      log(`[audio-pipeline] empty lane chunk dropped (${this.platform}, lane=${chunk.laneKey}, seq=${chunk.seq})`);
+      return;
+    }
+    const prior = this.laneQueues.get(chunk.laneKey) ?? Promise.resolve();
+    const next = prior.then(async () => {
+      try {
+        await this.recordingService.uploadChunk(
+          this.uploadUrl,
+          this.token,
+          chunk.data,
+          chunk.seq,
+          chunk.isFinal,
+          chunk.format,
+          {
+            mediaType: `lane-${chunk.laneKey}`,
+            laneId: chunk.laneId,
+            laneLabel: chunk.laneLabel ?? undefined,
+            laneIdSource: chunk.laneIdSource,
+            laneStartOffsetMs: chunk.laneStartOffsetMs ?? undefined,
+          },
+        );
+      } catch (err: any) {
+        // Same no-silent-fallback policy as the master queue: the server's
+        // chunk_seq contract makes gaps detectable; the lane master is
+        // built from whatever chunks arrived.
+        logJSON({
+          level: "error",
+          msg: "[audio-pipeline] lane chunk upload failed",
+          platform: this.platform,
+          lane_key: chunk.laneKey,
+          chunk_seq: chunk.seq,
+          is_final: chunk.isFinal,
+          error_message: err?.message,
+        });
+      }
+    });
+    this.laneQueues.set(chunk.laneKey, next);
+    await next;
   }
 
   private async _handleChunk(chunk: AudioChunk): Promise<void> {
@@ -626,6 +723,47 @@ export class MediaRecorderCapture extends EventEmitter implements AudioCaptureSo
       await page.exposeFunction("__vexaRecordingStarted", () => {
         startedFireOnce();
       });
+
+      // Issue #25 — per-participant lane chunks. Browser-side
+      // BrowserLaneRecorderManager calls this for each lane's MediaRecorder
+      // output; we re-emit as 'laneChunk' for UnifiedRecordingPipeline.
+      // Exposed unconditionally (harmless when lanes are disabled — the
+      // browser side never calls it).
+      await page.exposeFunction(
+        "__vexaSaveLaneChunk",
+        async (payload: {
+          laneKey: string;
+          laneId: string;
+          laneLabel: string | null;
+          laneIdSource: string;
+          laneStartOffsetMs: number | null;
+          base64: string;
+          chunkSeq: number;
+          isFinal: boolean;
+          mimeType?: string;
+        }): Promise<boolean> => {
+          try {
+            const buf = Buffer.from(payload.base64 || "", "base64");
+            const mt = (payload.mimeType || "").toLowerCase();
+            const format: "webm" | "wav" = mt.includes("wav") ? "wav" : "webm";
+            this.emit("laneChunk", {
+              laneKey: payload.laneKey,
+              laneId: payload.laneId,
+              laneLabel: payload.laneLabel,
+              laneIdSource: payload.laneIdSource,
+              laneStartOffsetMs: payload.laneStartOffsetMs ?? null,
+              format,
+              data: buf,
+              seq: payload.chunkSeq,
+              isFinal: !!payload.isFinal,
+            });
+            return true;
+          } catch (err: any) {
+            log(`[MediaRecorderCapture:${platform}] lane chunk callback error: ${err?.message || err}`);
+            return false;
+          }
+        },
+      );
 
       this.callbacksExposed = true;
     }

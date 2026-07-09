@@ -1,0 +1,11 @@
+{
+  "timestamp": "2026-07-09T20:58:36.923026+00:00",
+  "status": "pass",
+  "window_tasks": [
+    "dashboard-uiux-memo",
+    "speaker-attribution-voiceprint",
+    "issue-25-audio-lanes"
+  ],
+  "triggered_categories": [],
+  "unresolved_categories": []
+}

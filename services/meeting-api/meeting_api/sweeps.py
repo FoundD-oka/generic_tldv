@@ -37,6 +37,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import attributes
 
+from .media_types import is_lane_media_type
 from .models import Meeting, MeetingSession
 from .schemas import MeetingStatus, MeetingCompletionReason
 
@@ -341,7 +342,9 @@ def _parse_recording_chunk_key(user_id: int, session_uid: str, key: str) -> Opti
         return None
     media_type = parts[4]
     filename = parts[-1]
-    if media_type not in {"audio", "video"} or filename.startswith("master."):
+    if media_type not in {"audio", "video"} and not is_lane_media_type(media_type):
+        return None
+    if filename.startswith("master."):
         return None
     if "." not in filename:
         return None
@@ -357,6 +360,21 @@ def _recording_has_playback_url(rec: dict) -> bool:
     if not isinstance(playback_url, dict):
         return False
     return bool(playback_url.get("audio") or playback_url.get("video"))
+
+
+def _recording_has_unfinalized_lane(rec: dict) -> bool:
+    """Lane masters never produce a playback_url, so a recording can look
+    "done" (audio playback_url present) while its lanes are still raw
+    chunks. The unfinalized sweep must keep such recordings in scope
+    (issue #25)."""
+    if not isinstance(rec, dict):
+        return False
+    for mf in rec.get("media_files") or []:
+        if not isinstance(mf, dict) or not is_lane_media_type(mf.get("type")):
+            continue
+        if mf.get("finalized_by") != "recording_finalizer.master":
+            return True
+    return False
 
 
 async def recover_recordings_jsonb_from_storage(
@@ -423,6 +441,19 @@ async def recover_recordings_jsonb_from_storage(
         for (rec_id, media_type, media_format), chunk_keys in sorted(grouped.items()):
             chunk_keys = sorted(chunk_keys)
             recording_id = recording_id or rec_id
+            if is_lane_media_type(media_type):
+                # BUG-014 — lane_id/lane_label/lane_id_source only ever lived
+                # in upload metadata, never in the storage key, so a
+                # storage-only recovery cannot reconstruct the `lane` object.
+                # The solo-lane auto-confirm silently degrades to no name;
+                # log it so operators can see identity was lost, not just
+                # infer it from a missing lane_label.
+                logger.warning(
+                    "[finalizer-recovery] lane identity metadata lost for recovered "
+                    "entry meeting_id=%s media_type=%s — recovered from storage keys "
+                    "alone, no lane_label available (issue #25 BUG-014)",
+                    meeting.id, media_type,
+                )
             media_files.append({
                 "id": _new_recording_numeric_id(),
                 "type": media_type,
@@ -521,7 +552,10 @@ async def _sweep_unfinalized_recordings(
                 isinstance(rec, dict)
                 and rec.get("status") != "failed"
                 and rec.get("media_files")
-                and not _recording_has_playback_url(rec)
+                and (
+                    not _recording_has_playback_url(rec)
+                    or _recording_has_unfinalized_lane(rec)
+                )
                 for rec in recordings
             )
 
@@ -569,6 +603,17 @@ async def _sweep_unfinalized_recordings(
                 for (rec_id, media_type, media_format), chunk_keys in sorted(grouped.items()):
                     chunk_keys = sorted(chunk_keys)
                     recording_id = recording_id or rec_id
+                    if is_lane_media_type(media_type):
+                        # BUG-014 — see recover_recordings_jsonb_from_storage: this
+                        # sweep rebuilds from storage keys alone, so lane_label/
+                        # lane_id/lane_id_source can never be recovered here.
+                        logger.warning(
+                            "[sweep] unfinalized-recordings lane identity metadata lost "
+                            "for recovered entry meeting_id=%s media_type=%s — recovered "
+                            "from storage keys alone, no lane_label available "
+                            "(issue #25 BUG-014)",
+                            meeting.id, media_type,
+                        )
                     media_files.append({
                         "id": _new_recording_numeric_id(),
                         "type": media_type,

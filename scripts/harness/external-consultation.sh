@@ -565,7 +565,7 @@ def run_fable() -> None:
         "--max-budget-usd", str(args.max_budget_usd),
         "--tools", "Read,Bash",
         "--allowedTools", READ_ONLY_BASH,
-        "--disallowedTools", "Edit,Write,MultiEdit,NotebookEdit",
+        "--disallowedTools", "Edit,Write,NotebookEdit",
         "--permission-mode", "dontAsk",
     ]
     if args.bare:
