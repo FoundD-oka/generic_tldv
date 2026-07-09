@@ -56,7 +56,7 @@ async def test_sweep_unfinalized_recordings_recovers_missing_jsonb_from_storage_
         "recordings/1523/999999999999/other-session/audio/000000.webm",
     ]
 
-    with patch("meeting_api.storage.create_storage_client", return_value=storage), \
+    with patch.object(sweeps, "_get_default_storage_client", return_value=storage) as get_storage, \
          patch("meeting_api.recording_finalizer.finalize_recording_master", new=AsyncMock()) as finalize, \
          patch.object(sweeps.attributes, "flag_modified", new=MagicMock()) as flag_modified:
         swept = await sweeps._sweep_unfinalized_recordings(db_session_factory)
@@ -69,6 +69,7 @@ async def test_sweep_unfinalized_recordings_recovers_missing_jsonb_from_storage_
     db.commit.assert_awaited_once()
     finalize.assert_awaited_once_with(10062, db)
     flag_modified.assert_called_once_with(meeting, "data")
+    get_storage.assert_called_once_with()
 
 
 @pytest.mark.asyncio
@@ -108,13 +109,27 @@ async def test_sweep_unfinalized_recordings_finalizes_existing_jsonb_without_sto
     async def db_session_factory():
         yield db
 
-    storage = MagicMock()
-
-    with patch("meeting_api.storage.create_storage_client", return_value=storage), \
+    with patch.object(sweeps, "_get_default_storage_client") as get_storage, \
          patch("meeting_api.recording_finalizer.finalize_recording_master", new=AsyncMock()) as finalize:
         swept = await sweeps._sweep_unfinalized_recordings(db_session_factory)
 
     assert swept == 1
-    storage.list_objects_bounded.assert_not_called()
+    get_storage.assert_not_called()
     db.commit.assert_not_called()
     finalize.assert_awaited_once_with(10063, db)
+
+
+@pytest.mark.asyncio
+async def test_sweep_unfinalized_recordings_skips_storage_init_without_candidate_rows():
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=FetchAllResult([]))
+
+    @asynccontextmanager
+    async def db_session_factory():
+        yield db
+
+    with patch.object(sweeps, "_get_default_storage_client") as get_storage:
+        swept = await sweeps._sweep_unfinalized_recordings(db_session_factory)
+
+    assert swept == 0
+    get_storage.assert_not_called()
