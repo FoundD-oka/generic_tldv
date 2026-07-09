@@ -44,6 +44,8 @@ from typing import List, Optional, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
+from .media_types import is_audio_like_media_type, is_lane_media_type
+
 from .models import Meeting
 from .storage import StorageClient, create_storage_client
 
@@ -402,7 +404,7 @@ def _media_content_type(media_type: str, media_format: str) -> str:
     fmt = str(media_format or "").lower()
     typ = str(media_type or "").lower()
     if fmt == "webm":
-        return "audio/webm" if typ == "audio" else "video/webm"
+        return "audio/webm" if is_audio_like_media_type(typ) else "video/webm"
     if fmt == "wav":
         return "audio/wav"
     return "application/octet-stream"
@@ -620,7 +622,10 @@ async def finalize_recording_master(meeting_id: int, db: AsyncSession) -> None:
             mf_path = mf.get("storage_path") or ""
             mf_id = mf.get("id")
 
-            if mf_type not in ("audio", "video"):
+            # Lanes (issue #25) are concatenated into per-lane masters just
+            # like audio/video, but never gain a playback_url (see below —
+            # that block stays audio/video only).
+            if mf_type not in ("audio", "video") and not is_lane_media_type(mf_type):
                 continue
             if not mf_path or not mf_format:
                 logger.warning(

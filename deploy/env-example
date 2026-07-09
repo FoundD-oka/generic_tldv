@@ -103,6 +103,15 @@ KABOSU_DRIVE_FOLDER_ID=
 KABOSU_BOT_NAME=カボス
 KABOSU_BOT_LANGUAGE=ja
 KABOSU_VOICE_AGENT_ENABLED=false
+# Issue #25 — 参加者別音声レーン録音（Google Meet、opt-in）。
+# ストレージ/STTコストが参加者数に比例して増えるため既定はfalse。
+RECORD_PARTICIPANT_LANES=false
+# 同時録音レーン数の上限（bot側）
+MAX_RECORDING_LANES=8
+# レーンSTTの同時実行数（meeting-api側）
+LANE_STT_CONCURRENCY=2
+# 会議あたりレーン音声の合計上限秒数。超過時は混合masterへフォールバック
+MAX_LANE_TOTAL_DURATION_SECONDS=14400
 KABOSU_DRIVE_EXPORT_ENABLED=true
 # Set to true to export only Google Calendar-origin meetings.
 # Default (false) exports every completed meeting, including manual joins.

@@ -537,3 +537,205 @@ export class BrowserMediaRecorderPipeline {
   }
 }
 
+
+
+// ---------------------------------------------------------------------------
+// BrowserLaneRecorderManager — Issue #25 (Phase 2 audio lanes)
+//
+// Records each participant tile's media element to its OWN MediaRecorder
+// pipeline, in parallel with the combined (mixed-master) pipeline above.
+// Lane identity is keyed by MediaStreamTrack.id — NOT the DOM tile — so a
+// tile disappearing during screen-share/presentation does not kill the lane
+// while its track is still alive (track 'ended' is the stop signal).
+//
+// Lane chunks flow to the Node side via the laneChunkCallback bridge
+// (__vexaSaveLaneChunk) with per-lane identity; the server stores them under
+// media_type "lane-{laneKey}" — structurally outside the mixed master's
+// /audio/ prefix.
+// ---------------------------------------------------------------------------
+
+export interface LaneChunkPayload {
+  laneKey: string;
+  laneId: string;
+  laneLabel: string | null;
+  laneIdSource: string;
+  base64: string;
+  chunkSeq: number;
+  isFinal: boolean;
+  mimeType: string;
+}
+
+export interface BrowserLaneRecorderManagerOptions {
+  timesliceMs: number;
+  /** Hard cap on concurrently recorded lanes (cost control). */
+  maxLanes: number;
+  /** Bridge to Node's __vexaSaveLaneChunk. */
+  laneChunkCallback: (payload: LaneChunkPayload) => Promise<boolean>;
+  /** Rescan cadence for late joiners / recreated elements. */
+  rescanIntervalMs?: number;
+}
+
+interface LaneEntry {
+  laneKey: string;
+  pipeline: BrowserMediaRecorderPipeline;
+  track: MediaStreamTrack;
+}
+
+async function sha1Hex(input: string): Promise<string> {
+  const data = new TextEncoder().encode(input);
+  const digest = await crypto.subtle.digest("SHA-1", data);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+export class BrowserLaneRecorderManager {
+  private opts: BrowserLaneRecorderManagerOptions;
+  /** track.id → lane */
+  private lanes = new Map<string, LaneEntry>();
+  private skippedOverCap = new Set<string>();
+  private rescanTimer: number | null = null;
+  private stopped = false;
+
+  constructor(opts: BrowserLaneRecorderManagerOptions) {
+    this.opts = opts;
+  }
+
+  /** Number of currently recording lanes. */
+  laneCount(): number {
+    return this.lanes.size;
+  }
+
+  async start(initialElements: HTMLMediaElement[]): Promise<void> {
+    await this.scan(initialElements);
+    const interval = this.opts.rescanIntervalMs ?? 15000;
+    this.rescanTimer = window.setInterval(() => {
+      if (this.stopped) return;
+      const els = Array.from(
+        document.querySelectorAll("audio, video")
+      ) as HTMLMediaElement[];
+      this.scan(els).catch((err: any) => {
+        (window as any).logBot?.(
+          `[LaneRecorder] rescan failed: ${err?.message || err}`
+        );
+      });
+    }, interval);
+  }
+
+  private laneLabelForElement(el: HTMLMediaElement): { label: string | null; source: string } {
+    // Best-effort: the audio element may live inside (or near) a participant
+    // tile. When it does not, the lane still records — the deferred stage
+    // simply cannot auto-confirm it from a DOM name.
+    const tile = el.closest?.("[data-participant-id]") as HTMLElement | null;
+    if (tile) {
+      const name = tile.querySelector?.("span.notranslate")?.textContent?.trim();
+      if (name) return { label: name, source: "participant-id" };
+      const aria = tile.getAttribute("aria-label")?.trim();
+      if (aria) return { label: aria, source: "participant-id" };
+    }
+    return { label: null, source: "stream" };
+  }
+
+  private async scan(elements: HTMLMediaElement[]): Promise<void> {
+    for (const el of elements) {
+      let stream: MediaStream | null = null;
+      try {
+        stream =
+          (el.srcObject as MediaStream) ||
+          ((el as any).captureStream && (el as any).captureStream()) ||
+          null;
+      } catch {
+        stream = null;
+      }
+      if (!(stream instanceof MediaStream)) continue;
+
+      for (const track of stream.getAudioTracks()) {
+        if (track.readyState === "ended") continue;
+        if (this.lanes.has(track.id)) continue;
+
+        if (this.lanes.size >= this.opts.maxLanes) {
+          if (!this.skippedOverCap.has(track.id)) {
+            this.skippedOverCap.add(track.id);
+            (window as any).logBot?.(
+              `[LaneRecorder] WARN max lanes (${this.opts.maxLanes}) reached — ` +
+              `not recording track ${track.id}`
+            );
+          }
+          continue;
+        }
+
+        await this.startLane(el, stream, track);
+      }
+    }
+  }
+
+  private async startLane(
+    el: HTMLMediaElement,
+    stream: MediaStream,
+    track: MediaStreamTrack
+  ): Promise<void> {
+    const laneKey = (await sha1Hex(track.id)).slice(0, 10);
+    const { label, source } = this.laneLabelForElement(el);
+    const laneStream = new MediaStream([track]);
+
+    const pipeline = new BrowserMediaRecorderPipeline({
+      stream: laneStream,
+      timesliceMs: this.opts.timesliceMs,
+      chunkCallback: (p) =>
+        this.opts.laneChunkCallback({
+          laneKey,
+          laneId: track.id,
+          laneLabel: label,
+          laneIdSource: source,
+          base64: p.base64,
+          chunkSeq: p.chunkSeq,
+          isFinal: p.isFinal,
+          mimeType: p.mimeType,
+        }),
+    });
+
+    this.lanes.set(track.id, { laneKey, pipeline, track });
+    (window as any).logBot?.(
+      `[LaneRecorder] lane started laneKey=${laneKey} track=${track.id} ` +
+      `label=${label ?? "(none)"} lanes=${this.lanes.size}/${this.opts.maxLanes}`
+    );
+
+    // Track death (participant left / stream torn down) ends the lane and
+    // flushes its final chunk. New participantId/track ⇒ new lane by design.
+    track.addEventListener("ended", () => {
+      const lane = this.lanes.get(track.id);
+      if (!lane) return;
+      this.lanes.delete(track.id);
+      lane.pipeline.stop().catch((err: any) => {
+        (window as any).logBot?.(
+          `[LaneRecorder] lane stop on track-ended failed laneKey=${laneKey}: ${err?.message || err}`
+        );
+      });
+      (window as any).logBot?.(
+        `[LaneRecorder] lane ended laneKey=${laneKey} (track ended)`
+      );
+    });
+
+    await pipeline.start();
+  }
+
+  /** Stop every lane and flush final chunks. Called from stopBrowserCapture. */
+  async stopAll(): Promise<void> {
+    this.stopped = true;
+    if (this.rescanTimer !== null) {
+      window.clearInterval(this.rescanTimer);
+      this.rescanTimer = null;
+    }
+    const entries = Array.from(this.lanes.values());
+    this.lanes.clear();
+    await Promise.all(
+      entries.map((lane) =>
+        lane.pipeline.stop().catch((err: any) => {
+          (window as any).logBot?.(
+            `[LaneRecorder] lane stop failed laneKey=${lane.laneKey}: ${err?.message || err}`
+          );
+        })
+      )
+    );
+  }
+}

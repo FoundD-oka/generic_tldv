@@ -37,6 +37,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import attributes
 
+from .media_types import is_lane_media_type
 from .models import Meeting, MeetingSession
 from .schemas import MeetingStatus, MeetingCompletionReason
 
@@ -341,7 +342,9 @@ def _parse_recording_chunk_key(user_id: int, session_uid: str, key: str) -> Opti
         return None
     media_type = parts[4]
     filename = parts[-1]
-    if media_type not in {"audio", "video"} or filename.startswith("master."):
+    if media_type not in {"audio", "video"} and not is_lane_media_type(media_type):
+        return None
+    if filename.startswith("master."):
         return None
     if "." not in filename:
         return None
@@ -357,6 +360,21 @@ def _recording_has_playback_url(rec: dict) -> bool:
     if not isinstance(playback_url, dict):
         return False
     return bool(playback_url.get("audio") or playback_url.get("video"))
+
+
+def _recording_has_unfinalized_lane(rec: dict) -> bool:
+    """Lane masters never produce a playback_url, so a recording can look
+    "done" (audio playback_url present) while its lanes are still raw
+    chunks. The unfinalized sweep must keep such recordings in scope
+    (issue #25)."""
+    if not isinstance(rec, dict):
+        return False
+    for mf in rec.get("media_files") or []:
+        if not isinstance(mf, dict) or not is_lane_media_type(mf.get("type")):
+            continue
+        if mf.get("finalized_by") != "recording_finalizer.master":
+            return True
+    return False
 
 
 async def recover_recordings_jsonb_from_storage(
@@ -521,7 +539,10 @@ async def _sweep_unfinalized_recordings(
                 isinstance(rec, dict)
                 and rec.get("status") != "failed"
                 and rec.get("media_files")
-                and not _recording_has_playback_url(rec)
+                and (
+                    not _recording_has_playback_url(rec)
+                    or _recording_has_unfinalized_lane(rec)
+                )
                 for rec in recordings
             )
 

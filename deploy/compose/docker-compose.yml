@@ -305,6 +305,7 @@ services:
       - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-/var/secrets/google/application_default_credentials.json}
       - RECORDING_ENABLED=${RECORDING_ENABLED:-true}
       - CAPTURE_MODES=${CAPTURE_MODES:-audio}
+      - RECORD_PARTICIPANT_LANES=${RECORD_PARTICIPANT_LANES:-false}
       - TRANSCRIPTION_SERVICE_URL=${TRANSCRIPTION_SERVICE_URL:-}
       - TRANSCRIPTION_SERVICE_TOKEN=${TRANSCRIPTION_SERVICE_TOKEN:-}
       # Deferred (post-meeting) STT model; stt-async-* routes to the Soniox
