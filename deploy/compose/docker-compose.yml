@@ -642,6 +642,9 @@ services:
       - VOICEPRINT_SERVICE_TOKEN=${VOICEPRINT_SERVICE_TOKEN:-}
       - ALLOW_UNAUTHENTICATED=${VOICEPRINT_ALLOW_UNAUTHENTICATED:-false}
       - VOICEPRINT_MODEL_CACHE=/models
+      # Keep the HF cache inside the volume so speechbrain's symlinks
+      # survive container recreation (see voiceprint-service/Dockerfile).
+      - HF_HOME=/models/hf
       - VOICEPRINT_MAX_AUDIO_BYTES=${VOICEPRINT_MAX_AUDIO_BYTES:-20971520}
       - MAX_ACTIVE_REQUESTS=${VOICEPRINT_MAX_ACTIVE_REQUESTS:-2}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}

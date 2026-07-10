@@ -25,6 +25,12 @@ COPY services/voiceprint-service/main.py .
 # EncoderClassifier.from_hparams() call in main.py falls back to downloading
 # at runtime — same code path, no special handling needed.
 ENV VOICEPRINT_MODEL_CACHE=/models
+# HF_HOME must live INSIDE /models: speechbrain's savedir holds SYMLINKS into
+# the HuggingFace cache, and a named volume copies those links verbatim. With
+# the cache outside /models (default: $HOME/.cache), the links in the volume
+# dangle into the image's /root/.cache, which the non-root user cannot read
+# (PoC deploy failure 2026-07-10, HD: voiceprint-model-cache-perms).
+ENV HF_HOME=/models/hf
 RUN mkdir -p /models && \
     python -c "\
 from speechbrain.inference.speaker import EncoderClassifier; \
