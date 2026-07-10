@@ -3,7 +3,9 @@
 Folds Soniox token-level async responses into OpenAI verbose_json-shaped
 segments carrying an optional `speaker` field (anonymous acoustic cluster id,
 "1","2",...). Backends without diarization simply omit `speaker`, so existing
-start/end/text consumers are unaffected.
+start/end/text consumers are unaffected. Segments also carry an optional
+`token_count` (number of tokens folded into the segment), used downstream as
+a false-split guard signal; it is additive and never changes fold boundaries.
 
 Contract: contracts/stt/v1 (see README "Speaker diarization extension").
 Adapter manifest: .pipeline/adapters/soniox-stt.adapter.json
@@ -64,6 +66,8 @@ def fold_tokens_to_segments(
     change or a silence gap larger than max_gap_s starts a new segment. The
     Soniox speaker number is kept as a string cluster id in `speaker`; tokens
     without a speaker yield segments without the field (backward compatible).
+    Each segment also carries `token_count`, the number of tokens folded into
+    it (an additive, optional field; see contracts/stt/v1/README.md).
     """
     gap = SONIOX_SEGMENT_MAX_GAP_S if max_gap_s is None else max_gap_s
     runs: List[Dict[str, Any]] = []
@@ -87,10 +91,17 @@ def fold_tokens_to_segments(
         ):
             if current is not None:
                 runs.append(current)
-            current = {"start": start, "end": end, "text": text, "speaker": speaker}
+            current = {
+                "start": start,
+                "end": end,
+                "text": text,
+                "speaker": speaker,
+                "token_count": 1,
+            }
         else:
             current["end"] = max(current["end"], end)
             current["text"] += text
+            current["token_count"] += 1
     if current is not None:
         runs.append(current)
 
@@ -112,6 +123,7 @@ def fold_tokens_to_segments(
             "no_speech_prob": 0.0,
             "audio_start": round(run["start"], 3),
             "audio_end": round(run["end"], 3),
+            "token_count": run["token_count"],
         }
         if run["speaker"] is not None:
             segment["speaker"] = run["speaker"]

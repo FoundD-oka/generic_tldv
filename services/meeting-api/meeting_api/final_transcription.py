@@ -46,6 +46,20 @@ MAX_LANE_TOTAL_DURATION_SECONDS = float(
     os.getenv("MAX_LANE_TOTAL_DURATION_SECONDS", str(4 * 3600))
 )
 
+# Issue #26 — false-split guard (AC3/AC4): a lane cluster only counts toward
+# K_stable once its TOTAL duration/tokens across the lane clear these bars,
+# so one stray token or a half-second interjection cannot flip a solo lane
+# into a false "shared mic" split. See _stable_lane_clusters.
+LANE_SHARED_MIC_MIN_CLUSTER_DURATION_S = float(
+    os.getenv("LANE_SHARED_MIC_MIN_CLUSTER_DURATION_S", "2.0")
+)
+# BUG-004 — int(float(...)) so a decimal-looking value (e.g. "5.0", a
+# plausible typo by analogy with the float-typed sibling above) is accepted
+# instead of crashing the whole process at import time with ValueError.
+LANE_SHARED_MIC_MIN_CLUSTER_TOKENS = int(float(
+    os.getenv("LANE_SHARED_MIC_MIN_CLUSTER_TOKENS", "5")
+))
+
 
 @dataclass(frozen=True)
 class FinalTranscriptionSource:
@@ -311,36 +325,137 @@ def _lane_masters_available(meeting: Meeting) -> bool:
         return False
 
 
+def _stable_lane_clusters(
+    segments: List[Dict[str, Any]],
+    min_duration_s: float,
+    min_tokens: int,
+) -> set:
+    """Return the set of `speaker_cluster` ids whose TOTAL duration (and,
+    when available, TOTAL token count) across the lane clear the false-split
+    guard thresholds (issue #26 AC3/AC4, B-2).
+
+    `token_count` is an optional additive stt.v1 field the Soniox adapter
+    folds per segment; when NOT A SINGLE segment in the lane carries it, the
+    backend simply doesn't emit it and the token check is skipped entirely
+    — duration alone decides stability. This must NOT be confused with a
+    cluster whose segments carry `token_count` but sum to 0; that cluster is
+    correctly judged unstable.
+
+    Never raises: any bad/missing field degrades toward "0" (i.e. toward
+    "unstable"), never toward an exception — the caller relies on this so a
+    malformed segment can never escape into LaneTranscriptionFallback
+    (ARC-6: the filter must not turn a good lane into a mixed-master
+    fallback).
+    """
+    has_token_counts = any(seg.get("token_count") is not None for seg in segments)
+    duration_by_cluster: Dict[str, float] = {}
+    tokens_by_cluster: Dict[str, float] = {}
+    for seg in segments:
+        cluster = seg.get("speaker_cluster")
+        if not cluster:
+            continue
+        try:
+            duration = max(0.0, float(seg.get("end", 0)) - float(seg.get("start", 0)))
+        except (TypeError, ValueError):
+            duration = 0.0
+        duration_by_cluster[cluster] = duration_by_cluster.get(cluster, 0.0) + duration
+        if has_token_counts:
+            try:
+                tokens = float(seg.get("token_count") or 0)
+            except (TypeError, ValueError):
+                tokens = 0.0
+            tokens_by_cluster[cluster] = tokens_by_cluster.get(cluster, 0.0) + tokens
+    stable = set()
+    for cluster, duration in duration_by_cluster.items():
+        if duration < min_duration_s:
+            continue
+        if has_token_counts and tokens_by_cluster.get(cluster, 0.0) < min_tokens:
+            continue
+        stable.add(cluster)
+    return stable
+
+
 def _apply_lane_identity(
     lane: LaneTranscriptionSource,
     segments: List[Dict[str, Any]],
-) -> None:
-    """Post-process one lane's parsed segments.
+) -> bool:
+    """Post-process one lane's parsed segments. Returns True iff this lane
+    was treated as shared-mic (K_stable >= 2) — callers use this to record
+    `shared_mic_lanes` in the final_transcription success state.
 
-    Solo lane (≤1 acoustic cluster) → auto-confirm: the whole lane IS one
-    speaker, so the cluster becomes "lane:{laneKey}" and the DOM label (when
-    captured) becomes the speaker. Multi-cluster lane (shared-mic hint) →
-    keep the diarization clusters but namespace them per lane so clusters
-    from different lanes can never collide; naming stays with the DOM vote
-    that _parse_segments already ran (Phase 3 owns real sub-speaker UX).
+    Stability filter (issue #26 AC3/AC4, B-2): a cluster only counts toward
+    K_stable once `_stable_lane_clusters` clears it. Unstable clusters are
+    NEVER absorbed into the nearest stable cluster — there is no well-
+    defined "closest" cluster to absorb into (plan B-2) — so they either
+    ride along with the solo lane (K_stable <= 1) or keep their own
+    needs_review sub-cluster id (K_stable >= 2). They are never silently
+    merged.
+
+    K_stable <= 1 (0 or 1, including the all-unstable edge case) → SOLO
+    lane, same as Phase 2: the whole lane — unstable-cluster segments
+    included — becomes one speaker ("lane:{laneKey}", named by the DOM
+    lane_label when present).
+
+    K_stable >= 2 → SHARED MIC lane (issue #26 AC1/AC5): every cluster,
+    stable AND unstable, keeps its OWN namespaced id
+    "lane:{laneKey}:{cluster}". `seg["speaker"]` is forced to None on
+    EVERY segment of the lane so the DOM vote `_parse_segments` already ran
+    (name_clusters_by_dom_vote) can never resurface as a sub-speaker's
+    name — AC5 requires the room's shared-mic sub-speakers to stay
+    "needs_review" rather than silently wear a DOM-guessed name. This must
+    happen (and does, since it runs synchronously here) before
+    run_deferred_transcription captures `speaker_auto = seg.get("speaker")`
+    after `_transcribe_lanes` returns, so `speaker_auto` also ends up None,
+    not the discarded DOM name.
     """
     clusters = {s.get("speaker_cluster") for s in segments if s.get("speaker_cluster")}
-    if len(clusters) <= 1:
-        for seg in segments:
-            seg["speaker_cluster"] = f"lane:{lane.lane_key}"
-            if lane.lane_label:
-                seg["speaker"] = lane.lane_label
-    else:
+    shared_mic = False
+    if len(clusters) > 1:
+        try:
+            stable = _stable_lane_clusters(
+                segments,
+                LANE_SHARED_MIC_MIN_CLUSTER_DURATION_S,
+                LANE_SHARED_MIC_MIN_CLUSTER_TOKENS,
+            )
+        except Exception:
+            # ARC-6 — a filter bug must degrade to the safe solo treatment,
+            # never propagate into LaneTranscriptionFallback.
+            logger.warning(
+                "lane %s stability filter raised — treating as solo",
+                lane.lane_key, exc_info=True,
+            )
+            stable = set()
+        shared_mic = len(stable) >= 2
+
+    if shared_mic:
         for seg in segments:
             cluster = seg.get("speaker_cluster")
             if cluster:
                 seg["speaker_cluster"] = f"lane:{lane.lane_key}:{cluster}"
+            else:
+                # BUG-001 — a segment Soniox could not diarize (no cluster
+                # tag) must not collapse into the shared meeting-wide blank
+                # identity just because its lane happens to be shared-mic.
+                # Namespace it too, under its own stable sub-cluster id, so
+                # it keeps a distinct identity and still matches
+                # _LANE_SUB_CLUSTER_RE downstream (_derive_speaker_mapping_
+                # status in collector/endpoints.py), i.e. it is flagged
+                # needs_review exactly like a named sub-cluster segment
+                # instead of silently disappearing into "".
+                seg["speaker_cluster"] = f"lane:{lane.lane_key}:unclustered"
+            seg["speaker"] = None
+    else:
+        for seg in segments:
+            seg["speaker_cluster"] = f"lane:{lane.lane_key}"
+            if lane.lane_label:
+                seg["speaker"] = lane.lane_label
     for seg in segments:
         seg["_lane_key"] = lane.lane_key
         # BUG-023 — each lane segment carries its OWN recording's session_uid
         # so persisted Transcription rows are stamped correctly even when
         # lanes span a multi-session (bot rejoin) meeting.
         seg["_lane_session_uid"] = lane.session_uid
+    return shared_mic
 
 
 def _shift_speaker_events(
@@ -379,8 +494,11 @@ async def _transcribe_lanes(
     *,
     language: str,
     speaker_events: List[Dict[str, Any]],
-) -> tuple[List[Dict[str, Any]], str]:
-    """All-or-nothing lane STT. Returns (merged segments, detected language).
+) -> tuple[List[Dict[str, Any]], str, List[str]]:
+    """All-or-nothing lane STT. Returns (merged segments, detected language,
+    shared-mic lane keys — issue #26: the lane_keys whose _apply_lane_identity
+    call found K_stable >= 2, for the caller to record as
+    `shared_mic_lanes` in the final_transcription success state).
 
     Raises LaneTranscriptionFallback when any lane fails or the duration
     budget is exceeded — the caller then runs the unchanged mixed-master path.
@@ -458,9 +576,22 @@ async def _transcribe_lanes(
                 speaker_events=shifted_events,
                 fallback_duration=duration,
             )
-            _apply_lane_identity(lane, segments)
+            shared_mic = _apply_lane_identity(lane, segments)
             _shift_segment_times(segments, lane.start_offset_seconds)
-            return segments, detected
+            # NOTE: don't rely on a task-object → lane dict lookup in the
+            # merge loop below — asyncio.as_completed() does not guarantee
+            # yielding the identical Future/Task object that was used as a
+            # dict key, so the lane_key is threaded through the return
+            # value itself instead.
+            # BUG-006 (monitor) — this relies on Python truthiness, so an
+            # empty-string lane_key would be conflated with "no shared-mic
+            # lane" (None) below and in the `if shared_mic_lane_key:` check
+            # further down. lane_key is always a 10-char sha1 slug generated
+            # bot-side (vexa-bot browser.ts: sha1Hex(track.id).slice(0,10))
+            # and is never empty through normal bot operation, so this is
+            # acceptable while the internal upload endpoint is the only
+            # producer of `media_type="lane-..."` — see tribunal BUG-006.
+            return segments, detected, (lane.lane_key if shared_mic else None)
 
     transcribe_tasks = {
         asyncio.ensure_future(_transcribe(lane, audio, fmt, duration)): lane
@@ -473,17 +604,23 @@ async def _transcribe_lanes(
 
     errors: List[BaseException] = []
     merged: List[Dict[str, Any]] = []
+    shared_mic_lane_keys: List[str] = []
     # BUG-018 — duration-weighted vote across lanes instead of last-lane-wins:
     # one minority-language participant should not flip the whole meeting's
     # recorded language.
     language_durations: Dict[str, float] = {}
     for task in asyncio.as_completed(list(transcribe_tasks.keys())):
         try:
-            segments, detected = await task
+            segments, detected, shared_mic_lane_key = await task
         except Exception as exc:
             errors.append(exc)
             continue
         merged.extend(segments)
+        # BUG-006 (monitor) — truthiness check paired with the one in
+        # `_transcribe` above; see the comment there for the invariant this
+        # relies on (lane_key is always a non-empty bot-generated slug).
+        if shared_mic_lane_key:
+            shared_mic_lane_keys.append(shared_mic_lane_key)
         if detected and detected != "unknown":
             lane_duration = sum(
                 max(0.0, float(seg.get("end", 0)) - float(seg.get("start", 0)))
@@ -501,7 +638,7 @@ async def _transcribe_lanes(
         else (language or "unknown")
     )
     merged.sort(key=lambda s: (float(s.get("start", 0)), str(s.get("_lane_key", ""))))
-    return merged, detected_language
+    return merged, detected_language, shared_mic_lane_keys
 
 
 def _speaking_ranges(speaker_events: List[Dict[str, Any]]) -> List[tuple]:
@@ -992,6 +1129,7 @@ async def run_deferred_transcription(
 
     lane_used = False
     lane_fallback_reason: Optional[str] = None
+    shared_mic_lane_keys: List[str] = []
     try:
         meeting_data = _meeting_data(meeting)
         speaker_events = meeting_data.get("speaker_events", [])
@@ -1017,7 +1155,7 @@ async def run_deferred_transcription(
         # never mixed in one transcript.
         if lane_sources:
             try:
-                segments, detected_language = await _transcribe_lanes(
+                segments, detected_language, shared_mic_lane_keys = await _transcribe_lanes(
                     lane_sources,
                     language=resolved_language,
                     speaker_events=speaker_events,
@@ -1121,6 +1259,13 @@ async def run_deferred_transcription(
 
     # Re-apply saved manual cluster corrections so replace never silently
     # discards human edits; the auto label stays in speaker_auto for undo.
+    # Issue #26 AC5 — for shared-mic lane segments, _apply_lane_identity
+    # already forced seg["speaker"] to None (discarding the DOM vote) before
+    # _transcribe_lanes returned, so speaker_auto below captures None, not
+    # the discarded DOM name. A saved rename keyed "lane:{laneKey}:{cluster}"
+    # still applies here exactly like any other cluster key — the sub-
+    # cluster's own id is untouched by the None overwrite, only `speaker`
+    # was cleared, so a prior human rename for that sub-cluster still wins.
     corrections = _saved_cluster_corrections(meeting)
     for seg in segments:
         seg["speaker_auto"] = seg.get("speaker")
@@ -1184,6 +1329,10 @@ async def run_deferred_transcription(
         # audio produced this transcript" isn't pointed at the (unused, in
         # the lane_used branch) mixed master path alone.
         "source_lane_paths": [lane.storage_path for lane in lane_sources] if lane_used else [],
+        # Issue #26 — lane_keys whose K_stable >= 2 (shared mic detected):
+        # these lanes' sub-cluster segments are speaker=None / needs_review
+        # until a human names them via the rename correction API.
+        "shared_mic_lanes": shared_mic_lane_keys if lane_used else [],
         "lane_fallback_reason": lane_fallback_reason,
         "source_recording_path": source.storage_path,
         "source_recording_backend": source.storage_backend,

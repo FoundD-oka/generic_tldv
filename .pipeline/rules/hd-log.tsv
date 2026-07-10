@@ -22,3 +22,8 @@ date	task_id	category	source	severity	note
 2026-07-10	issue-25-audio-lanes	lane-label-resolution	tribunal	medium	BUG-020 laneLabelForElement DOM assumption fails for Meet audio elements
 2026-07-10	issue-25-audio-lanes	lane-startlane-throw	tribunal	low	BUG-021 pipeline.start throw leaves zombie lane entry
 2026-07-10	issue-25-audio-lanes	lane-provenance	tribunal	low	BUG-023 Lane transcripts record mixed-master provenance
+2026-07-10	issue-26-lane-diarization	sharedmic-clusterless-blank	tribunal	medium	BUG-001 Shared-mic branch nulls speaker on clusterless segments collapsing them into blank identity
+2026-07-10	issue-26-lane-diarization	sharedmic-merge-identity-mismatch	tribunal	medium	BUG-002 buildSpeakerMerge matches by name only so needs_review sub-speakers silently no-op
+2026-07-10	issue-26-lane-diarization	sharedmic-env-parse-crash	tribunal	low	BUG-004 int() parse of LANE_SHARED_MIC_MIN_CLUSTER_TOKENS crashes on decimal env value
+2026-07-10	issue-26-lane-diarization	sharedmic-redis-derivation-gap	tribunal	low	BUG-005 Redis merge path trusts speaker_mapping_status instead of deriving like PG path
+2026-07-10	issue-26-lane-diarization	sharedmic-lanekey-truthiness	tribunal	low	BUG-006 shared_mic lane_key threading uses falsy-string check (monitor)

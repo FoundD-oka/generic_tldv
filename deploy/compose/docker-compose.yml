@@ -313,6 +313,10 @@ services:
       # silently ignored and the hardcoded defaults always applied.
       - LANE_STT_CONCURRENCY=${LANE_STT_CONCURRENCY:-2}
       - MAX_LANE_TOTAL_DURATION_SECONDS=${MAX_LANE_TOTAL_DURATION_SECONDS:-14400}
+      # Issue #26 — false-split guard thresholds for shared-mic detection
+      # within a single lane (see final_transcription._stable_lane_clusters).
+      - LANE_SHARED_MIC_MIN_CLUSTER_DURATION_S=${LANE_SHARED_MIC_MIN_CLUSTER_DURATION_S:-2.0}
+      - LANE_SHARED_MIC_MIN_CLUSTER_TOKENS=${LANE_SHARED_MIC_MIN_CLUSTER_TOKENS:-5}
       - TRANSCRIPTION_SERVICE_URL=${TRANSCRIPTION_SERVICE_URL:-}
       - TRANSCRIPTION_SERVICE_TOKEN=${TRANSCRIPTION_SERVICE_TOKEN:-}
       # Deferred (post-meeting) STT model; stt-async-* routes to the Soniox

@@ -1,0 +1,8 @@
+{
+  "schema_version": "1.0",
+  "task_id": "issue-26-lane-diarization",
+  "verdict": "pass",
+  "reviewer": "claude-code-orchestrator",
+  "summary": "Verification contract items re-executed independently of the implementing Sonnet subagents: meeting-api 418 passed / 18 skipped (P3-AC1..AC5 incl. contract-required non-absorption fixture and exact-boundary stability fixtures; invariants: all-or-nothing fallback, offset ordering, saved-correction reapply, mixed-master DOM vote untouched), transcription-service 42 passed (golden fixture replay with token_count derived from real fold), dashboard 102 passed + tsc clean (identity/display separation, 要確認の話者A/B and 未特定の話者X labels, raw lane ids never rendered, REST mapper carries speaker_mapping_status). Three-stage tribunal adjudicated 6 findings (5 confirmed, 0 critical) — all fixed and HD-recorded. Fable final-audit MUST_FIX (missing contract fixture) and both SHOULD_FIX items resolved and classified. Remaining risk is operational: stability thresholds (2.0s/5tokens) require real-meeting PoC tuning before RECORD_PARTICIPANT_LANES is enabled (default off).",
+  "blocking_findings": []
+}
