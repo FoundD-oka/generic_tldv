@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-07-09T23:32:10.116573+00:00",
+  "timestamp": "2026-07-10T05:33:56.373810+00:00",
   "status": "pass",
   "window_tasks": [
-    "speaker-attribution-voiceprint",
     "issue-25-audio-lanes",
-    "issue-26-lane-diarization"
+    "issue-26-lane-diarization",
+    "issue-27-voiceprint"
   ],
   "triggered_categories": [],
   "unresolved_categories": []
