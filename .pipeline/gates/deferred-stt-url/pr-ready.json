@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-07-09T20:59:26.146691+00:00",
+  "timestamp": "2026-07-10T05:33:56.626425+00:00",
   "task_id": "deferred-stt-url",
   "size": "S",
   "status": "ready",
@@ -27,7 +27,7 @@
     {
       "check": "adapter-contract",
       "ok": true,
-      "detail": "status=pass count=4"
+      "detail": "status=pass count=5"
     },
     {
       "check": "backcast-contracts",

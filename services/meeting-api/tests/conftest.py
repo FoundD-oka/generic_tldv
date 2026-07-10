@@ -127,6 +127,11 @@ class MockResult:
     def scalar_one_or_none(self):
         return self._items[0] if self._items else None
 
+    def scalar_one(self):
+        if not self._items:
+            raise RuntimeError("MockResult.scalar_one(): no rows returned")
+        return self._items[0]
+
     def scalar(self):
         return self._scalar_value
 

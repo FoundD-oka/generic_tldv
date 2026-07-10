@@ -1,0 +1,121 @@
+{
+  "schema_version": "1.0",
+  "task_id": "issue-27-voiceprint",
+  "commit": "aae86b5",
+  "final_verdicts": [
+    {
+      "id": "BUG-001",
+      "is_real_bug": true,
+      "severity": "critical",
+      "category": "security",
+      "reasoning": "Verified directly: webhook_delivery.py's _INTERNAL_DATA_KEYS (lines 67-72) does not include 'speaker_suggestions', while schemas.py's independent MEETING_DATA_REDACTED_KEYS (line 33) does — two unsynchronized redaction lists for the same field, and only one of them was updated in this commit. clean_meeting_data() is the sole filter webhooks.py applies to meeting.data before both send_completion_webhook and send_status_webhook payloads. Traced the actual timing: the first completion webhook fires from post_meeting.py before final transcription/matching runs, so it cannot leak. But callbacks.py:785-794 has a genuine 'late bot callback' branch that fires schedule_status_webhook_task on the meeting's current (possibly post-matching) meeting.data when a stray non-terminal status arrives for an already-processed meeting with stop_requested=true. This is a narrow but real trigger, and the structural gap (a third exit path for meeting.data that was never updated to match the new redaction list) is unambiguous regardless of trigger frequency. Leaking profile_id (an internal correlatable identifier for enrolled biometric data) to an arbitrary user-configured external URL is a genuine biometric-PII exposure, warranting critical severity despite the narrow window.",
+      "action_required": "fix-immediately",
+      "fix_suggestion": "Add 'speaker_suggestions' to _INTERNAL_DATA_KEYS in webhook_delivery.py, or better, make clean_meeting_data() delegate to schemas.MEETING_DATA_REDACTED_KEYS so there is one source of truth. Add a regression test asserting a populated speaker_suggestions key never survives clean_meeting_data()/a built webhook envelope."
+    },
+    {
+      "id": "BUG-002",
+      "is_real_bug": true,
+      "severity": "critical",
+      "category": "race-condition",
+      "reasoning": "Verified directly: database.py:75 sets expire_on_commit=False, so meeting.data is never refreshed from the DB after a commit — it stays whatever was last assigned in-process. final_transcription.py releases the .with_for_update() row lock at its own success commit, then calls run_voiceprint_matching_followup(meeting, db, ...) using the SAME meeting ORM object and the SAME long-lived db session (opened by _sweep_final_transcription_jobs's `async with db_session_factory() as db:`), for up to MATCH_TOTAL_BUDGET_S (120s) of network/ffmpeg work with no re-lock. Meanwhile update_meeting_speakers and reject_speaker_suggestion each open a brand-new per-request session, SELECT...FOR UPDATE, and commit independently. _run_matching's final write (voiceprint_matching.py:522-527) does `data = dict(meeting.data or {})` — reading the stale in-process attribute, not a fresh DB row — then `meeting.data = data; await db.commit()`, which is a full JSONB column overwrite with no optimistic-lock/version check. A concurrent PATCH landing in that window is silently discarded (lost update), or an already-rejected suggestion can be resurrected. This can destroy real user data (speaker_corrections), not just voiceprint state.",
+      "action_required": "fix-immediately",
+      "fix_suggestion": "Before the final write in _run_matching (and the mode='replace' stale-clear write), re-SELECT the meeting row with .with_for_update() in a short scoped transaction, and merge only the speaker_suggestions key into the freshly-read data rather than overwriting the whole dict captured earlier. At minimum, re-fetch meeting.data immediately before each write."
+    },
+    {
+      "id": "BUG-003",
+      "is_real_bug": true,
+      "severity": "medium",
+      "category": "config-mismatch",
+      "reasoning": "Verified directly via grep: voiceprint_matching.py reads unprefixed os.getenv('MATCH_TOTAL_BUDGET_S', '120') and os.getenv('EMBED_TIMEOUT_S', '15'), while docker-compose.yml:358-359 and env-example:222,224 only set/document the VOICEPRINT_-prefixed names (VOICEPRINT_MATCH_TOTAL_BUDGET_S, VOICEPRINT_EMBED_TIMEOUT_S). No unprefixed fallback exists anywhere, so an operator editing .env per the documented variable names has zero effect on the running process — it silently keeps the hardcoded 120s/15s defaults. Confirmed VOICEPRINT_SUGGEST_THRESHOLD/VOICEPRINT_RETENTION_MONTHS are correctly prefixed and do match compose/env-example, so this is a specific inconsistency, not a systemic convention. Also confirmed VOICEPRINT_MIN_CLIP_SECONDS/VOICEPRINT_MAX_CLIP_SECONDS/VOICEPRINT_FFMPEG_TIMEOUT_SECONDS have no compose/env-example entry at all.",
+      "action_required": "fix-recommended",
+      "fix_suggestion": "Rename the env vars read in voiceprint_matching.py to the already-established VOICEPRINT_-prefixed forms, and add the three clip-policy env vars to docker-compose.yml + env-example for consistency."
+    },
+    {
+      "id": "BUG-004",
+      "is_real_bug": true,
+      "severity": "medium",
+      "category": "logic-error",
+      "reasoning": "Verified directly: handleAcceptSuggestion (transcript-viewer.tsx:438-444) calls applySpeakerUpdate(buildSpeakerRename(...)) — an ordinary rename payload indistinguishable from a manual free-text rename at the PATCH level. update_meeting_speakers' rename loop (meetings.py) unconditionally appends {cluster_id, display_name, operation:'rename'} to affected_clusters for every rename, with no flag distinguishing 'accepted an existing voiceprint match' from 'typed a brand-new name' (the pending_suggestions check that logs a 'confirm' audit event is a side effect, not reflected in the response). getRenameEnrollCandidates filters purely on operation === 'rename', so the enroll-offer toast fires identically for both cases — directly contradicting the commit's stated scope ('enroll offer after manual rename only') and creating redundant enrollment prompts (and, combined with BUG-009's missing unique constraint, a path to duplicate SpeakerProfile rows for the same person).",
+      "action_required": "fix-recommended",
+      "fix_suggestion": "Tag the affected_clusters entry with a confirm/pending-suggestion marker (or the matched profile_id) when update_meeting_speakers finds a pending suggestion for op.from_cluster, and have getRenameEnrollCandidates skip those entries."
+    },
+    {
+      "id": "BUG-005",
+      "is_real_bug": true,
+      "severity": "medium",
+      "category": "logic-error",
+      "reasoning": "Verified directly in sweeps.py:936-942: _voiceprint_retention_last_run (a process-lifetime module global) is stamped to `now` BEFORE the `async with db_session_factory() as db:` block that runs the actual (fallible) DELETE-candidate query. start_sweeps' calling loop (sweeps.py ~1054-1062) wraps the call in try/except that only logs — no finally/reset on failure. A single transient DB error on any invocation therefore disables the 24-month PII retention sweep for a full 86400s day, repeating indefinitely if the failure is persistent, undermining the retention guarantee the sweep exists to enforce.",
+      "action_required": "fix-recommended",
+      "fix_suggestion": "Only update _voiceprint_retention_last_run after the sweep body completes successfully (success branch or finally-with-success-flag), or track last-attempt vs last-success separately so repeated failures are visible/retried sooner."
+    },
+    {
+      "id": "BUG-006",
+      "is_real_bug": true,
+      "severity": "medium",
+      "category": "resource-leak",
+      "reasoning": "Verified directly in voiceprint-service/main.py:282-306: the Content-Length pre-check (best-effort, client-supplied, absent under chunked transfer) is followed unconditionally by `audio_bytes = await _extract_audio_bytes(request)`, which fully buffers the body via request.body()/request.form() with no incremental cap, and only THEN checks `len(audio_bytes) > VOICEPRINT_MAX_AUDIO_BYTES`. No ASGI-level max-body-size middleware exists in main.py, Dockerfile, or the compose definition. The adapter manifest documents the 413 cap as a validated safety boundary, but the real enforcement point is post-hoc. Risk is somewhat bounded by the service being internal-compose-network-only with a controlled caller (meeting-api sending small clips), but the code-level gap is real and could exhaust the 1.5g-limited container's memory from a misbehaving/compromised caller.",
+      "action_required": "fix-recommended",
+      "fix_suggestion": "Enforce the cap while streaming (read the ASGI receive stream incrementally and abort once VOICEPRINT_MAX_AUDIO_BYTES is exceeded), or add a reverse-proxy/ASGI max-body-size guard in front of the service."
+    },
+    {
+      "id": "BUG-007",
+      "is_real_bug": true,
+      "severity": "low",
+      "category": "resource-leak",
+      "reasoning": "Verified directly in voiceprint_matching.py:229-237: tempfile.mkstemp creates the file on disk immediately (line 234) before the download call; if storage.download_file_to_path (storage.py — default/S3/GCS implementations can all raise on network/credential/missing-object errors) raises, _download_master_to_tempfile propagates without returning path. Its only caller, embed_clip_from_ranges, only wraps code AFTER `src_path = await _download_master_to_tempfile(...)` in try/finally: os.unlink(src_path) — so a download failure leaves src_path unbound and the finally block never runs, leaking one empty temp file per failed attempt for the container's lifetime.",
+      "action_required": "fix-recommended",
+      "fix_suggestion": "Wrap mkstemp+download in a try/except that unlinks the temp file on any exception before re-raising."
+    },
+    {
+      "id": "BUG-008",
+      "is_real_bug": true,
+      "severity": "low",
+      "category": "security",
+      "reasoning": "Verified directly in voiceprint-service/main.py:201-203: `provided != token` is a plain Python string comparison, which short-circuits at the first mismatched byte — a textbook timing side channel on a bearer-token credential. secrets.compare_digest is not imported or used anywhere in the file. Severity is fairly rated low given the service is intended to sit on an internal compose-only network, consistent with the finder's own caveat.",
+      "action_required": "fix-recommended",
+      "fix_suggestion": "Use secrets.compare_digest(provided, token)."
+    },
+    {
+      "id": "BUG-009",
+      "is_real_bug": true,
+      "severity": "low",
+      "category": "race-condition",
+      "reasoning": "Verified directly in voiceprints.py (enroll_from_cluster, ~line 114-123): the find-or-create SELECT on (user_id, display_name) has no .with_for_update(), and models.py's SpeakerProfile (line 199-213) has only a non-unique Index on user_id, no unique constraint on (user_id, display_name). Two concurrent enroll-from-cluster calls with the same display_name (double-click, or two near-simultaneous meetings) can both pass the SELECT before either commits and both INSERT, producing duplicate identity profiles that _load_user_voiceprints then treats as unrelated candidates.",
+      "action_required": "fix-recommended",
+      "fix_suggestion": "Add a unique constraint on (user_id, display_name) in speaker_profiles; catch the resulting IntegrityError and retry the SELECT, or use INSERT ... ON CONFLICT DO NOTHING + re-SELECT."
+    },
+    {
+      "id": "BUG-010",
+      "is_real_bug": true,
+      "severity": "low",
+      "category": "state-management",
+      "reasoning": "Verified directly in transcript-viewer.tsx: rejectedSuggestionClusters (line 144) is a useState<Set<string>> only ever added-to on reject (line 451) and only removed on the reject API call's own failure (rollback). No effect clears/reconciles it against a fresh transcript fetch or meeting.id change. It gates the suggestion overlay purely by raw cluster_id (line ~1179-1183). Since mode='replace' matching explicitly clears and recomputes speaker_suggestions and can reuse the same lane-derived cluster_id, a genuinely new suggestion for a previously-rejected cluster stays suppressed for the life of the mounted component instance.",
+      "action_required": "fix-recommended",
+      "fix_suggestion": "Clear/filter rejectedSuggestionClusters on meeting.id change or transcript refetch/replace, or key rejection off (cluster_id, run_completed_at) instead of cluster_id alone."
+    },
+    {
+      "id": "BUG-011",
+      "is_real_bug": true,
+      "severity": "low",
+      "category": "logic-error",
+      "reasoning": "Verified directly in voiceprint_matching.py:293-301 (_cosine_similarity): guards the zero-norm case but performs no isfinite/NaN check; np.linalg.norm/np.dot propagate NaN if either embedding vector contains one (plausible via _embed_clip's [float(x) for x in embedding] on a malformed service response, since json.loads accepts NaN tokens by default). max(scored, key=lambda t: t[2]) (line 486) with no pre-filter: Python's max is a left-to-right fold using '>' comparisons, and any comparison against NaN is False, so an order-dependent NaN entry can incorrectly 'win' the fold over a legitimately higher real score. One correction worth noting (raised by the adversarial pass and independently verified): since NaN >= threshold is also False, the practical failure mode when NaN wins is a silently dropped/skipped suggestion and NaN pollution of the match_attempt audit log, not literally 'a wrong speaker gets suggested' as the finder's title states — the underlying missing-isfinite-filter defect is nonetheless real.",
+      "action_required": "fix-recommended",
+      "fix_suggestion": "Filter out non-finite similarity scores (math.isfinite) before taking max(), and treat an embedding that produces any non-finite score as embed_failed/skip."
+    },
+    {
+      "id": "BUG-012",
+      "is_real_bug": true,
+      "severity": "low",
+      "category": "logic-error",
+      "reasoning": "Verified directly in meetings.py: the rename branch (~line 2141-2154) explicitly checks pending_suggestions.get(op.from_cluster) and does del pending_suggestions[op.from_cluster] plus a 'confirm' audit event when a pending suggestion existed. The merge branch (~line 2161-2201) has no equivalent — it updates clusters_map/aliases and affected_clusters but never reads or mutates pending_suggestions/data['speaker_suggestions'] for any merged-away source cluster, and `data['speaker_suggestions'] = pending_suggestions` is only written when suggestions_changed (set only by the rename branch), so a merge never even re-persists the (unmodified) dict. Confirmed the mitigating detail both reviewers noted: _overlay_speaker_suggestions requires speaker_mapping_status=='needs_review', which the merge's own UPDATE clears for affected rows, so today this is an orphaned, un-audited key in the JSONB blob rather than a user-visible leak — a latent correctness gap, asymmetric with the rename branch's handling.",
+      "action_required": "fix-recommended",
+      "fix_suggestion": "Pop/clear any pending suggestion for every cluster in op.clusters inside the merge loop too, symmetric with the rename branch, and record a confirm/reject-equivalent audit event for consistency."
+    }
+  ],
+  "summary": {
+    "total_reported": 12,
+    "confirmed_bugs": 12,
+    "false_positives": 0,
+    "critical_issues": 2
+  }
+}

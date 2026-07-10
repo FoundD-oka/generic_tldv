@@ -11,5 +11,7 @@ alembic>=1.13
 python-multipart>=0.0.20
 boto3>=1.34
 google-cloud-storage>=2.16
+numpy>=1.26                      # issue #27 — voiceprint cosine similarity
+cryptography>=42.0                # issue #27 — voiceprint embedding encryption (Fernet)
 
 Mako>=1.3.12

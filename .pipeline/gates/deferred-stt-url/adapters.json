@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-07-09T20:59:25.984877+00:00",
+  "timestamp": "2026-07-10T05:33:56.461111+00:00",
   "status": "pass",
-  "adapter_count": 4,
+  "adapter_count": 5,
   "adapters": [
     {
       "path": ".pipeline/adapters/claude-fable-cli.adapter.json",
@@ -20,6 +20,11 @@
     },
     {
       "path": ".pipeline/adapters/soniox-stt.adapter.json",
+      "status": "pass",
+      "errors": []
+    },
+    {
+      "path": ".pipeline/adapters/voiceprint-embedder.adapter.json",
       "status": "pass",
       "errors": []
     }

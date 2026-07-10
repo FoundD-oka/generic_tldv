@@ -19,6 +19,7 @@ import pytest
 from meeting_api.collector.endpoints import (
     _derive_speaker_mapping_status,
     _get_full_transcript_segments,
+    _overlay_speaker_suggestions,
 )
 
 
@@ -158,3 +159,137 @@ async def test_redis_segment_keeps_explicit_wire_status_when_derivation_is_none(
 
     by_id = {s.segment_id: s for s in segments}
     assert by_id["seg-r2"].speaker_mapping_status == "some_future_status"
+
+
+# ---------------------------------------------------------------------------
+# Issue #27 Phase 4 — voiceprint suggestion overlay
+# ---------------------------------------------------------------------------
+
+
+def _suggestion_payload(**overrides):
+    payload = {
+        "candidate_display_name": "田中",
+        "profile_id": 42,
+        "similarity": 0.83,
+        "status": "suggested",
+        "run_completed_at": "2026-07-10T00:00:00",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_overlay_adds_minimal_payload_without_profile_id():
+    """plan §6 露出制御 — profile_id must never reach the segment-level
+    payload, only candidate_display_name/similarity/status."""
+    from meeting_api.schemas import TranscriptionSegment
+
+    seg = TranscriptionSegment(
+        start=0.0, end=1.0, text="hi", language="ja",
+        speaker=None, speaker_cluster="lane:aaaaaaaaaa:spk0",
+        speaker_mapping_status="needs_review",
+    )
+    _overlay_speaker_suggestions([seg], {"lane:aaaaaaaaaa:spk0": _suggestion_payload()})
+
+    assert seg.speaker_suggestion == {
+        "candidate_display_name": "田中",
+        "similarity": 0.83,
+        "status": "suggested",
+    }
+    assert "profile_id" not in seg.speaker_suggestion
+
+
+def test_overlay_skips_segment_not_needing_review():
+    from meeting_api.schemas import TranscriptionSegment
+
+    seg = TranscriptionSegment(
+        start=0.0, end=1.0, text="hi", language="ja",
+        speaker="花子", speaker_cluster="lane:aaaaaaaaaa:spk0",
+        speaker_mapping_status=None,
+    )
+    _overlay_speaker_suggestions([seg], {"lane:aaaaaaaaaa:spk0": _suggestion_payload()})
+    assert seg.speaker_suggestion is None
+
+
+def test_overlay_skips_rejected_or_confirmed_entries():
+    from meeting_api.schemas import TranscriptionSegment
+
+    seg = TranscriptionSegment(
+        start=0.0, end=1.0, text="hi", language="ja",
+        speaker=None, speaker_cluster="lane:aaaaaaaaaa:spk0",
+        speaker_mapping_status="needs_review",
+    )
+    _overlay_speaker_suggestions(
+        [seg], {"lane:aaaaaaaaaa:spk0": _suggestion_payload(status="rejected")},
+    )
+    assert seg.speaker_suggestion is None
+
+
+@pytest.mark.asyncio
+async def test_overlay_applies_through_pg_only_path():
+    """Overlay runs AFTER the PG/Redis merge, so it must apply to a
+    PG-persisted segment when Redis has nothing live for it."""
+    db_segments = [
+        _pg_segment(speaker_cluster="lane:aaaaaaaaaa:spk0", speaker=None, segment_id="seg-1"),
+    ]
+    db = AsyncMock()
+    db.execute = AsyncMock(side_effect=[_Result([]), _Result(db_segments)])
+    redis_c = AsyncMock()
+    redis_c.hgetall = AsyncMock(return_value={})
+
+    meeting = SimpleNamespace(data={
+        "speaker_suggestions": {"lane:aaaaaaaaaa:spk0": _suggestion_payload()},
+    })
+
+    segments = await _get_full_transcript_segments(1, db, redis_c, meeting=meeting)
+    by_id = {s.segment_id: s for s in segments}
+    assert by_id["seg-1"].speaker_suggestion["candidate_display_name"] == "田中"
+
+
+@pytest.mark.asyncio
+async def test_overlay_survives_redis_wins_merge():
+    """Codex critique FC-8: Redis wins over PG on the same segment_id — the
+    overlay must still apply to whatever the FINAL merged segment is, not
+    just the PG branch."""
+    db_segments = [
+        _pg_segment(speaker_cluster="lane:aaaaaaaaaa:spk0", speaker=None, segment_id="seg-1"),
+    ]
+    db = AsyncMock()
+    db.execute = AsyncMock(side_effect=[_Result([]), _Result(db_segments)])
+    redis_c = AsyncMock()
+    redis_c.hgetall = AsyncMock(return_value={
+        "seg-1": json.dumps({
+            "segment_id": "seg-1",
+            "text": "ライブ更新テキスト",
+            "start_time": 0.0,
+            "end_time": 1.0,
+            "speaker": None,
+            "speaker_cluster": "lane:aaaaaaaaaa:spk0",
+        }),
+    })
+
+    meeting = SimpleNamespace(data={
+        "speaker_suggestions": {"lane:aaaaaaaaaa:spk0": _suggestion_payload()},
+    })
+
+    segments = await _get_full_transcript_segments(1, db, redis_c, meeting=meeting)
+    by_id = {s.segment_id: s for s in segments}
+    # Redis-wins: the text is the live one, but the suggestion still overlays.
+    assert by_id["seg-1"].text == "ライブ更新テキスト"
+    assert by_id["seg-1"].speaker_suggestion["candidate_display_name"] == "田中"
+
+
+@pytest.mark.asyncio
+async def test_overlay_is_noop_without_meeting_argument():
+    """Backward compatibility: callers that don't pass `meeting` (none
+    currently, but the parameter is optional) get the old behavior."""
+    db_segments = [
+        _pg_segment(speaker_cluster="lane:aaaaaaaaaa:spk0", speaker=None, segment_id="seg-1"),
+    ]
+    db = AsyncMock()
+    db.execute = AsyncMock(side_effect=[_Result([]), _Result(db_segments)])
+    redis_c = AsyncMock()
+    redis_c.hgetall = AsyncMock(return_value={})
+
+    segments = await _get_full_transcript_segments(1, db, redis_c)
+    by_id = {s.segment_id: s for s in segments}
+    assert by_id["seg-1"].speaker_suggestion is None

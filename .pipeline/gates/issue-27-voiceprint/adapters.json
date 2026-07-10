@@ -1,0 +1,32 @@
+{
+  "timestamp": "2026-07-10T05:33:05.126077+00:00",
+  "status": "pass",
+  "adapter_count": 5,
+  "adapters": [
+    {
+      "path": ".pipeline/adapters/claude-fable-cli.adapter.json",
+      "status": "pass",
+      "errors": []
+    },
+    {
+      "path": ".pipeline/adapters/codex-cli.adapter.json",
+      "status": "pass",
+      "errors": []
+    },
+    {
+      "path": ".pipeline/adapters/github.adapter.json",
+      "status": "pass",
+      "errors": []
+    },
+    {
+      "path": ".pipeline/adapters/soniox-stt.adapter.json",
+      "status": "pass",
+      "errors": []
+    },
+    {
+      "path": ".pipeline/adapters/voiceprint-embedder.adapter.json",
+      "status": "pass",
+      "errors": []
+    }
+  ]
+}
