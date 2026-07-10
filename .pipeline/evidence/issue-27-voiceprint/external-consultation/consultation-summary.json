@@ -1,0 +1,81 @@
+{
+  "schema_version": "1.1",
+  "task_id": "issue-27-voiceprint",
+  "provider": "claude-fable-cli",
+  "status": "completed",
+  "mode": "final",
+  "model": "fable",
+  "authentication_mode": "not_used",
+  "redaction_confirmed": true,
+  "prompt_hash": "sha256:736737c9f813f99a64750f9eb5c892f165db26eb739a8182a98b68266e501e5f",
+  "response_hash": "sha256:869f2e6315d1d6088ec1eb6a3f03cd551911474be3919b55bec8ba417060dab3",
+  "brief_path": ".pipeline/plans/issue-27-voiceprint/consultation-brief.md",
+  "response_path": ".pipeline/evidence/issue-27-voiceprint/external-consultation/fable.md",
+  "raw_response_path": ".pipeline/evidence/issue-27-voiceprint/external-consultation/fable-final-20260710T031113Z.raw.json",
+  "not_source_of_truth": true,
+  "session_id": "a33bd96e-10c8-403b-959e-daeb102b0b06",
+  "resumed_session": "",
+  "call_index": 1,
+  "max_calls": 5,
+  "fallback_to_codex_only": false,
+  "skip_reason": "",
+  "verdict": "SHOULD_FIX",
+  "confidence": "high",
+  "summary": "PR作成をブロックするMUST_FIXなし。PII露出制御は全出口経路(MeetingResponseシリアライザ、transcriptエンドポイント手組みdata、webhookのMEETING_DATA_REDACTED_KEYS単一ソース連合、segmentオーバーレイのprofile_id非含有、assistant-context/post_meetingフック/api-gatewayの特定キー読みのみ)で確認済み。consent不変条件はDBレベルNOT NULL FKで保証、テナント分離・disabledモード・retention sweep・transcript非遅延・match-then-discardも実コードで整合を確認。ただしBUG-002修正は不完全: 最終マージがrun開始時スナップショットのspeaker_suggestionsをキー丸ごと書き戻すため、照合ウィンドウ(最大120秒)中に併走コミットされたsuggestionのreject/confirm(いずれもエントリをpopする)が「suggested」として復活し得る。他のdataキー(rename等)は保護されており、suggest専用でPII漏洩ではないためSHOULD_FIX。",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "SHOULD_FIX",
+      "title": "BUG-002修正の残存レース: speaker_suggestionsキー内の併走reject/confirmが復活し得る",
+      "evidence": "voiceprint_matching.py:443で`suggestions = dict(data.get(\"speaker_suggestions\") or {})`をrun開始時にスナップショットし、:587-590の`_merge_speaker_suggestions_into_fresh_row`はwith_for_updateで再取得した行に対しこのスナップショット+新規エントリを`speaker_suggestions`キー丸ごと上書きする。meetings.py:2334-2340のreject(DELETE)や confirm(rename PATCH)はエントリをpopするため、照合ウィンドウ(VOICEPRINT_MATCH_TOTAL_BUDGET_S=120秒)中にコミットされたpopが最終マージで復活する。",
+      "recommendation": "`_merge_speaker_suggestions_into_fresh_row`内でfresh行の現在のsuggestionsを基点にし、このrunで新規計算したclusterエントリのみをupsertする(run開始時スナップショットを渡さない)。replace時の全消去パスは現行の空dict上書きのままで良い。併走rejectを模したfixture回帰テストを追加。"
+    },
+    {
+      "id": "F2",
+      "severity": "NOTE",
+      "title": "retention cutoffは月=30日近似(24ヶ月=720日)で暦24ヶ月よりわずかに早く削除される",
+      "evidence": "sweeps.py:943-945 `cutoff = now - timedelta(days=30 * VOICEPRINT_RETENTION_MONTHS)`。コードコメントで許容と明記済み。",
+      "recommendation": "PIIの早期削除方向の誤差であり保守的なので変更不要。PII方針文書に「約24ヶ月(720日)」と記載齟齬がないか一度だけ確認しておく。"
+    },
+    {
+      "id": "F3",
+      "severity": "NOTE",
+      "title": "meeting.data内に永続化されるsuggestionエントリはprofile_idを含むが、全出口でredaction済み",
+      "evidence": "voiceprint_matching.py:573-579でprofile_idをmeeting.dataに保存。露出はMEETING_DATA_REDACTED_KEYS(schemas.py:33)による全キー除去とオーバーレイの3フィールド限定(collector/endpoints.py:278-283)で遮断されている。",
+      "recommendation": "現状で契約を満たす。将来meeting.dataを丸ごと返す新エンドポイント/エクスポートを追加する際は必ずredact_meeting_data経由にする、という一文をハーネス(hd-log/レビュー観点)に残すと再発防止になる。"
+    }
+  ],
+  "adoption_status": [
+    {
+      "id": "F1",
+      "severity": "SHOULD_FIX",
+      "status": "adopted",
+      "note": "Entry-level merge: fresh row's suggestions + only this run's new entries; concurrent reject/confirm stays popped; 3 regression tests verified fail-before/pass-after — 495 passed",
+      "updated_at": "2026-07-10T03:16:29.805084+00:00"
+    },
+    {
+      "id": "F2",
+      "severity": "NOTE",
+      "status": "deferred",
+      "note": "Retention cutoff 30-day-month approximation deletes slightly earlier than calendar 24 months — conservative direction (earlier deletion is privacy-safe); calendar-exact cutoff deferred",
+      "updated_at": "2026-07-10T03:11:57.346932+00:00"
+    },
+    {
+      "id": "F3",
+      "severity": "NOTE",
+      "status": "already_handled",
+      "note": "profile_id persisted inside meeting.data suggestions is redacted at every exit path (verified by consultation itself); segment payload never carries it",
+      "updated_at": "2026-07-10T03:11:57.388444+00:00"
+    }
+  ],
+  "open_must_fix_count": 0,
+  "adopted_points": [
+    "BUG-002修正の残存レース: speaker_suggestionsキー内の併走reject/confirmが復活し得る",
+    "meeting.data内に永続化されるsuggestionエントリはprofile_idを含むが、全出口でredaction済み"
+  ],
+  "rejected_points": [],
+  "needs_verification": [
+    "F1: `_merge_speaker_suggestions_into_fresh_row`内でfresh行の現在のsuggestionsを基点にし、このrunで新規計算したclusterエントリのみをupsertする(run開始時スナップショットを渡さない)。replace時の全消去パスは現行の空dict上書きのままで良い。併走rejectを模したfixture回帰テストを追加。"
+  ],
+  "notes": "Fable CLI advisory review evidence. Classify each finding with the classify command after reflecting or rejecting it."
+}
