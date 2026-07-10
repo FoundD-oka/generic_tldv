@@ -195,6 +195,37 @@ WAKE_CHAT_EMPTY_PROMPT=呼ばれたよ。要約、整理、チャット内容の
 BOT_ECHO_COOLDOWN_MS=2000
 WAKE_STT_FAST_COMMAND_STABILITY_MS=500
 
+# Issue #27 Phase 4 — 声紋(voiceprint)によるsuggest専用の話者自動命名候補。
+# PII注意: 声紋は生体情報。voiceprint-serviceはローカルCPUで埋め込みを計算し
+# 音声・ベクトルを一切保存/ログ出力しない（外部送信もしない）。保存責務・暗号化・
+# 同意記録・retentionはmeeting-api側（voiceprints/voiceprint_consentsテーブル）
+# が担う。auto適用は本フェーズの対象外（suggest→人間確認のみ、issue #27 plan参照）。
+# voiceprint-serviceを起動するにはcomposeを`--profile voiceprint`で実行すること。
+VOICEPRINT_SERVICE_URL=http://voiceprint-service:8000
+# meeting-api <-> voiceprint-service間の認証トークン。voiceprint-service側の
+# VOICEPRINT_SERVICE_TOKENと同じ値を設定する。未設定のまま
+# VOICEPRINT_ALLOW_UNAUTHENTICATED=trueにしない限りvoiceprint-serviceは503を返す。
+VOICEPRINT_SERVICE_TOKEN=
+# voiceprint-service自身のトークン設定（上のVOICEPRINT_SERVICE_TOKENと揃えること）
+#VOICEPRINT_ALLOW_UNAUTHENTICATED=false
+# 声紋ベクトルの暗号化鍵（Fernet、meeting-api側でのみ使用）。未設定の場合、
+# 声紋機能はdisabledモードに落ちる（enrollは503、matchingはskip+audit、
+# 既存行は復号を試みず不変のまま）。生成例: python -c
+# "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+VOICEPRINT_ENCRYPTION_KEY=
+# コサイン類似度のsuggest閾値（0.75-0.80の作業仮説レンジ内、実測前の初期値）
+VOICEPRINT_SUGGEST_THRESHOLD=0.78
+# 未マッチ声紋の保持期間（月）。超過分はretention sweepで削除+audit記録
+VOICEPRINT_RETENTION_MONTHS=24
+# 1会議あたりのvoiceprint matching全体の時間予算（秒）。超過時はskip+audit
+# （transcript本体の成功/失敗判定には一切影響しない）
+VOICEPRINT_MATCH_TOTAL_BUDGET_S=120
+# voiceprint-serviceへの/embed呼び出し1件あたりのタイムアウト（秒）
+VOICEPRINT_EMBED_TIMEOUT_S=15
+# voiceprint-service自体のリソース設定（`--profile voiceprint`で起動する場合）
+#VOICEPRINT_MAX_AUDIO_BYTES=20971520
+#VOICEPRINT_MAX_ACTIVE_REQUESTS=2
+
 # Agent API — Claude credentials (optional, for agent-api service)
 CLAUDE_CREDENTIALS_PATH=
 CLAUDE_JSON_PATH=

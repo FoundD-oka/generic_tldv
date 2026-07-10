@@ -187,3 +187,26 @@ describe("resolveSpeakerLabelByKey (F2 — filter dropdown/badge display path)",
     expect(displayed).not.toContain("lane:");
   });
 });
+
+// issue #27 Phase4: a voiceprint match candidate (speaker_suggestion) rides
+// alongside a needs_review sub-cluster segment, but must never be auto-
+// applied to the identity display label — the candidate only shows in the
+// suggestion chip until the user explicitly approves it (rename flow).
+describe("speaker_suggestion never overrides the identity display label (issue #27 Phase4)", () => {
+  it("keeps the 要確認の話者X label even when a suggestion is present", () => {
+    const suggested = {
+      speaker: "",
+      speaker_cluster: "lane:abc:1",
+      speaker_mapping_status: "needs_review",
+      speaker_suggestion: {
+        candidate_display_name: "田中",
+        similarity: 0.87,
+        status: "suggested" as const,
+      },
+    };
+    const labels = buildSpeakerDisplayLabels([suggested]);
+
+    expect(getSpeakerDisplayLabel(suggested, labels)).toBe("要確認の話者A");
+    expect(getSpeakerDisplayLabel(suggested, labels)).not.toBe("田中");
+  });
+});

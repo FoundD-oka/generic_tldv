@@ -26,6 +26,19 @@ ACCEPTED_LANGUAGE_CODES = {
 # --- Allowed Tasks ---
 ALLOWED_TASKS = {"transcribe", "translate"}
 
+# --- Issue #27 Phase 4 — meeting.data keys that must never reach a generic
+# API response. speaker_suggestions carries candidate names/similarity
+# scores keyed by cluster and is only meant to be read through the
+# segment-level `speaker_suggestion` minimal payload (plan §6 露出制御).
+MEETING_DATA_REDACTED_KEYS = frozenset({"webhook_secret", "speaker_suggestions"})
+
+
+def redact_meeting_data(data: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Strip keys that must never leave meeting.data via a generic response."""
+    if data is None:
+        return None
+    return {k: v for k, v in data.items() if k not in MEETING_DATA_REDACTED_KEYS}
+
 # --- Allowed Transcription Tiers ---
 ALLOWED_TRANSCRIPTION_TIERS = {"realtime", "deferred"}
 
@@ -975,10 +988,10 @@ class MeetingResponse(BaseModel): # Not inheriting from MeetingBase anymore to a
 
     @field_serializer('data')
     def exclude_webhook_secret_from_data(self, data: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-        """Exclude webhook_secret from API responses for security."""
-        if data is None:
-            return None
-        return {k: v for k, v in data.items() if k != 'webhook_secret'}
+        """Exclude webhook_secret and speaker_suggestions from API responses
+        (the latter per issue #27 Phase 4 plan §6 露出制御 — see
+        redact_meeting_data)."""
+        return redact_meeting_data(data)
 
     class Config:
         from_attributes = True
@@ -1060,6 +1073,14 @@ class TranscriptionSegment(BaseModel):
     track_id: Optional[str] = Field(None, description="Audio track identity when provided by the bot")
     speaker_cluster: Optional[str] = Field(None, description="Acoustic cluster id from STT diarization (anonymous, per-meeting)")
     speaker_auto: Optional[str] = Field(None, description="Original auto-assigned speaker label (undo baseline for manual corrections)")
+    speaker_suggestion: Optional[Dict[str, Any]] = Field(
+        None,
+        description=(
+            "Issue #27 Phase 4 voiceprint auto-naming candidate for this "
+            "segment's cluster: {candidate_display_name, similarity, status}. "
+            "Deliberately excludes profile_id (plan §6 露出制御)."
+        ),
+    )
 
     @field_validator('language')
     @classmethod

@@ -347,3 +347,253 @@ async def test_rename_of_merged_representative_covers_source_clusters(client, mo
     corrections = meeting.data["speaker_corrections"]
     assert corrections["clusters"] == {"1": "田中", "3": "田中"}
     assert corrections["aliases"] == {"3": "1"}  # merge group itself is kept
+
+
+# ---------------------------------------------------------------------------
+# Issue #27 Phase 4 — affected_clusters (plan §8 / Codex critique #11)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_rename_reports_affected_cluster_for_from_cluster(client, mock_db):
+    meeting = _completed_meeting()
+    mock_db.execute = AsyncMock(side_effect=[
+        MockResult([meeting]),
+        UpdateResult(rowcount=3),
+        MockResult([("田中",)]),
+    ])
+    p1, p2 = _patch_flags()
+    with p1, p2, patch(
+        "meeting_api.final_transcription._clear_live_transcript_cache", new=AsyncMock(return_value=True)
+    ):
+        resp = await client.patch(
+            f"/meetings/{TEST_MEETING_ID}/transcripts/speakers",
+            json={"rename": [{"from_cluster": "1", "to_name": "田中"}]},
+        )
+    assert resp.status_code == 200
+    assert resp.json()["affected_clusters"] == [
+        {"cluster_id": "1", "display_name": "田中", "operation": "rename"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_rename_by_name_reports_no_affected_cluster(client, mock_db):
+    """Legacy from_name rename targets rows without a speaker_cluster —
+    there is no cluster identity to echo, by design."""
+    meeting = _completed_meeting()
+    mock_db.execute = AsyncMock(side_effect=[
+        MockResult([meeting]),
+        UpdateResult(rowcount=2),
+        MockResult([("鈴木",)]),
+    ])
+    p1, p2 = _patch_flags()
+    with p1, p2, patch(
+        "meeting_api.final_transcription._clear_live_transcript_cache",
+        new=AsyncMock(return_value=True),
+    ):
+        resp = await client.patch(
+            f"/meetings/{TEST_MEETING_ID}/transcripts/speakers",
+            json={"rename": [{"from_name": "Unknown", "to_name": "鈴木"}]},
+        )
+    assert resp.status_code == 200
+    assert resp.json()["affected_clusters"] == []
+
+
+@pytest.mark.asyncio
+async def test_merge_reports_all_source_and_representative_clusters(client, mock_db):
+    meeting = _completed_meeting()
+    mock_db.execute = AsyncMock(side_effect=[
+        MockResult([meeting]),
+        UpdateResult(rowcount=5),
+        MockResult([("佐藤",)]),
+    ])
+    p1, p2 = _patch_flags()
+    with p1, p2, patch(
+        "meeting_api.final_transcription._clear_live_transcript_cache",
+        new=AsyncMock(return_value=True),
+    ):
+        resp = await client.patch(
+            f"/meetings/{TEST_MEETING_ID}/transcripts/speakers",
+            json={"merge": [{"clusters": ["1", "3"], "to_name": "佐藤"}]},
+        )
+    assert resp.status_code == 200
+    affected = {(a["cluster_id"], a["operation"]) for a in resp.json()["affected_clusters"]}
+    assert affected == {("1", "merge"), ("3", "merge")}
+
+
+@pytest.mark.asyncio
+async def test_merge_with_explicit_to_cluster_outside_source_list_reports_it_too(client, mock_db):
+    meeting = _completed_meeting()
+    mock_db.execute = AsyncMock(side_effect=[
+        MockResult([meeting]),
+        UpdateResult(rowcount=5),
+        MockResult([("佐藤",)]),
+    ])
+    p1, p2 = _patch_flags()
+    with p1, p2, patch(
+        "meeting_api.final_transcription._clear_live_transcript_cache",
+        new=AsyncMock(return_value=True),
+    ):
+        resp = await client.patch(
+            f"/meetings/{TEST_MEETING_ID}/transcripts/speakers",
+            json={"merge": [{"clusters": ["1", "3"], "to_name": "佐藤", "to_cluster": "9"}]},
+        )
+    assert resp.status_code == 200
+    affected = {a["cluster_id"] for a in resp.json()["affected_clusters"]}
+    assert affected == {"1", "3", "9"}
+
+
+@pytest.mark.asyncio
+async def test_reassign_with_to_cluster_reports_it(client, mock_db):
+    meeting = _completed_meeting()
+    mock_db.execute = AsyncMock(side_effect=[
+        MockResult([meeting]),
+        UpdateResult(rowcount=2),
+        MockResult([("山田",)]),
+    ])
+    p1, p2 = _patch_flags()
+    with p1, p2, patch(
+        "meeting_api.final_transcription._clear_live_transcript_cache",
+        new=AsyncMock(return_value=True),
+    ):
+        resp = await client.patch(
+            f"/meetings/{TEST_MEETING_ID}/transcripts/speakers",
+            json={"reassign": [{
+                "segment_ids": ["deferred:42:5:10.000"],
+                "to_name": "山田",
+                "to_cluster": "2",
+            }]},
+        )
+    assert resp.status_code == 200
+    assert resp.json()["affected_clusters"] == [
+        {"cluster_id": "2", "display_name": "山田", "operation": "reassign"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_reassign_without_to_cluster_reports_no_affected_cluster(client, mock_db):
+    meeting = _completed_meeting()
+    mock_db.execute = AsyncMock(side_effect=[
+        MockResult([meeting]),
+        UpdateResult(rowcount=2),
+        MockResult([("山田",)]),
+    ])
+    p1, p2 = _patch_flags()
+    with p1, p2, patch(
+        "meeting_api.final_transcription._clear_live_transcript_cache",
+        new=AsyncMock(return_value=True),
+    ):
+        resp = await client.patch(
+            f"/meetings/{TEST_MEETING_ID}/transcripts/speakers",
+            json={"reassign": [{"segment_ids": ["deferred:42:5:10.000"], "to_name": "山田"}]},
+        )
+    assert resp.status_code == 200
+    assert resp.json()["affected_clusters"] == []
+
+
+# ---------------------------------------------------------------------------
+# Issue #27 Phase 4 — DELETE .../speaker-suggestions/{cluster_id} (reject)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_reject_suggestion_clears_entry_and_audits(client, mock_db):
+    meeting = _completed_meeting(speaker_suggestions={
+        "lane:aaaaaaaaaa:spk0": {
+            "candidate_display_name": "田中", "profile_id": 7,
+            "similarity": 0.9, "status": "suggested", "run_completed_at": "now",
+        },
+    })
+    mock_db.execute = AsyncMock(return_value=MockResult([meeting]))
+    added = []
+    mock_db.add = MagicMock(side_effect=added.append)
+
+    with patch("meeting_api.meetings.attributes.flag_modified", MagicMock()):
+        resp = await client.delete(
+            f"/meetings/{TEST_MEETING_ID}/speaker-suggestions/lane:aaaaaaaaaa:spk0",
+        )
+
+    assert resp.status_code == 200
+    assert meeting.data["speaker_suggestions"] == {}
+    assert len(added) == 1
+    audit = added[0]
+    assert audit.event == "suggest"
+    assert audit.detail == {"cluster_id": "lane:aaaaaaaaaa:spk0", "action": "reject"}
+    assert audit.subject_profile_id == 7
+    mock_db.commit.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_reject_suggestion_404_when_no_pending_entry(client, mock_db):
+    meeting = _completed_meeting()
+    mock_db.execute = AsyncMock(return_value=MockResult([meeting]))
+
+    resp = await client.delete(
+        f"/meetings/{TEST_MEETING_ID}/speaker-suggestions/lane:aaaaaaaaaa:spk0",
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_reject_suggestion_404_for_other_users_meeting(client, mock_db):
+    mock_db.execute = AsyncMock(return_value=MockResult([]))
+    resp = await client.delete(
+        f"/meetings/{TEST_MEETING_ID}/speaker-suggestions/lane:aaaaaaaaaa:spk0",
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_rename_matching_pending_suggestion_audits_confirm_and_clears_it(client, mock_db):
+    """PII policy §6 requires a 'confirm' audit event — accepting a
+    suggestion has no dedicated endpoint (it IS this rename, plan §7)."""
+    meeting = _completed_meeting(speaker_suggestions={
+        "1": {
+            "candidate_display_name": "田中", "profile_id": 7,
+            "similarity": 0.91, "status": "suggested", "run_completed_at": "now",
+        },
+    })
+    mock_db.execute = AsyncMock(side_effect=[
+        MockResult([meeting]),
+        UpdateResult(rowcount=3),
+        MockResult([("田中",)]),
+    ])
+    added = []
+    mock_db.add = MagicMock(side_effect=added.append)
+    p1, p2 = _patch_flags()
+    with p1, p2, patch(
+        "meeting_api.final_transcription._clear_live_transcript_cache", new=AsyncMock(return_value=True)
+    ):
+        resp = await client.patch(
+            f"/meetings/{TEST_MEETING_ID}/transcripts/speakers",
+            json={"rename": [{"from_cluster": "1", "to_name": "田中"}]},
+        )
+    assert resp.status_code == 200
+    assert meeting.data["speaker_suggestions"] == {}
+    confirm_events = [a for a in added if getattr(a, "event", None) == "confirm"]
+    assert len(confirm_events) == 1
+    assert confirm_events[0].subject_profile_id == 7
+    assert confirm_events[0].detail["cluster_id"] == "1"
+
+
+@pytest.mark.asyncio
+async def test_rename_without_pending_suggestion_does_not_audit_confirm(client, mock_db):
+    meeting = _completed_meeting()
+    mock_db.execute = AsyncMock(side_effect=[
+        MockResult([meeting]),
+        UpdateResult(rowcount=3),
+        MockResult([("田中",)]),
+    ])
+    added = []
+    mock_db.add = MagicMock(side_effect=added.append)
+    p1, p2 = _patch_flags()
+    with p1, p2, patch(
+        "meeting_api.final_transcription._clear_live_transcript_cache", new=AsyncMock(return_value=True)
+    ):
+        resp = await client.patch(
+            f"/meetings/{TEST_MEETING_ID}/transcripts/speakers",
+            json={"rename": [{"from_cluster": "1", "to_name": "田中"}]},
+        )
+    assert resp.status_code == 200
+    assert not any(getattr(a, "event", None) == "confirm" for a in added)
+    assert "speaker_suggestions" not in meeting.data

@@ -1,6 +1,6 @@
 import sqlalchemy
 from sqlalchemy import (
-    Column, String, Text, Integer, DateTime, Float,
+    Column, String, Text, Integer, DateTime, Float, LargeBinary,
     ForeignKey, Index, UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -177,4 +177,129 @@ class CalendarEvent(Base):
         UniqueConstraint('user_id', 'external_event_id', name='uq_calendar_event_user_ext_id'),
         Index('ix_calendar_events_start_time', 'start_time'),
         Index('ix_calendar_events_status', 'status'),
+    )
+
+
+# --- Issue #27 Phase 4 — voiceprint biometric PII (speaker auto-naming) ---
+#
+# Consent invariant (plan §3 AC, PII policy §7-3): `voiceprints.consent_id`
+# is NOT NULL + FK, so inserting a voiceprint row without a corresponding
+# consent row is impossible at the DB level — not just an application check.
+# `voiceprints.consent_id` and `voiceprint_consents.subject_profile_id` both
+# cascade ON DELETE from speaker_profiles, so `DELETE /speaker-profiles/{id}`
+# fully removes voiceprints via EITHER FK path without depending on
+# Postgres's internal delete ordering between the two cascade routes
+# (Codex critique Adopted-Recommended Change #1).
+#
+# `voiceprint_audit_log` is intentionally NOT cascaded — it survives profile
+# deletion (subject_profile_id → SET NULL) so a `delete` audit event remains
+# queryable after the biometric data itself is gone (PII policy §4/§6).
+
+
+class SpeakerProfile(Base):
+    __tablename__ = "speaker_profiles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    display_name = Column(String(255), nullable=False)
+    created_at = Column(DateTime, server_default=func.now(), index=True)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    voiceprints = relationship("Voiceprint", back_populates="profile", cascade="all, delete-orphan")
+    consents = relationship("VoiceprintConsent", back_populates="profile", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index('ix_speaker_profile_user_id', 'user_id'),
+    )
+
+
+class VoiceprintConsent(Base):
+    """Consent record (PII policy §2). Required before any voiceprint for
+    `subject_profile_id` may be persisted — see the NOT NULL FK on
+    `Voiceprint.consent_id` below, which makes this a DB-level invariant."""
+    __tablename__ = "voiceprint_consents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    subject_profile_id = Column(
+        Integer, ForeignKey("speaker_profiles.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    scope = Column(String(64), nullable=False, default="会議内自動命名")
+    # "explicit_enroll" | "implicit_suggest_accept" — PII policy §2.
+    method = Column(String(32), nullable=False)
+    consented_at = Column(DateTime, server_default=func.now())
+    consented_by = Column(Integer, nullable=False)
+    revoked_at = Column(DateTime, nullable=True)
+
+    profile = relationship("SpeakerProfile", back_populates="consents")
+    voiceprints = relationship("Voiceprint", back_populates="consent")
+
+    __table_args__ = (
+        Index('ix_voiceprint_consent_user_profile', 'user_id', 'subject_profile_id'),
+    )
+
+
+class Voiceprint(Base):
+    __tablename__ = "voiceprints"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    profile_id = Column(
+        Integer, ForeignKey("speaker_profiles.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    # Consent invariant — see module docstring. NOT NULL + FK (not just an
+    # application-level check) means a bug in the enroll transaction cannot
+    # produce an orphan voiceprint with no consent record.
+    consent_id = Column(
+        Integer, ForeignKey("voiceprint_consents.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    # Reserved for future key-ring rotation (plan §4); Phase 4 always writes
+    # the single fixed key id from voiceprint_crypto.VoiceprintCrypto.key_id.
+    key_id = Column(String(32), nullable=False, default="default")
+    embedding_encrypted = Column(LargeBinary, nullable=False)
+    embedding_dim = Column(Integer, nullable=False, default=192)
+    embedding_model = Column(String(64), nullable=False, default="speechbrain-ecapa-tdnn")
+    # "explicit_enroll" | "implicit_suggest_accept"
+    source = Column(String(32), nullable=False)
+    quality = Column(Float, nullable=True)
+    # Analysis-only reference (PII policy §3) — deliberately NOT a FK to
+    # meetings/recordings; a voiceprint must never resolve back to audio.
+    source_meeting_id = Column(Integer, nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), index=True)
+    last_matched_at = Column(DateTime, nullable=True)
+
+    profile = relationship("SpeakerProfile", back_populates="voiceprints")
+    consent = relationship("VoiceprintConsent", back_populates="voiceprints")
+
+    __table_args__ = (
+        Index('ix_voiceprint_user_profile', 'user_id', 'profile_id'),
+    )
+
+
+class VoiceprintAuditLog(Base):
+    """Standalone audit trail (PII policy §6) — deliberately NOT cascaded
+    with speaker_profiles (subject_profile_id is SET NULL on delete) so a
+    `delete` event stays queryable after the biometric data is gone."""
+    __tablename__ = "voiceprint_audit_log"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    # enroll | match_attempt | suggest | confirm | delete | skip
+    event = Column(String(32), nullable=False)
+    actor_user_id = Column(Integer, nullable=True)
+    subject_profile_id = Column(
+        Integer, ForeignKey("speaker_profiles.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+    meeting_id = Column(Integer, nullable=True, index=True)
+    # Score/reason metadata ONLY — embeddings and raw vectors must never be
+    # written here (plan §2/§6, PII policy §6).
+    detail = Column(JSONB, nullable=False, default=lambda: {}, server_default=text("'{}'::jsonb"))
+    created_at = Column(DateTime, server_default=func.now(), index=True)
+
+    __table_args__ = (
+        Index('ix_voiceprint_audit_user_event', 'user_id', 'event'),
     )

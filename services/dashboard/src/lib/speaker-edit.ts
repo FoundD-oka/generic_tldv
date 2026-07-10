@@ -1,4 +1,4 @@
-import type { SpeakerUpdatePayload, TranscriptSegment } from "@/types/vexa";
+import type { AffectedCluster, SpeakerUpdatePayload, TranscriptSegment } from "@/types/vexa";
 import { getSpeakerIdentityKey } from "@/lib/speaker-label";
 
 /**
@@ -91,4 +91,17 @@ export function buildSpeakerMerge(
 export function describeSpeakerUpdate(updated: Record<string, number>): string {
   const total = (updated.rename || 0) + (updated.merge || 0) + (updated.reassign || 0);
   return `${total}件の発話の話者を更新しました`;
+}
+
+/**
+ * PATCH応答の`affected_clusters`から、暗黙登録オファー対象（issue #27
+ * Phase4, ARC-6/NH-3）のrename結果のみを抽出する。merge/reassignは対象
+ * クラスタの一意性が保証できないため、本フェーズではオファーを出さない。
+ */
+export function getRenameEnrollCandidates(
+  affectedClusters: AffectedCluster[] | undefined
+): Array<{ cluster_id: string; display_name: string }> {
+  return (affectedClusters || [])
+    .filter((cluster) => cluster.operation === "rename")
+    .map(({ cluster_id, display_name }) => ({ cluster_id, display_name }));
 }
