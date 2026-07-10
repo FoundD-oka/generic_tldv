@@ -5,6 +5,7 @@ unmatched embeddings, stale-clears on replace, respects the total budget).
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Optional
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -144,6 +145,38 @@ def test_needs_review_clusters_only_groups_unnamed_lane_sub_clusters():
 
 
 # ---------------------------------------------------------------------------
+# _download_master_to_tempfile
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_download_master_to_tempfile_unlinks_on_download_failure():
+    """BUG-007 regression: tempfile.mkstemp creates the file on disk
+    immediately, before the download call. If storage.download_file_to_path
+    raises (network/credential/missing-object error), the function used to
+    propagate without ever returning `path` — so embed_clip_from_ranges's
+    `finally: os.unlink(src_path)` never ran (it never got a src_path value)
+    and the empty temp file leaked on disk for the container's lifetime."""
+    created_paths: list[str] = []
+
+    class _FailingStorage:
+        def download_file_to_path(self, storage_path, path):
+            assert os.path.exists(path)  # mkstemp already created it
+            created_paths.append(path)
+            raise RuntimeError("simulated storage backend failure")
+
+    with patch(
+        "meeting_api.voiceprint_matching.create_storage_client",
+        return_value=_FailingStorage(),
+    ):
+        with pytest.raises(RuntimeError):
+            await vm._download_master_to_tempfile("minio", "recordings/x/master.wav", "wav")
+
+    assert created_paths, "download_file_to_path was never called"
+    assert not os.path.exists(created_paths[0]), "temp file leaked after download failure"
+
+
+# ---------------------------------------------------------------------------
 # run_voiceprint_matching_followup — orchestration
 # ---------------------------------------------------------------------------
 
@@ -258,7 +291,7 @@ async def test_followup_times_out_and_audits_budget_exceeded():
         await asyncio.sleep(10)
 
     with patch("meeting_api.voiceprint_matching._run_matching", new=_hang), \
-         patch("meeting_api.voiceprint_matching.MATCH_TOTAL_BUDGET_S", 0.01):
+         patch("meeting_api.voiceprint_matching.VOICEPRINT_MATCH_TOTAL_BUDGET_S", 0.01):
         await vm.run_voiceprint_matching_followup(
             meeting, db,
             segments=_needs_review_segments(),
@@ -282,6 +315,7 @@ async def test_followup_writes_suggestion_when_similarity_above_threshold():
     meeting = make_meeting(id=1, user_id=5, data={})
     db = _mock_db(execute_results=[
         MockResult([(_FakeVoiceprintRow(profile_id=7), "田中")]),  # _load_user_voiceprints
+        MockResult([meeting]),  # BUG-002 fix: re-SELECT immediately before the write
     ])
     crypto = _enabled_crypto()
     crypto.decrypt_embedding = MagicMock(return_value=[1.0, 0.0, 0.0])
@@ -348,6 +382,46 @@ async def test_followup_discards_embedding_when_below_threshold():
 
 
 @pytest.mark.asyncio
+async def test_followup_treats_all_nonfinite_scores_as_embed_failed():
+    """BUG-011 regression: NaN/inf similarity scores must never win max()'s
+    left-to-right fold (NaN comparisons are always False, so an
+    order-dependent NaN entry could otherwise beat a legitimately higher
+    real score). When EVERY candidate's score for a cluster is non-finite
+    (e.g. a corrupted stored embedding, or a NaN slipping through
+    _embed_clip's response parsing), the cluster must be treated as
+    embed_failed — an audited skip — never a silent drop, and never a
+    max()-on-empty-sequence crash."""
+    meeting = make_meeting(id=1, user_id=5, data={})
+    db = _mock_db(execute_results=[
+        MockResult([
+            (_FakeVoiceprintRow(profile_id=7, id=99), "田中"),
+            (_FakeVoiceprintRow(profile_id=9, id=100), "鈴木"),
+        ]),
+    ])
+    crypto = _enabled_crypto()
+    crypto.decrypt_embedding = MagicMock(return_value=[1.0, 0.0, 0.0])
+
+    with patch("meeting_api.voiceprint_matching.get_voiceprint_crypto", return_value=crypto), \
+         patch("meeting_api.voiceprint_matching.VOICEPRINT_SERVICE_URL", "http://voiceprint-service"), \
+         patch("meeting_api.voiceprint_matching.embed_clip_from_ranges",
+               new=AsyncMock(return_value=[1.0, 0.0, 0.0])), \
+         patch("meeting_api.voiceprint_matching._cosine_similarity", return_value=float("nan")):
+        await vm.run_voiceprint_matching_followup(
+            meeting, db,
+            segments=_needs_review_segments(),
+            mixed_source=_FakeMixedSource(),
+            lane_sources=[_FakeLaneSource(lane_key="aaaaaaaaaa", storage_path="x")],
+            mode="reject_if_exists",
+        )
+
+    assert "speaker_suggestions" not in meeting.data or meeting.data["speaker_suggestions"] == {}
+    events = [call.args[0].event for call in db.add.call_args_list]
+    assert events == ["skip"]
+    reasons = [call.args[0].detail.get("reason") for call in db.add.call_args_list]
+    assert reasons == ["embed_failed"]
+
+
+@pytest.mark.asyncio
 async def test_followup_replace_clears_stale_suggestions_before_new_run():
     """plan §6: mode='replace' must clear a PRIOR run's suggestions in its
     own commit before writing this run's results — even when this run finds
@@ -360,7 +434,9 @@ async def test_followup_replace_clears_stale_suggestions_before_new_run():
             },
         },
     })
-    db = _mock_db()
+    db = _mock_db(execute_results=[
+        MockResult([meeting]),  # BUG-002 fix: re-SELECT for the stale-clear write
+    ])
 
     with patch("meeting_api.voiceprint_matching.attributes.flag_modified", new=MagicMock()):
         await vm.run_voiceprint_matching_followup(
@@ -375,6 +451,84 @@ async def test_followup_replace_clears_stale_suggestions_before_new_run():
 
     assert meeting.data["speaker_suggestions"] == {}
     db.commit.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_followup_write_preserves_concurrent_edit_via_fresh_reselect():
+    """BUG-002 regression: a concurrent PATCH (e.g. update_meeting_speakers /
+    reject_speaker_suggestion) can commit new data (speaker_corrections) via
+    a DIFFERENT db session/ORM object while this long-running matching
+    follow-up is still in flight on its own stale `meeting` object
+    (database.py's expire_on_commit=False never refreshes it, and this run
+    can take up to VOICEPRINT_MATCH_TOTAL_BUDGET_S doing network/ffmpeg
+    work). The final write must re-SELECT the row immediately before
+    writing and merge ONLY the speaker_suggestions key, so the concurrent
+    edit survives rather than being clobbered by a full-dict overwrite
+    sourced from the stale object captured at function entry."""
+    meeting = make_meeting(id=1, user_id=5, data={})  # stale snapshot: no speaker_corrections
+    # Simulates the row as a fresh SELECT would see it: a concurrent rename
+    # landed speaker_corrections (via a different session) after `meeting`
+    # was first loaded but before this run's final write.
+    fresh_row = make_meeting(id=1, user_id=5, data={
+        "speaker_corrections": {"lane:zzzzzzzzzz:spk0": "concurrent-rename"},
+    })
+
+    db = _mock_db(execute_results=[
+        MockResult([(_FakeVoiceprintRow(profile_id=7), "田中")]),  # _load_user_voiceprints
+        MockResult([fresh_row]),  # the re-SELECT immediately before the write
+    ])
+    crypto = _enabled_crypto()
+    crypto.decrypt_embedding = MagicMock(return_value=[1.0, 0.0, 0.0])
+
+    with patch("meeting_api.voiceprint_matching.get_voiceprint_crypto", return_value=crypto), \
+         patch("meeting_api.voiceprint_matching.VOICEPRINT_SERVICE_URL", "http://voiceprint-service"), \
+         patch("meeting_api.voiceprint_matching.embed_clip_from_ranges",
+               new=AsyncMock(return_value=[1.0, 0.0, 0.0])), \
+         patch("meeting_api.voiceprint_matching.attributes.flag_modified", new=MagicMock()):
+        await vm.run_voiceprint_matching_followup(
+            meeting, db,
+            segments=_needs_review_segments(),
+            mixed_source=_FakeMixedSource(),
+            lane_sources=[_FakeLaneSource(lane_key="aaaaaaaaaa", storage_path="x")],
+            mode="reject_if_exists",
+        )
+
+    # The concurrent edit must survive the write ...
+    assert fresh_row.data["speaker_corrections"] == {"lane:zzzzzzzzzz:spk0": "concurrent-rename"}
+    # ... AND this run's suggestion must land, merged into the SAME fresh row.
+    suggestion = fresh_row.data["speaker_suggestions"]["lane:aaaaaaaaaa:spk0"]
+    assert suggestion["candidate_display_name"] == "田中"
+    # The stale object captured at function entry must never be the thing
+    # that gets written back.
+    assert "speaker_corrections" not in (meeting.data or {})
+
+
+def test_voiceprint_matching_reads_prefixed_budget_and_timeout_env_vars():
+    """BUG-003 regression: docker-compose.yml / deploy/env-example only set
+    and document VOICEPRINT_MATCH_TOTAL_BUDGET_S / VOICEPRINT_EMBED_TIMEOUT_S
+    — an unprefixed os.getenv read silently ignores any operator override.
+    Import the module fresh in a subprocess under a controlled env to prove
+    the prefixed names are what's actually read (not just present unused
+    elsewhere). A subprocess — not importlib.reload — is deliberate: reload
+    would rebind every class/exception this module defines (e.g.
+    VoiceprintServiceUnavailable) to a NEW object, silently breaking
+    `except VoiceprintServiceUnavailable` in voiceprints.py (which imported
+    the ORIGINAL class at its own module-load time) for the rest of the test
+    session."""
+    import subprocess
+    import sys
+
+    script = (
+        "import meeting_api.voiceprint_matching as vm; "
+        "print(vm.VOICEPRINT_MATCH_TOTAL_BUDGET_S, vm.VOICEPRINT_EMBED_TIMEOUT_S)"
+    )
+    env = dict(os.environ, VOICEPRINT_MATCH_TOTAL_BUDGET_S="77", VOICEPRINT_EMBED_TIMEOUT_S="9")
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        env=env, capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.split() == ["77.0", "9.0"]
 
 
 class _FakeVoiceprintRow:

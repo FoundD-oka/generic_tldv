@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
+import math
 import os
 import re
 import subprocess
@@ -38,8 +39,8 @@ VOICEPRINT_SERVICE_TOKEN = os.getenv("VOICEPRINT_SERVICE_TOKEN", "").strip()
 # range (critique NH-5 — this is NOT "the upper end of community norms").
 VOICEPRINT_SUGGEST_THRESHOLD = float(os.getenv("VOICEPRINT_SUGGEST_THRESHOLD", "0.78"))
 VOICEPRINT_RETENTION_MONTHS = int(os.getenv("VOICEPRINT_RETENTION_MONTHS", "24"))
-MATCH_TOTAL_BUDGET_S = float(os.getenv("MATCH_TOTAL_BUDGET_S", "120"))
-EMBED_TIMEOUT_S = float(os.getenv("EMBED_TIMEOUT_S", "15"))
+VOICEPRINT_MATCH_TOTAL_BUDGET_S = float(os.getenv("VOICEPRINT_MATCH_TOTAL_BUDGET_S", "120"))
+VOICEPRINT_EMBED_TIMEOUT_S = float(os.getenv("VOICEPRINT_EMBED_TIMEOUT_S", "15"))
 
 VOICEPRINT_MIN_CLIP_SECONDS = float(os.getenv("VOICEPRINT_MIN_CLIP_SECONDS", "5"))
 VOICEPRINT_MAX_CLIP_SECONDS = float(os.getenv("VOICEPRINT_MAX_CLIP_SECONDS", "30"))
@@ -233,7 +234,21 @@ async def _download_master_to_tempfile(
     suffix = f".{(media_format or 'webm').lower()}"
     fd, path = tempfile.mkstemp(suffix=suffix)
     os.close(fd)
-    await asyncio.to_thread(storage.download_file_to_path, storage_path, path)
+    try:
+        await asyncio.to_thread(storage.download_file_to_path, storage_path, path)
+    except Exception:
+        # BUG-007: mkstemp already created `path` on disk. If the download
+        # itself raises (network/credential/missing-object error — all
+        # realistic against production recordings storage), this function
+        # never returns a path, so embed_clip_from_ranges's own
+        # `finally: os.unlink(src_path)` never runs (it never gets a
+        # src_path value) and the empty temp file leaks for the container's
+        # lifetime. Unlink it here before re-raising.
+        try:
+            os.unlink(path)
+        except FileNotFoundError:
+            pass
+        raise
     return path
 
 
@@ -242,7 +257,7 @@ async def _embed_clip(wav_bytes: bytes) -> List[float]:
     if VOICEPRINT_SERVICE_TOKEN:
         headers["Authorization"] = f"Bearer {VOICEPRINT_SERVICE_TOKEN}"
     payload = {"audio_base64": base64.b64encode(wav_bytes).decode("ascii")}
-    async with httpx.AsyncClient(timeout=EMBED_TIMEOUT_S) as client:
+    async with httpx.AsyncClient(timeout=VOICEPRINT_EMBED_TIMEOUT_S) as client:
         response = await client.post(
             f"{VOICEPRINT_SERVICE_URL.rstrip('/')}/embed",
             json=payload,
@@ -354,7 +369,7 @@ async def run_voiceprint_matching_followup(
                 segments=segments, mixed_source=mixed_source,
                 lane_sources=lane_sources, mode=mode,
             ),
-            timeout=MATCH_TOTAL_BUDGET_S,
+            timeout=VOICEPRINT_MATCH_TOTAL_BUDGET_S,
         )
     except asyncio.TimeoutError:
         logger.warning("voiceprint matching budget exceeded for meeting %s", meeting_id)
@@ -381,6 +396,37 @@ async def _record_skip(db: AsyncSession, *, user_id: int, meeting_id: int, reaso
         )
 
 
+async def _merge_speaker_suggestions_into_fresh_row(
+    db: AsyncSession, meeting_id: int, suggestions: Dict[str, Any],
+) -> None:
+    """Re-SELECT the meeting row with a row lock IMMEDIATELY before writing
+    speaker_suggestions, and merge ONLY that key into the freshly-read data
+    dict — never write back a dict captured earlier in `_run_matching`.
+
+    `_run_matching` can hold the same `meeting` ORM object / db session for
+    up to VOICEPRINT_MATCH_TOTAL_BUDGET_S (default 120s) of network + ffmpeg work.
+    database.py's ``expire_on_commit=False`` means ``meeting.data`` is never
+    refreshed after a commit, and because the session already has this row
+    in its identity map, an ordinary re-SELECT would return the SAME
+    (still-stale) Python object without touching already-loaded columns —
+    hence ``populate_existing=True`` to force the freshly queried row's
+    values onto it. Without this, a concurrent PATCH (rename, suggestion
+    accept/reject) committed by a different session while this run was in
+    flight would be silently discarded by a full-dict overwrite (BUG-002).
+    """
+    stmt = (
+        select(Meeting)
+        .where(Meeting.id == meeting_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    fresh = (await db.execute(stmt)).scalar_one()
+    fresh_data = dict(fresh.data or {}) if isinstance(fresh.data, dict) else {}
+    fresh_data["speaker_suggestions"] = suggestions
+    fresh.data = fresh_data
+    attributes.flag_modified(fresh, "data")
+
+
 async def _run_matching(
     meeting: Meeting,
     db: AsyncSession,
@@ -402,10 +448,9 @@ async def _run_matching(
         # rather than a suggestion from a prior, now-discarded run. This
         # runs even when the new run finds nothing to match (below) — an
         # old suggestion for a cluster that no longer needs review must not
-        # survive the replace.
-        data["speaker_suggestions"] = {}
-        meeting.data = data
-        attributes.flag_modified(meeting, "data")
+        # survive the replace. Re-SELECT + merge (BUG-002) so this doesn't
+        # clobber a concurrent PATCH made since `meeting` was first loaded.
+        await _merge_speaker_suggestions_into_fresh_row(db, meeting_id, {})
         await db.commit()
         suggestions = {}
 
@@ -483,7 +528,27 @@ async def _run_matching(
             (profile_id, display_name, _cosine_similarity(embedding, vp_embedding))
             for profile_id, display_name, vp_embedding in voiceprints
         ]
-        best_profile_id, best_name, best_score = max(scored, key=lambda t: t[2])
+        # BUG-011: NaN/inf similarity scores (a corrupted/degenerate stored
+        # embedding, or a NaN slipping through _embed_clip's
+        # `[float(x) for x in embedding]` on a malformed service response)
+        # must never win max()'s left-to-right fold — NaN comparisons are
+        # always False, so an order-dependent NaN entry could silently beat
+        # a legitimately higher real score. Filter first; if EVERY score for
+        # this cluster is non-finite, treat it as embed_failed (an audited
+        # skip) rather than silently dropping the cluster or letting max()
+        # raise ValueError on an empty sequence.
+        finite_scored = [t for t in scored if math.isfinite(t[2])]
+        if not finite_scored:
+            logger.warning(
+                "voiceprint similarity scoring produced only non-finite "
+                "scores for meeting %s cluster %s", meeting_id, cluster_id,
+            )
+            db.add(VoiceprintAuditLog(
+                user_id=user_id, event="skip", meeting_id=meeting_id,
+                detail={"reason": "embed_failed", "cluster_id": cluster_id},
+            ))
+            continue
+        best_profile_id, best_name, best_score = max(finite_scored, key=lambda t: t[2])
         clip_seconds = sum(end - start for start, end in ranges)
 
         # FMR/FRR research log: SCORES only, never the embedding vector
@@ -519,9 +584,9 @@ async def _run_matching(
         # of scope, never persisted). PII policy §2 OPEN DECISION B, 案A.
 
     if changed:
-        data = dict(meeting.data or {}) if isinstance(meeting.data, dict) else {}
-        data["speaker_suggestions"] = suggestions
-        meeting.data = data
-        attributes.flag_modified(meeting, "data")
+        # Re-SELECT + merge only the speaker_suggestions key (BUG-002) —
+        # `meeting.data` here would be whatever this long-held object last
+        # saw, possibly minutes stale relative to a concurrent PATCH.
+        await _merge_speaker_suggestions_into_fresh_row(db, meeting_id, suggestions)
 
     await db.commit()

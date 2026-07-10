@@ -100,3 +100,36 @@ async def test_retention_sweep_is_day_guarded():
     assert second == 0
     # Guarded — no additional query on the immediately-following call.
     assert db.execute.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_retention_sweep_failure_does_not_stamp_the_day_guard():
+    """BUG-005 regression: the day-guard timestamp must be stamped only
+    AFTER the sweep body completes successfully. A transient DB error must
+    leave `_voiceprint_retention_last_run` untouched so the very next
+    60s-cadence sweep loop iteration retries — not silently disabled for a
+    full VOICEPRINT_RETENTION_SWEEP_INTERVAL_SECONDS (24h), repeating
+    indefinitely if the failure persists."""
+    db = AsyncMock()
+    db.execute = AsyncMock(side_effect=RuntimeError("transient db error"))
+
+    @asynccontextmanager
+    async def db_session_factory():
+        yield db
+
+    assert sweeps._voiceprint_retention_last_run is None
+
+    with pytest.raises(RuntimeError):
+        await sweeps._sweep_voiceprint_retention(db_session_factory)
+
+    # The guard must still be unset — a failed attempt is not a success.
+    assert sweeps._voiceprint_retention_last_run is None
+
+    # A retry immediately after must actually re-query, not be day-guarded
+    # away by a stamp the failed attempt should never have made.
+    db.execute = AsyncMock(return_value=MockResult([]))
+    swept = await sweeps._sweep_voiceprint_retention(db_session_factory)
+    assert swept == 0
+    db.execute.assert_awaited_once()
+    # This second call DID succeed, so now the guard is stamped.
+    assert sweeps._voiceprint_retention_last_run is not None

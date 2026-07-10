@@ -210,6 +210,12 @@ class SpeakerProfile(Base):
 
     __table_args__ = (
         Index('ix_speaker_profile_user_id', 'user_id'),
+        # BUG-009: enroll-from-cluster's find-or-create SELECT (voiceprints.py)
+        # has no row lock, so two concurrent enroll calls with the same
+        # display_name (double-click, or enrolling from two meetings' clusters
+        # around the same time) could both pass the SELECT and both INSERT
+        # without this constraint, producing duplicate identity profiles.
+        UniqueConstraint('user_id', 'display_name', name='uq_speaker_profile_user_display_name'),
     )
 
 

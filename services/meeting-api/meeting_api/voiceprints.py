@@ -21,6 +21,7 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import func as sa_func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -120,7 +121,34 @@ async def enroll_from_cluster(
     if profile is None:
         profile = SpeakerProfile(user_id=current_user.id, display_name=req.display_name)
         db.add(profile)
-        await db.flush()  # need profile.id for the consent FK below
+        try:
+            await db.flush()  # need profile.id for the consent FK below
+        except IntegrityError:
+            # BUG-009: no row lock guards the find-or-create SELECT above, so
+            # a concurrent enroll-from-cluster call for the same
+            # (user_id, display_name) — a double-click, or enrolling from two
+            # meetings' clusters for the same person around the same time —
+            # can win this race and commit first. The
+            # uq_speaker_profile_user_display_name constraint (models.py)
+            # catches the loser's duplicate INSERT here; roll back this
+            # failed attempt and re-SELECT the profile the winner created,
+            # rather than 500ing or producing two profiles for one identity.
+            await db.rollback()
+            profile = (await db.execute(
+                select(SpeakerProfile).where(
+                    SpeakerProfile.user_id == current_user.id,
+                    SpeakerProfile.display_name == req.display_name,
+                )
+            )).scalars().first()
+            if profile is None:
+                # Should not happen (the constraint violation implies a row
+                # with this (user_id, display_name) exists) — surface a
+                # clear, retryable error instead of proceeding without a
+                # profile.
+                raise HTTPException(
+                    status_code=409,
+                    detail="Speaker profile enrollment conflict — please retry",
+                )
 
     now = datetime.utcnow()
     consent = VoiceprintConsent(

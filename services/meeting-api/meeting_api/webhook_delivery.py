@@ -25,6 +25,7 @@ from uuid import uuid4
 import httpx
 
 from .retry import with_retry
+from .schemas import MEETING_DATA_REDACTED_KEYS
 
 logger = logging.getLogger(__name__)
 
@@ -63,13 +64,21 @@ def get_redis_client() -> Any:
 
 WEBHOOK_API_VERSION = "2026-03-01"
 
-# Internal fields to strip from meeting.data before webhook delivery
+# Internal fields to strip from meeting.data before webhook delivery.
+#
+# This set is the union of this module's own internal bookkeeping keys and
+# schemas.MEETING_DATA_REDACTED_KEYS — the latter is the single source of
+# truth for keys (e.g. speaker_suggestions) that must NEVER leave
+# meeting.data via any exit path (API response, transcript endpoint, or a
+# webhook payload). Keeping them merged here means a future addition to
+# MEETING_DATA_REDACTED_KEYS is automatically honored by webhook delivery
+# without a second edit.
 _INTERNAL_DATA_KEYS = {
     "webhook_delivery", "webhook_deliveries", "webhook_secret", "webhook_secrets",
     "webhook_events", "webhook_url",
     "outbound_events",
     "bot_container_id", "container_name",
-}
+} | set(MEETING_DATA_REDACTED_KEYS)
 
 
 def build_envelope(event_type: str, data: Dict[str, Any], event_id: str | None = None) -> Dict[str, Any]:

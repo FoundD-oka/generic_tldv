@@ -222,6 +222,13 @@ VOICEPRINT_RETENTION_MONTHS=24
 VOICEPRINT_MATCH_TOTAL_BUDGET_S=120
 # voiceprint-serviceへの/embed呼び出し1件あたりのタイムアウト（秒）
 VOICEPRINT_EMBED_TIMEOUT_S=15
+# voiceprint matching対象クリップの最短秒数。これ未満の発話量しかない
+# クラスタはskip+audit（below_min_durationとして記録、失敗扱いではない）
+VOICEPRINT_MIN_CLIP_SECONDS=5
+# voiceprint matching対象クリップの最長秒数（これを超える分は先頭から切り出し）
+VOICEPRINT_MAX_CLIP_SECONDS=30
+# クリップ切り出し用ffmpeg呼び出し1件あたりのタイムアウト（秒）
+VOICEPRINT_FFMPEG_TIMEOUT_SECONDS=60
 # voiceprint-service自体のリソース設定（`--profile voiceprint`で起動する場合）
 #VOICEPRINT_MAX_AUDIO_BYTES=20971520
 #VOICEPRINT_MAX_ACTIVE_REQUESTS=2

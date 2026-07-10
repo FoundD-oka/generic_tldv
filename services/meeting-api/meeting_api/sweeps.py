@@ -939,7 +939,6 @@ async def _sweep_voiceprint_retention(
         < VOICEPRINT_RETENTION_SWEEP_INTERVAL_SECONDS
     ):
         return 0
-    _voiceprint_retention_last_run = now
 
     # Calendar months approximated as 30d — acceptable for a 24-month-scale
     # retention window; a few days of slop either way is not meaningful here.
@@ -970,6 +969,16 @@ async def _sweep_voiceprint_retention(
 
         if swept:
             await db.commit()
+
+    # BUG-005: stamp the day-guard only AFTER the sweep body has fully
+    # completed without raising — attempt vs success. Stamping before the
+    # fallible DB work (as this used to) would disable the 24-month PII
+    # retention sweep for a full day on any transient failure, since
+    # start_sweeps' caller only logs exceptions and never resets this
+    # guard; that repeats indefinitely if the failure persists. Leaving
+    # `_voiceprint_retention_last_run` untouched on failure lets the very
+    # next 60s-cadence sweep loop iteration retry instead.
+    _voiceprint_retention_last_run = now
 
     return swept
 

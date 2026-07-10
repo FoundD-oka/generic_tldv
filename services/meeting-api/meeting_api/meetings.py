@@ -2180,6 +2180,29 @@ async def update_meeting_speakers(
             clusters_map[cluster] = op.to_name
             if cluster != representative:
                 aliases[cluster] = representative
+            # BUG-012: mirror the rename branch's pending-suggestion cleanup
+            # here too. Without this, a merged-away cluster's pending
+            # speaker_suggestions entry is never popped/audited — an
+            # ever-growing orphaned key in the JSONB blob with no confirm
+            # audit trail, asymmetric with rename's handling.
+            pending = pending_suggestions.get(cluster)
+            if isinstance(pending, dict) and pending.get("status") == "suggested":
+                del pending_suggestions[cluster]
+                suggestions_changed = True
+                from .models import VoiceprintAuditLog
+
+                db.add(VoiceprintAuditLog(
+                    user_id=current_user.id,
+                    event="confirm",
+                    actor_user_id=current_user.id,
+                    subject_profile_id=pending.get("profile_id"),
+                    meeting_id=meeting_id,
+                    detail={
+                        "cluster_id": cluster,
+                        "similarity": pending.get("similarity"),
+                        "operation": "merge",
+                    },
+                ))
         clusters_map[representative] = op.to_name
         # Chained merges: re-point aliases whose representative was itself
         # merged away, so the whole group still follows one representative.

@@ -23,6 +23,7 @@ import json
 import base64
 import logging
 import asyncio
+import secrets
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -199,7 +200,10 @@ async def verify_token(request: Request) -> bool:
     if not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="missing bearer token")
     provided = auth_header[len("Bearer "):].strip()
-    if provided != token:
+    # secrets.compare_digest instead of `!=`: a plain string comparison
+    # short-circuits at the first mismatched byte, which is a timing side
+    # channel on a bearer-token credential (tribunal BUG-008).
+    if not secrets.compare_digest(provided, token):
         raise HTTPException(status_code=401, detail="invalid bearer token")
     return True
 
@@ -219,15 +223,53 @@ async def health_check():
 # --------------------------------------------------------------------------
 # /embed
 # --------------------------------------------------------------------------
-async def _extract_audio_bytes(request: Request) -> bytes:
+async def _read_bounded_body(request: Request, max_bytes: int) -> bytes:
+    """Read the request body incrementally via the ASGI stream, aborting
+    with 413 the moment the running total exceeds max_bytes.
+
+    This is the real enforcement point for VOICEPRINT_MAX_AUDIO_BYTES: the
+    Content-Length header (checked separately, see embed()) is a
+    client-supplied, best-effort fast path that is absent under chunked
+    transfer encoding. Without this streaming guard a misbehaving/compromised
+    caller could make the service buffer an unbounded body in memory before
+    any size check ran (tribunal BUG-006). We never hold more than
+    max_bytes + (one chunk) bytes.
+    """
+    chunks: List[bytes] = []
+    total = 0
+    async for chunk in request.stream():
+        if not chunk:
+            continue
+        chunks.append(chunk)
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=f"payload exceeds {max_bytes} byte limit",
+            )
+    return b"".join(chunks)
+
+
+async def _extract_audio_bytes(request: Request, max_bytes: int) -> bytes:
     """Pull raw audio bytes out of either a multipart file or a JSON body.
+
+    Reads the whole body through `_read_bounded_body` first so the size cap
+    is enforced while streaming, not after the fact. The bounded bytes are
+    then cached on `request._body`, which Starlette's `Request.stream()`
+    honours (it yields the cached body instead of re-reading the — already
+    fully consumed — ASGI receive channel), so `request.form()` below reuses
+    the already-capped buffer instead of triggering a second, unbounded
+    read of the connection.
 
     Never logs the extracted bytes or any decoded content.
     """
     content_type = request.headers.get("content-type", "")
 
+    raw_body = await _read_bounded_body(request, max_bytes)
+    request._body = raw_body  # noqa: SLF001 - starlette-documented cache hook (Request.stream()/.body())
+
     if content_type.startswith("multipart/form-data"):
-        form = await request.form()
+        form = await request.form(max_part_size=max_bytes + 1)
         file_field = form.get("file") or form.get("audio")
         if file_field is None or not hasattr(file_field, "read"):
             raise HTTPException(
@@ -236,7 +278,6 @@ async def _extract_audio_bytes(request: Request) -> bytes:
             )
         return await file_field.read()
 
-    raw_body = await request.body()
     if not raw_body:
         raise HTTPException(status_code=400, detail="empty request body")
     try:
@@ -298,7 +339,11 @@ async def embed(request: Request, _: bool = Depends(verify_token)):
     if model is None:
         raise HTTPException(status_code=503, detail="voiceprint model is still loading")
 
-    audio_bytes = await _extract_audio_bytes(request)
+    # _extract_audio_bytes enforces VOICEPRINT_MAX_AUDIO_BYTES while reading
+    # the stream (see _read_bounded_body) — the check below is a redundant
+    # belt-and-suspenders guard on the decoded/extracted payload, which can
+    # only ever be <= the already-capped raw body.
+    audio_bytes = await _extract_audio_bytes(request, VOICEPRINT_MAX_AUDIO_BYTES)
     if len(audio_bytes) > VOICEPRINT_MAX_AUDIO_BYTES:
         raise HTTPException(
             status_code=413,
