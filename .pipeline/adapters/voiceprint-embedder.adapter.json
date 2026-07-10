@@ -1,0 +1,63 @@
+{
+  "schema_version": "1.0",
+  "id": "voiceprint-embedder",
+  "name": "SpeechBrain ECAPA-TDNN speaker embedding (voiceprint-service)",
+  "kind": "domain-tool",
+  "source": {
+    "upstream": "https://huggingface.co/speechbrain/spkrec-ecapa-voxceleb",
+    "docs": "https://speechbrain.readthedocs.io/en/latest/API/speechbrain.inference.speaker.html",
+    "license": "Apache-2.0"
+  },
+  "entrypoints": {
+    "run": "POST ${VOICEPRINT_SERVICE_URL}/embed (services/voiceprint-service/main.py)",
+    "health": "GET ${VOICEPRINT_SERVICE_URL}/health"
+  },
+  "contracts": {
+    "inputs": [
+      "16kHz mono WAV bytes, duration >= 1.0s — multipart form field 'file' or JSON body {\"audio_base64\": ...}",
+      "Authorization: Bearer ${VOICEPRINT_SERVICE_TOKEN} header, required unless ALLOW_UNAUTHENTICATED=true is explicitly set"
+    ],
+    "outputs": [
+      "192-dimensional float embedding vector (list[float]), cosine-comparable across calls and across enrolled voiceprints stored by meeting-api (issue #27 speaker_profiles/voiceprints tables)",
+      "duration_seconds: float — decoded audio duration as measured by the service",
+      "model: fixed string \"ecapa-tdnn\" identifying the embedding model used"
+    ],
+    "evidence": [
+      "services/voiceprint-service/tests/ (17 unit tests, model mocked — no real download in CI)",
+      "services/voiceprint-service/tests/fixtures/golden_embed.json (deterministic golden fixture)",
+      "services/voiceprint-service/tests/test_golden_fixture.py (proves /embed plumbing is deterministic for a fixed mocked model output)"
+    ]
+  },
+  "safety": {
+    "boundaries": [
+      "no third-party network egress at inference time — the model runs locally in-container, matching the PII policy's 'local processing only' requirement (audio and embeddings never leave the deployment)",
+      "the service does not persist audio bytes or embeddings anywhere (no disk, no DB, no cache beyond the in-memory request lifetime) — storage, consent recording, and encryption are the caller's responsibility (meeting-api voiceprints/voiceprint_consents tables, issue #27)",
+      "the service never logs embedding vector values or raw audio/base64 bytes at any log level (enforced by services/voiceprint-service/tests/test_no_pii_in_logs.py)",
+      "returns 503 for /embed when VOICEPRINT_SERVICE_TOKEN is unset and ALLOW_UNAUTHENTICATED is not explicitly enabled — refuses to silently run an unauthenticated biometric endpoint",
+      "the service performs no matching, thresholding, or identity decisions — it only turns audio into a vector; cosine comparison and the VOICEPRINT_SUGGEST_THRESHOLD decision happen in meeting-api"
+    ],
+    "forbidden_claims": [
+      "embeddings from this endpoint are a legal or biometric identity proof",
+      "cosine similarity across two calls to this endpoint is guaranteed above a specific accuracy bound (FMR/FRR) — no benchmark has been run against this deployment; auto-apply thresholds are out of scope for this phase (suggest-only)",
+      "the service enforces retention, consent, or deletion — those are meeting-api invariants (DB-level FK constraints + sweeps), not this service's responsibility"
+    ]
+  },
+  "validation": {
+    "checks": [
+      "manifest validates against schemas/harness-adapter.schema.json",
+      "/embed rejects audio shorter than 1.0s with 422 (test_embed_rejects_audio_shorter_than_one_second)",
+      "/embed rejects payloads larger than VOICEPRINT_MAX_AUDIO_BYTES with 413 (test_embed_rejects_payload_over_max_bytes)",
+      "/embed requires a valid Bearer token when VOICEPRINT_SERVICE_TOKEN is configured, 401 on missing/mismatched token (test_auth.py)",
+      "/embed returns 503 when no token is configured and ALLOW_UNAUTHENTICATED is unset (test_embed_returns_503_when_token_unset_and_unauthenticated_not_allowed)",
+      "/embed returns 503 while the model has not finished loading (test_embed_returns_503_when_model_not_loaded)",
+      "/embed returns 429 once MAX_ACTIVE_REQUESTS in-flight requests are exceeded, with Retry-After header, and releases the slot after completion (test_embed_returns_429_when_concurrency_limit_exceeded, test_embed_slot_is_released_after_request_completes)",
+      "/health reports status=loading (503) before warmup completes and status=healthy (200) after (test_health.py)",
+      "golden fixture: a fixed input + fixed mocked-model output reproduces byte-identical response shape and values through the real /embed request pipeline (test_golden_fixture.py) — this proves plumbing determinism, not real-model determinism (no real ECAPA-TDNN inference runs in CI)",
+      "log records emitted during /embed never contain the returned embedding values or the request's audio/base64 bytes (test_no_pii_in_logs.py)"
+    ],
+    "minimum_artifacts": [
+      "services/voiceprint-service/tests/",
+      "services/voiceprint-service/tests/fixtures/golden_embed.json"
+    ]
+  }
+}

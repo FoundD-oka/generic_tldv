@@ -1359,6 +1359,31 @@ async def run_deferred_transcription(
             triggered_by=triggered_by,
         )
 
+    # Issue #27 Phase 4 — voiceprint matching follow-up. Runs AFTER the
+    # success commit + finalized-notification above, in its OWN commit, so a
+    # slow (up to MATCH_TOTAL_BUDGET_S) or failing matching pass can never
+    # affect this function's success/failure result or delay the
+    # transcript.finalized notification (plan §6, Codex critique FC-4/5/20).
+    # run_voiceprint_matching_followup already catches everything internally
+    # (never raises); this try/except is belt-and-suspenders so a bug in
+    # that isolation can never propagate into "final transcription failed".
+    try:
+        from .voiceprint_matching import run_voiceprint_matching_followup
+
+        await run_voiceprint_matching_followup(
+            meeting, db,
+            segments=segments,
+            mixed_source=source,
+            lane_sources=lane_sources,
+            mode=mode,
+        )
+    except Exception:
+        logger.exception(
+            "voiceprint matching followup crashed for meeting %s — "
+            "transcript success is unaffected",
+            meeting_id,
+        )
+
     logger.info(
         "Deferred final transcription succeeded for meeting %s: stored=%s replaced=%s speakers=%s",
         meeting_id,

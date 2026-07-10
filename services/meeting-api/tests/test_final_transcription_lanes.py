@@ -190,7 +190,11 @@ async def test_lane_solo_auto_confirm_and_segment_ids():
     meeting = _meeting_with_lanes()
     db = _db_for(meeting)
     added: list[Transcription] = []
-    db.add = MagicMock(side_effect=added.append)
+    db.add = MagicMock(side_effect=lambda obj: (
+        added.append(obj) if isinstance(obj, Transcription) else None
+    ))  # issue #27 — voiceprint audit-log rows may also be added for
+    # shared-mic fixtures (needs_review sub-clusters); this file only
+    # asserts on Transcription rows
 
     # Lane STT results carry no diarization clusters → each lane is solo.
     async def fake_stt(audio, fmt, *, language):
@@ -225,7 +229,11 @@ async def test_lane_failure_falls_back_to_mixed_master_entirely():
     meeting = _meeting_with_lanes()
     db = _db_for(meeting)
     added: list[Transcription] = []
-    db.add = MagicMock(side_effect=added.append)
+    db.add = MagicMock(side_effect=lambda obj: (
+        added.append(obj) if isinstance(obj, Transcription) else None
+    ))  # issue #27 — voiceprint audit-log rows may also be added for
+    # shared-mic fixtures (needs_review sub-clusters); this file only
+    # asserts on Transcription rows
 
     async def download(source):
         if "lane-" in source.storage_path:
@@ -288,7 +296,11 @@ async def test_saved_lane_cluster_corrections_win_over_lane_label():
         corrections={f"lane:{LANE_A_KEY}": "訂正済みの名前"})
     db = _db_for(meeting)
     added: list[Transcription] = []
-    db.add = MagicMock(side_effect=added.append)
+    db.add = MagicMock(side_effect=lambda obj: (
+        added.append(obj) if isinstance(obj, Transcription) else None
+    ))  # issue #27 — voiceprint audit-log rows may also be added for
+    # shared-mic fixtures (needs_review sub-clusters); this file only
+    # asserts on Transcription rows
 
     stt = AsyncMock(return_value={
         "language": "ja",
@@ -334,7 +346,11 @@ async def test_lane_start_offset_shifts_segments_onto_master_timeline():
     meeting = _meeting_with_lanes(lane_a_offset_ms=5000, speaker_events=speaker_events)
     db = _db_for(meeting)
     added: list[Transcription] = []
-    db.add = MagicMock(side_effect=added.append)
+    db.add = MagicMock(side_effect=lambda obj: (
+        added.append(obj) if isinstance(obj, Transcription) else None
+    ))  # issue #27 — voiceprint audit-log rows may also be added for
+    # shared-mic fixtures (needs_review sub-clusters); this file only
+    # asserts on Transcription rows
 
     async def fake_stt(audio, fmt, *, language):
         return {
@@ -498,7 +514,11 @@ async def test_lane_segments_stamped_with_own_lane_session_uid():
     meeting = _meeting_with_lanes()
     db = _db_for(meeting)
     added: list[Transcription] = []
-    db.add = MagicMock(side_effect=added.append)
+    db.add = MagicMock(side_effect=lambda obj: (
+        added.append(obj) if isinstance(obj, Transcription) else None
+    ))  # issue #27 — voiceprint audit-log rows may also be added for
+    # shared-mic fixtures (needs_review sub-clusters); this file only
+    # asserts on Transcription rows
 
     async def fake_stt(audio, fmt, *, language):
         return {"language": "ja",
@@ -537,7 +557,11 @@ async def test_shared_mic_two_stable_clusters_speaker_none_and_recorded():
     meeting = _meeting_with_single_lane(speaker_events=speaker_events)
     db = _db_for(meeting)
     added: list[Transcription] = []
-    db.add = MagicMock(side_effect=added.append)
+    db.add = MagicMock(side_effect=lambda obj: (
+        added.append(obj) if isinstance(obj, Transcription) else None
+    ))  # issue #27 — voiceprint audit-log rows may also be added for
+    # shared-mic fixtures (needs_review sub-clusters); this file only
+    # asserts on Transcription rows
 
     async def fake_stt(audio, fmt, *, language):
         return {
@@ -582,7 +606,11 @@ async def test_shared_mic_lane_namespaces_clusterless_segment_instead_of_blankin
     meeting = _meeting_with_single_lane()
     db = _db_for(meeting)
     added: list[Transcription] = []
-    db.add = MagicMock(side_effect=added.append)
+    db.add = MagicMock(side_effect=lambda obj: (
+        added.append(obj) if isinstance(obj, Transcription) else None
+    ))  # issue #27 — voiceprint audit-log rows may also be added for
+    # shared-mic fixtures (needs_review sub-clusters); this file only
+    # asserts on Transcription rows
 
     async def fake_stt(audio, fmt, *, language):
         return {
@@ -641,7 +669,11 @@ async def test_shared_mic_unstable_cluster_coexists_without_being_absorbed():
     meeting = _meeting_with_single_lane()
     db = _db_for(meeting)
     added: list[Transcription] = []
-    db.add = MagicMock(side_effect=added.append)
+    db.add = MagicMock(side_effect=lambda obj: (
+        added.append(obj) if isinstance(obj, Transcription) else None
+    ))  # issue #27 — voiceprint audit-log rows may also be added for
+    # shared-mic fixtures (needs_review sub-clusters); this file only
+    # asserts on Transcription rows
 
     async def fake_stt(audio, fmt, *, language):
         return {
@@ -704,7 +736,11 @@ async def test_solo_lane_with_tiny_noise_cluster_does_not_split():
     meeting = _meeting_with_single_lane(lane_label="山森")
     db = _db_for(meeting)
     added: list[Transcription] = []
-    db.add = MagicMock(side_effect=added.append)
+    db.add = MagicMock(side_effect=lambda obj: (
+        added.append(obj) if isinstance(obj, Transcription) else None
+    ))  # issue #27 — voiceprint audit-log rows may also be added for
+    # shared-mic fixtures (needs_review sub-clusters); this file only
+    # asserts on Transcription rows
 
     async def fake_stt(audio, fmt, *, language):
         return {
@@ -743,7 +779,11 @@ async def test_all_tiny_clusters_fall_back_to_solo():
     meeting = _meeting_with_single_lane(lane_label="山森")
     db = _db_for(meeting)
     added: list[Transcription] = []
-    db.add = MagicMock(side_effect=added.append)
+    db.add = MagicMock(side_effect=lambda obj: (
+        added.append(obj) if isinstance(obj, Transcription) else None
+    ))  # issue #27 — voiceprint audit-log rows may also be added for
+    # shared-mic fixtures (needs_review sub-clusters); this file only
+    # asserts on Transcription rows
 
     async def fake_stt(audio, fmt, *, language):
         return {
@@ -811,7 +851,11 @@ async def test_shared_mic_clusters_exactly_at_stability_boundary_count_as_stable
     meeting = _meeting_with_single_lane()
     db = _db_for(meeting)
     added: list[Transcription] = []
-    db.add = MagicMock(side_effect=added.append)
+    db.add = MagicMock(side_effect=lambda obj: (
+        added.append(obj) if isinstance(obj, Transcription) else None
+    ))  # issue #27 — voiceprint audit-log rows may also be added for
+    # shared-mic fixtures (needs_review sub-clusters); this file only
+    # asserts on Transcription rows
 
     async def fake_stt(audio, fmt, *, language):
         return {
@@ -851,7 +895,11 @@ async def test_saved_correction_for_subcluster_applies_after_shared_mic_processi
     meeting = _meeting_with_single_lane(corrections={f"lane:{LANE_A_KEY}:spk0": "花子"})
     db = _db_for(meeting)
     added: list[Transcription] = []
-    db.add = MagicMock(side_effect=added.append)
+    db.add = MagicMock(side_effect=lambda obj: (
+        added.append(obj) if isinstance(obj, Transcription) else None
+    ))  # issue #27 — voiceprint audit-log rows may also be added for
+    # shared-mic fixtures (needs_review sub-clusters); this file only
+    # asserts on Transcription rows
 
     async def fake_stt(audio, fmt, *, language):
         return {

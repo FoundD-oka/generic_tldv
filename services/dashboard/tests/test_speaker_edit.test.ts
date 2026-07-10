@@ -4,6 +4,7 @@ import {
   buildSpeakerMerge,
   buildSpeakerRename,
   describeSpeakerUpdate,
+  getRenameEnrollCandidates,
 } from "@/lib/speaker-edit";
 
 describe("buildSpeakerRename", () => {
@@ -119,5 +120,47 @@ describe("describeSpeakerUpdate", () => {
     expect(describeSpeakerUpdate({ rename: 3, merge: 2, reassign: 1 })).toBe(
       "6件の発話の話者を更新しました"
     );
+  });
+});
+
+// issue #27 Phase4 (ARC-5): accepting a voiceprint suggestion reuses the
+// EXISTING cluster-rename path, called with the candidate name for that
+// cluster — no new rename mechanism is introduced.
+describe("voiceprint suggestion acceptance reuses buildSpeakerRename (issue #27 Phase4)", () => {
+  it("triggers a rename payload for the right cluster with the candidate name", () => {
+    expect(
+      buildSpeakerRename({ speaker: "", speaker_cluster: "lane:hash123:1" }, "田中")
+    ).toEqual({
+      rename: [{ from_cluster: "lane:hash123:1", to_name: "田中" }],
+    });
+  });
+});
+
+// issue #27 Phase4 (ARC-6/NH-3): the implicit-enroll offer must only ever be
+// shown for rename operations in the PATCH response's affected_clusters —
+// merge/reassign can span multiple clusters and their target isn't unique.
+describe("getRenameEnrollCandidates", () => {
+  it("returns rename entries only, dropping merge and reassign", () => {
+    expect(
+      getRenameEnrollCandidates([
+        { cluster_id: "1", display_name: "田中", operation: "rename" },
+        { cluster_id: "2", display_name: "山田", operation: "merge" },
+        { cluster_id: "3", display_name: "佐藤", operation: "reassign" },
+        { cluster_id: "4", display_name: "鈴木", operation: "rename" },
+      ])
+    ).toEqual([
+      { cluster_id: "1", display_name: "田中" },
+      { cluster_id: "4", display_name: "鈴木" },
+    ]);
+  });
+
+  it("returns an empty array when there are no rename entries", () => {
+    expect(
+      getRenameEnrollCandidates([{ cluster_id: "2", display_name: "山田", operation: "merge" }])
+    ).toEqual([]);
+  });
+
+  it("returns an empty array for undefined affected_clusters", () => {
+    expect(getRenameEnrollCandidates(undefined)).toEqual([]);
   });
 });

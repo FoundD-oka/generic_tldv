@@ -170,6 +170,11 @@ export const vexaAPI = {
   ): Promise<{ meeting: Meeting; segments: TranscriptSegment[]; recordings: RecordingData[] }> {
     const params = meetingId ? `?meeting_id=${meetingId}` : "";
     const response = await fetch(withBasePath(`/api/vexa/transcripts/${platform}/${nativeId}${params}`));
+    interface RawSpeakerSuggestion {
+      candidate_display_name: string;
+      similarity: number;
+      status: string;
+    }
     interface RawSegment {
       start: number;
       end: number;
@@ -183,6 +188,9 @@ export const vexaAPI = {
       speaker_cluster?: string | null;
       speaker_auto?: string | null;
       speaker_mapping_status?: string | null;
+      // 声紋照合による命名候補（issue #27 Phase4）。profile_idは含まれない
+      // — サーバのtranscript応答は最小payloadのみ返す（露出制御）。
+      speaker_suggestion?: RawSpeakerSuggestion | null;
     }
     interface RawTranscriptResponse {
       id: number;
@@ -237,6 +245,14 @@ export const vexaAPI = {
       speaker_cluster: seg.speaker_cluster || undefined,
       speaker_auto: seg.speaker_auto || undefined,
       speaker_mapping_status: seg.speaker_mapping_status || undefined,
+      speaker_suggestion:
+        seg.speaker_suggestion && seg.speaker_suggestion.status === "suggested"
+          ? {
+              candidate_display_name: seg.speaker_suggestion.candidate_display_name,
+              similarity: seg.speaker_suggestion.similarity,
+              status: "suggested",
+            }
+          : undefined,
     }));
 
     // Extract recordings from response (populated from meeting.data.recordings by backend)
@@ -497,6 +513,40 @@ export const vexaAPI = {
       }
     );
     return handleResponse<SpeakerUpdateResult>(response);
+  },
+
+  // 声紋登録（issue #27 Phase4）: クラスタの声を明示登録する。
+  // 呼び出し前に「本人の同意を得ているか」の確認UIを経由すること（PII方針）。
+  async enrollVoiceprintFromCluster(
+    meetingId: string | number,
+    clusterId: string,
+    displayName: string
+  ): Promise<{ status: string; profile_id?: number; voiceprint_id?: number }> {
+    const response = await fetch(withBasePath("/api/vexa/voiceprints/enroll-from-cluster"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        meeting_id: meetingId,
+        cluster_id: clusterId,
+        display_name: displayName,
+      }),
+    });
+    return handleResponse<{ status: string; profile_id?: number; voiceprint_id?: number }>(response);
+  },
+
+  // 声紋サジェストの棄却（issue #27 Phase4）: 候補チップの「却下」ボタンから呼ぶ。
+  async rejectSpeakerSuggestion(meetingId: string | number, clusterId: string): Promise<void> {
+    const response = await fetch(
+      withBasePath(`/api/vexa/meetings/${meetingId}/speaker-suggestions/${clusterId}`),
+      { method: "DELETE" }
+    );
+    if (!response.ok) {
+      throw new VexaAPIError(
+        "Failed to reject speaker suggestion",
+        response.status,
+        await response.text()
+      );
+    }
   },
 
   // Transcribe a recorded meeting (deferred transcription)

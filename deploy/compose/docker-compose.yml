@@ -344,6 +344,19 @@ services:
       - WAKE_STREAM_IDLE_TIMEOUT_SEC=${WAKE_STREAM_IDLE_TIMEOUT_SEC:-5}
       - TRANSCRIPTION_GATEWAY_URL=${TRANSCRIPTION_GATEWAY_URL:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      # Issue #27 Phase 4 — voiceprint suggest-only speaker matching.
+      # voiceprint-service itself only ships when compose runs with
+      # `--profile voiceprint`; leaving these pointed at a disabled service
+      # is intentional — meeting-api must treat a connection failure as
+      # skip+audit, never as a transcript failure (see
+      # .pipeline/plans/issue-27-voiceprint/plan.md §6).
+      - VOICEPRINT_SERVICE_URL=${VOICEPRINT_SERVICE_URL:-http://voiceprint-service:8000}
+      - VOICEPRINT_SERVICE_TOKEN=${VOICEPRINT_SERVICE_TOKEN:-}
+      - VOICEPRINT_ENCRYPTION_KEY=${VOICEPRINT_ENCRYPTION_KEY:-}
+      - VOICEPRINT_SUGGEST_THRESHOLD=${VOICEPRINT_SUGGEST_THRESHOLD:-0.78}
+      - VOICEPRINT_RETENTION_MONTHS=${VOICEPRINT_RETENTION_MONTHS:-24}
+      - VOICEPRINT_MATCH_TOTAL_BUDGET_S=${VOICEPRINT_MATCH_TOTAL_BUDGET_S:-120}
+      - VOICEPRINT_EMBED_TIMEOUT_S=${VOICEPRINT_EMBED_TIMEOUT_S:-15}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     volumes:
       - ${LOCAL_STORAGE_VOLUME_SOURCE:-recordings-data}:/data/recordings
@@ -609,6 +622,39 @@ services:
       - vexa
     restart: "no"
 
+  # voiceprint-service (issue #27 Phase 4): local SpeechBrain ECAPA-TDNN
+  # speaker-embedding service. Optional — meeting-api treats it as
+  # unavailable=skip+audit, never as a transcript failure. Enable with
+  # `--profile voiceprint`.
+  voiceprint-service:
+    profiles: ["voiceprint"]
+    build:
+      context: ../..
+      dockerfile: services/voiceprint-service/Dockerfile
+    image: vexaai/voiceprint-service:${IMAGE_TAG}
+    mem_limit: 1.5g
+    expose:
+      - "8000"
+    environment:
+      - VOICEPRINT_SERVICE_TOKEN=${VOICEPRINT_SERVICE_TOKEN:-}
+      - ALLOW_UNAUTHENTICATED=${VOICEPRINT_ALLOW_UNAUTHENTICATED:-false}
+      - VOICEPRINT_MODEL_CACHE=/models
+      - VOICEPRINT_MAX_AUDIO_BYTES=${VOICEPRINT_MAX_AUDIO_BYTES:-20971520}
+      - MAX_ACTIVE_REQUESTS=${VOICEPRINT_MAX_ACTIVE_REQUESTS:-2}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - voiceprint-models:/models
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 20s
+      timeout: 10s
+      start_period: 120s
+      retries: 6
+    init: true
+    networks:
+      - vexa
+    restart: unless-stopped
+
   calendar-service:
     profiles: ["calendar"]
     build:
@@ -651,6 +697,7 @@ volumes:
   minio-data:
   recordings-data:
   tts-voices:
+  voiceprint-models:
 
 networks:
   vexa:

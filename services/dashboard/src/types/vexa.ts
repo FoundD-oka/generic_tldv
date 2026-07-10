@@ -55,6 +55,16 @@ export interface MeetingData {
   [key: string]: unknown;
 }
 
+/**
+ * 声紋照合による命名候補（issue #27 Phase4）。`profile_id`は意図的に含めない
+ * — サーバ側もtranscript応答へは最小payloadのみ返す（露出制御）。
+ */
+export interface SpeakerSuggestion {
+  candidate_display_name: string;
+  similarity: number;
+  status: "suggested";
+}
+
 export interface TranscriptSegment {
   id: string;
   meeting_id: string;
@@ -78,6 +88,8 @@ export interface TranscriptSegment {
   speaker_cluster?: string;
   /** Original auto-assigned speaker label (undo baseline) */
   speaker_auto?: string;
+  /** 声紋照合による命名候補（issue #27 Phase4）。承認まで`speaker`は書き換えない。 */
+  speaker_suggestion?: SpeakerSuggestion;
 }
 
 /** Payload for PATCH /meetings/{id}/transcripts/speakers (issue #23) */
@@ -87,12 +99,24 @@ export interface SpeakerUpdatePayload {
   reassign?: Array<{ segment_ids: string[]; to_name: string; to_cluster?: string }>;
 }
 
+/**
+ * PATCH応答が反映したクラスタ（issue #27 Phase4, ARC-6）。rename/merge/reassignを
+ * 同時に受けられるPATCHのため、単数`cluster_id`では対象を一意特定できない
+ * ——複数クラスタを配列で返す。暗黙登録オファーは`operation==="rename"`限定。
+ */
+export interface AffectedCluster {
+  cluster_id: string;
+  display_name: string;
+  operation: "rename" | "merge" | "reassign";
+}
+
 export interface SpeakerUpdateResult {
   meeting_id: number;
   updated: Record<string, number>;
   speakers: string[];
   redis_cache_cleared: boolean;
   drive_export_requeued: boolean;
+  affected_clusters?: AffectedCluster[];
 }
 
 export interface CreateBotRequest {
