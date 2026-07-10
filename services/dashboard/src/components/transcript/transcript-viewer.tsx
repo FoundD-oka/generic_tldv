@@ -19,7 +19,7 @@ import {
   DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu";
 import { TranscriptSegment } from "./transcript-segment";
-import type { Meeting, TranscriptSegment as TranscriptSegmentType, ChatMessage, SpeakerUpdatePayload } from "@/types/vexa";
+import type { Meeting, TranscriptSegment as TranscriptSegmentType, ChatMessage, SpeakerSuggestion, SpeakerUpdatePayload } from "@/types/vexa";
 import { getSpeakerColor } from "@/types/vexa";
 import {
   buildSegmentReassign,
@@ -27,6 +27,8 @@ import {
   buildSpeakerRename,
   describeSpeakerUpdate,
   getRenameEnrollCandidates,
+  reconcileRejectedSuggestions,
+  type RejectedSuggestionEntry,
 } from "@/lib/speaker-edit";
 import {
   exportToTxt,
@@ -140,8 +142,12 @@ export function TranscriptViewer({
   const [mergeTargetName, setMergeTargetName] = useState("");
   const [reassignTargetName, setReassignTargetName] = useState("");
   const [isUpdatingSpeakers, setIsUpdatingSpeakers] = useState(false);
-  // 声紋照合による命名候補（issue #27 Phase4）: 却下した候補は再取得までクライアント側で隠す
-  const [rejectedSuggestionClusters, setRejectedSuggestionClusters] = useState<Set<string>>(new Set());
+  // 声紋照合による命名候補（issue #27 Phase4）: 却下した候補はクライアント側で隠す。
+  // BUG-010: クラスタIDのみでなく却下時の候補内容も保持し、文字起こし再取得時に
+  // reconcileRejectedSuggestionsで再検証する（新しい照合実行の候補は再表示する）。
+  const [rejectedSuggestionClusters, setRejectedSuggestionClusters] = useState<
+    Map<string, RejectedSuggestionEntry>
+  >(new Map());
   const searchInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -390,7 +396,10 @@ export function TranscriptViewer({
   );
 
   const applySpeakerUpdate = useCallback(
-    async (payload: SpeakerUpdatePayload | null) => {
+    async (
+      payload: SpeakerUpdatePayload | null,
+      options?: { suppressEnrollOfferForClusters?: string[] }
+    ) => {
       if (!payload || !meeting?.id) return;
       setIsUpdatingSpeakers(true);
       try {
@@ -408,7 +417,13 @@ export function TranscriptViewer({
 
         // 暗黙登録オファー（issue #27 Phase4, NH-3）: renameのみが対象。
         // merge/reassignは対象クラスタの一意性が保証できないためオファーしない。
-        for (const candidate of getRenameEnrollCandidates(result.affected_clusters)) {
+        // BUG-004: 声紋照合候補の「承認」もrenameとして送られるが、承認は
+        // 既に登録済みの声紋との一致確認であり登録オファーは不要 —
+        // 呼び出し側（handleAcceptSuggestion）が対象クラスタを除外指定する。
+        for (const candidate of getRenameEnrollCandidates(
+          result.affected_clusters,
+          options?.suppressEnrollOfferForClusters
+        )) {
           toast(
             `この声を「${candidate.display_name}」として登録しますか？（本人の同意を得ていることを確認してください）`,
             {
@@ -437,21 +452,32 @@ export function TranscriptViewer({
   // 声紋照合による候補の承認/却下（issue #27 Phase4）
   const handleAcceptSuggestion = useCallback(
     (clusterId: string, candidateName: string) => {
+      // BUG-004: 承認は既に登録済みの声紋との一致確認であり、暗黙登録オファー
+      // を出すべきでない。手動renameと区別するため対象クラスタを除外指定する。
       void applySpeakerUpdate(
-        buildSpeakerRename({ speaker: "", speaker_cluster: clusterId }, candidateName)
+        buildSpeakerRename({ speaker: "", speaker_cluster: clusterId }, candidateName),
+        { suppressEnrollOfferForClusters: [clusterId] }
       );
     },
     [applySpeakerUpdate]
   );
 
   const handleRejectSuggestion = useCallback(
-    (clusterId: string) => {
+    (clusterId: string, suggestion: SpeakerSuggestion) => {
       if (!meeting?.id) return;
-      // 楽観的にチップを消す（失敗時は元に戻す）
-      setRejectedSuggestionClusters((prev) => new Set(prev).add(clusterId));
+      // 楽観的にチップを消す（失敗時は元に戻す）。BUG-010: どの候補を却下
+      // したかも保持し、再取得時に新しい候補と区別できるようにする。
+      setRejectedSuggestionClusters((prev) => {
+        const next = new Map(prev);
+        next.set(clusterId, {
+          candidateDisplayName: suggestion.candidate_display_name,
+          similarity: suggestion.similarity,
+        });
+        return next;
+      });
       void vexaAPI.rejectSpeakerSuggestion(meeting.id, clusterId).catch((error) => {
         setRejectedSuggestionClusters((prev) => {
-          const next = new Set(prev);
+          const next = new Map(prev);
           next.delete(clusterId);
           return next;
         });
@@ -462,6 +488,12 @@ export function TranscriptViewer({
     },
     [meeting?.id]
   );
+
+  // BUG-010: 文字起こしが再取得されるたびに却下フラグを最新のsuggestionと
+  // 突き合わせ、サーバ側で反映済み/新しい照合実行の候補は追跡を外す。
+  useEffect(() => {
+    setRejectedSuggestionClusters((prev) => reconcileRejectedSuggestions(prev, segments));
+  }, [segments]);
 
   const toggleGroupSelection = useCallback((segmentIds: string[]) => {
     setSelectedSegmentIds((prev) => {
@@ -1276,7 +1308,7 @@ export function TranscriptViewer({
                       }
                       onRejectSuggestion={
                         syntheticSegment.speaker_suggestion
-                          ? () => handleRejectSuggestion(group.key)
+                          ? () => handleRejectSuggestion(group.key, syntheticSegment.speaker_suggestion!)
                           : undefined
                       }
                     />

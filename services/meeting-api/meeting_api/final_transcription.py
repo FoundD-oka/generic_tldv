@@ -1361,7 +1361,7 @@ async def run_deferred_transcription(
 
     # Issue #27 Phase 4 — voiceprint matching follow-up. Runs AFTER the
     # success commit + finalized-notification above, in its OWN commit, so a
-    # slow (up to MATCH_TOTAL_BUDGET_S) or failing matching pass can never
+    # slow (up to VOICEPRINT_MATCH_TOTAL_BUDGET_S) or failing matching pass can never
     # affect this function's success/failure result or delay the
     # transcript.finalized notification (plan §6, Codex critique FC-4/5/20).
     # run_voiceprint_matching_followup already catches everything internally

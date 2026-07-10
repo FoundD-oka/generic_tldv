@@ -28,3 +28,15 @@ date	task_id	category	source	severity	note
 2026-07-10	issue-26-lane-diarization	sharedmic-redis-derivation-gap	tribunal	low	BUG-005 Redis merge path trusts speaker_mapping_status instead of deriving like PG path
 2026-07-10	issue-26-lane-diarization	sharedmic-lanekey-truthiness	tribunal	low	BUG-006 shared_mic lane_key threading uses falsy-string check (monitor)
 2026-07-10	issue-27-voiceprint	codex-sandbox-readonly	harness	medium	Codex rescue runtime sandbox is read-only despite write:true job flag — critique files must be relayed via final-message text
+2026-07-10	issue-27-voiceprint	redaction-list-divergence	tribunal	critical	BUG-001 webhook _INTERNAL_DATA_KEYS missing speaker_suggestions - parallel redaction lists diverged
+2026-07-10	issue-27-voiceprint	postcommit-lost-update	tribunal	critical	BUG-002 matching follow-up overwrites meeting.data from stale ORM object (expire_on_commit=False)
+2026-07-10	issue-27-voiceprint	voiceprint-env-mismatch	tribunal	medium	BUG-003 compose env names differ from os.getenv names - overrides silently ignored
+2026-07-10	issue-27-voiceprint	enroll-offer-on-acceptance	tribunal	medium	BUG-004 enroll toast fires on suggestion acceptance not just manual rename
+2026-07-10	issue-27-voiceprint	retention-guard-prestamp	tribunal	medium	BUG-005 retention day-guard stamped before run - failure silently skips PII sweep
+2026-07-10	issue-27-voiceprint	embed-size-cap-bypass	tribunal	medium	BUG-006 /embed size cap checked after full body buffering
+2026-07-10	issue-27-voiceprint	tempfile-leak-download-fail	tribunal	low	BUG-007 temp file leaked when master download fails
+2026-07-10	issue-27-voiceprint	token-timing-compare	tribunal	low	BUG-008 bearer token compared with != not compare_digest
+2026-07-10	issue-27-voiceprint	profile-create-race	tribunal	low	BUG-009 find-or-create profile lacks unique constraint
+2026-07-10	issue-27-voiceprint	reject-state-unreconciled	tribunal	low	BUG-010 optimistic reject set never invalidated on refetch
+2026-07-10	issue-27-voiceprint	nan-similarity-max	tribunal	low	BUG-011 max() over possibly-NaN similarities drops suggestions
+2026-07-10	issue-27-voiceprint	merge-suggestion-orphan	tribunal	low	BUG-012 merge does not clear pending suggestions for merged-away clusters

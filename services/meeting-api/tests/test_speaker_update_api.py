@@ -597,3 +597,77 @@ async def test_rename_without_pending_suggestion_does_not_audit_confirm(client, 
     assert resp.status_code == 200
     assert not any(getattr(a, "event", None) == "confirm" for a in added)
     assert "speaker_suggestions" not in meeting.data
+
+
+@pytest.mark.asyncio
+async def test_merge_clears_pending_suggestions_for_merged_away_clusters(client, mock_db):
+    """BUG-012 regression: the merge branch must mirror rename's
+    pending-suggestion cleanup — a pending speaker_suggestions entry for a
+    cluster that gets merged away must be popped (not left as an orphaned
+    JSONB key) and a confirm-shaped audit event recorded, symmetric with the
+    rename branch's handling."""
+    meeting = _completed_meeting(speaker_suggestions={
+        "1": {
+            "candidate_display_name": "佐藤", "profile_id": 7,
+            "similarity": 0.91, "status": "suggested", "run_completed_at": "now",
+        },
+        "3": {
+            "candidate_display_name": "佐藤", "profile_id": 9,
+            "similarity": 0.85, "status": "suggested", "run_completed_at": "now",
+        },
+    })
+    mock_db.execute = AsyncMock(side_effect=[
+        MockResult([meeting]),
+        UpdateResult(rowcount=5),
+        MockResult([("佐藤",)]),
+    ])
+    added = []
+    mock_db.add = MagicMock(side_effect=added.append)
+    p1, p2 = _patch_flags()
+    with p1, p2, patch(
+        "meeting_api.final_transcription._clear_live_transcript_cache",
+        new=AsyncMock(return_value=True),
+    ):
+        resp = await client.patch(
+            f"/meetings/{TEST_MEETING_ID}/transcripts/speakers",
+            json={"merge": [{"clusters": ["1", "3"], "to_name": "佐藤"}]},
+        )
+
+    assert resp.status_code == 200
+    # Both merged-away clusters' pending suggestions must be gone — no
+    # orphaned entry survives in the persisted JSONB blob.
+    assert meeting.data["speaker_suggestions"] == {}
+
+    confirm_events = {
+        a.detail["cluster_id"]: a
+        for a in added
+        if getattr(a, "event", None) == "confirm"
+    }
+    assert set(confirm_events) == {"1", "3"}
+    assert confirm_events["1"].subject_profile_id == 7
+    assert confirm_events["3"].subject_profile_id == 9
+    assert confirm_events["1"].detail["operation"] == "merge"
+
+
+@pytest.mark.asyncio
+async def test_merge_without_pending_suggestions_does_not_audit_confirm(client, mock_db):
+    meeting = _completed_meeting()
+    mock_db.execute = AsyncMock(side_effect=[
+        MockResult([meeting]),
+        UpdateResult(rowcount=5),
+        MockResult([("佐藤",)]),
+    ])
+    added = []
+    mock_db.add = MagicMock(side_effect=added.append)
+    p1, p2 = _patch_flags()
+    with p1, p2, patch(
+        "meeting_api.final_transcription._clear_live_transcript_cache",
+        new=AsyncMock(return_value=True),
+    ):
+        resp = await client.patch(
+            f"/meetings/{TEST_MEETING_ID}/transcripts/speakers",
+            json={"merge": [{"clusters": ["1", "3"], "to_name": "佐藤"}]},
+        )
+    assert resp.status_code == 200
+    assert not any(getattr(a, "event", None) == "confirm" for a in added)
+    assert "speaker_suggestions" not in meeting.data
