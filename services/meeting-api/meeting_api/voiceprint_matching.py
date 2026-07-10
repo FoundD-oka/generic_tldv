@@ -397,7 +397,7 @@ async def _record_skip(db: AsyncSession, *, user_id: int, meeting_id: int, reaso
 
 
 async def _merge_speaker_suggestions_into_fresh_row(
-    db: AsyncSession, meeting_id: int, suggestions: Dict[str, Any],
+    db: AsyncSession, meeting_id: int, new_entries: Dict[str, Any], *, replace: bool = False,
 ) -> None:
     """Re-SELECT the meeting row with a row lock IMMEDIATELY before writing
     speaker_suggestions, and merge ONLY that key into the freshly-read data
@@ -413,6 +413,21 @@ async def _merge_speaker_suggestions_into_fresh_row(
     values onto it. Without this, a concurrent PATCH (rename, suggestion
     accept/reject) committed by a different session while this run was in
     flight would be silently discarded by a full-dict overwrite (BUG-002).
+
+    BUG-002 follow-up (Fable F1): even with the fresh re-SELECT above, the
+    original fix still wrote the ENTIRE ``speaker_suggestions`` dict from a
+    value built at `_run_matching`'s run-start — a snapshot plus this run's
+    new entries. A concurrent reject (DELETE) or confirm (rename, which also
+    pops the entry) committed against a DIFFERENT cluster_id during the
+    matching window (up to 120s) would land in the DB, only to be resurrected
+    as "suggested" by this wholesale overwrite once the run finally
+    committed. The fix is entry-level: unless ``replace`` is requested (the
+    intentional mode="replace" stale-clear, which runs in its own commit
+    BEFORE matching starts), the value written is the FRESH row's *current*
+    speaker_suggestions (respecting anything popped/edited concurrently)
+    merged with ONLY ``new_entries`` — the cluster_id -> suggestion entries
+    this run itself produced. An entry that came from a stale snapshot but
+    was never touched by this run is never rewritten.
     """
     stmt = (
         select(Meeting)
@@ -422,7 +437,13 @@ async def _merge_speaker_suggestions_into_fresh_row(
     )
     fresh = (await db.execute(stmt)).scalar_one()
     fresh_data = dict(fresh.data or {}) if isinstance(fresh.data, dict) else {}
-    fresh_data["speaker_suggestions"] = suggestions
+    if replace:
+        merged = dict(new_entries)
+    else:
+        current = fresh_data.get("speaker_suggestions")
+        current = dict(current) if isinstance(current, dict) else {}
+        merged = {**current, **new_entries}
+    fresh_data["speaker_suggestions"] = merged
     fresh.data = fresh_data
     attributes.flag_modified(fresh, "data")
 
@@ -440,19 +461,30 @@ async def _run_matching(
     user_id = meeting.user_id
 
     data = dict(meeting.data or {}) if isinstance(meeting.data, dict) else {}
-    suggestions: Dict[str, Any] = dict(data.get("speaker_suggestions") or {})
+    stale_suggestions = data.get("speaker_suggestions") or {}
+    # Entries this run itself produces (cluster_id -> suggestion). This is
+    # deliberately NOT seeded from `stale_suggestions` above — that snapshot
+    # is only used to decide (heuristically) whether a mode="replace" clear
+    # is worth attempting below. Seeding the accumulator from it would
+    # resurrect a concurrently-rejected/confirmed entry at the final
+    # entry-level merge (Fable F1 / BUG-002 follow-up): see
+    # `_merge_speaker_suggestions_into_fresh_row`.
+    new_entries: Dict[str, Any] = {}
 
-    if mode == "replace" and suggestions:
+    if mode == "replace" and stale_suggestions:
         # Stale-clear BEFORE writing this run's results, in its own commit
         # (plan §6): a crash mid-loop below then leaves "no suggestions"
         # rather than a suggestion from a prior, now-discarded run. This
         # runs even when the new run finds nothing to match (below) — an
         # old suggestion for a cluster that no longer needs review must not
-        # survive the replace. Re-SELECT + merge (BUG-002) so this doesn't
-        # clobber a concurrent PATCH made since `meeting` was first loaded.
-        await _merge_speaker_suggestions_into_fresh_row(db, meeting_id, {})
+        # survive the replace. Re-SELECT under a fresh lock (BUG-002) so
+        # this doesn't clobber a concurrent PATCH made since `meeting` was
+        # first loaded — this is an intentional wholesale wipe (replace=True),
+        # not the entry-level merge used by the final write below; any
+        # concurrent reject/confirm landing AFTER this clear is still
+        # respected because the final write re-reads the row fresh again.
+        await _merge_speaker_suggestions_into_fresh_row(db, meeting_id, {}, replace=True)
         await db.commit()
-        suggestions = {}
 
     # Nothing to match — return WITHOUT any audit noise. This is the common
     # case (most meetings have no lane shared-mic sub-clusters at all), so
@@ -567,7 +599,7 @@ async def _run_matching(
         ))
 
         if best_score >= VOICEPRINT_SUGGEST_THRESHOLD:
-            suggestions[cluster_id] = {
+            new_entries[cluster_id] = {
                 "candidate_display_name": best_name,
                 "profile_id": best_profile_id,
                 "similarity": round(best_score, 4),
@@ -584,9 +616,12 @@ async def _run_matching(
         # of scope, never persisted). PII policy §2 OPEN DECISION B, 案A.
 
     if changed:
-        # Re-SELECT + merge only the speaker_suggestions key (BUG-002) —
-        # `meeting.data` here would be whatever this long-held object last
-        # saw, possibly minutes stale relative to a concurrent PATCH.
-        await _merge_speaker_suggestions_into_fresh_row(db, meeting_id, suggestions)
+        # Re-SELECT + entry-level merge of ONLY this run's new_entries
+        # (BUG-002 / Fable F1) — `meeting.data` here would be whatever this
+        # long-held object last saw, possibly minutes stale relative to a
+        # concurrent PATCH, and a wholesale key overwrite from a run-start
+        # snapshot would resurrect anything popped (rejected/confirmed)
+        # concurrently during the up-to-120s matching window.
+        await _merge_speaker_suggestions_into_fresh_row(db, meeting_id, new_entries)
 
     await db.commit()

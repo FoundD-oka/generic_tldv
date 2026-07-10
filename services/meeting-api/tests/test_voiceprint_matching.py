@@ -503,6 +503,158 @@ async def test_followup_write_preserves_concurrent_edit_via_fresh_reselect():
     assert "speaker_corrections" not in (meeting.data or {})
 
 
+@pytest.mark.asyncio
+async def test_followup_write_does_not_resurrect_concurrently_rejected_entry():
+    """Fable F1 (BUG-002 follow-up): the original re-SELECT fix still wrote
+    the ENTIRE speaker_suggestions key from a value seeded at run-start —
+    a stale snapshot plus this run's new entries. A concurrent DELETE
+    /meetings/{id}/speaker-suggestions/{cluster_id} (reject) committed by a
+    different session DURING the up-to-120s matching window pops its entry
+    from the DB row; the old wholesale-write fix would resurrect it as
+    "suggested" anyway. The fix must be entry-level: only THIS run's
+    cluster_id -> suggestion entries are written; a rejected OLD entry
+    (for a cluster this run never touches) must stay gone, while this run's
+    own new suggestion still lands."""
+    stale_old_entry = {
+        "candidate_display_name": "旧候補", "profile_id": 1,
+        "similarity": 0.9, "status": "suggested", "run_completed_at": "old",
+    }
+    # `meeting` is the stale object `_run_matching` was handed at entry —
+    # it still sees the old, not-yet-rejected suggestion.
+    meeting = make_meeting(id=1, user_id=5, data={
+        "speaker_suggestions": {"lane:bbbbbbbbbb:spk0": stale_old_entry},
+    })
+    # `fresh_row` simulates what the re-SELECT sees: a concurrent reject
+    # (different session) already popped the old cluster's entry.
+    fresh_row = make_meeting(id=1, user_id=5, data={"speaker_suggestions": {}})
+
+    db = _mock_db(execute_results=[
+        MockResult([(_FakeVoiceprintRow(profile_id=7), "田中")]),  # _load_user_voiceprints
+        MockResult([fresh_row]),  # the re-SELECT immediately before the final write
+    ])
+    crypto = _enabled_crypto()
+    crypto.decrypt_embedding = MagicMock(return_value=[1.0, 0.0, 0.0])
+
+    with patch("meeting_api.voiceprint_matching.get_voiceprint_crypto", return_value=crypto), \
+         patch("meeting_api.voiceprint_matching.VOICEPRINT_SERVICE_URL", "http://voiceprint-service"), \
+         patch("meeting_api.voiceprint_matching.embed_clip_from_ranges",
+               new=AsyncMock(return_value=[1.0, 0.0, 0.0])), \
+         patch("meeting_api.voiceprint_matching.attributes.flag_modified", new=MagicMock()):
+        await vm.run_voiceprint_matching_followup(
+            meeting, db,
+            # This run only reviews a DIFFERENT cluster than the rejected one.
+            segments=_needs_review_segments(),
+            mixed_source=_FakeMixedSource(),
+            lane_sources=[_FakeLaneSource(lane_key="aaaaaaaaaa", storage_path="x")],
+            mode="reject_if_exists",
+        )
+
+    final_suggestions = fresh_row.data["speaker_suggestions"]
+    # The concurrently-rejected entry must NOT be resurrected.
+    assert "lane:bbbbbbbbbb:spk0" not in final_suggestions
+    # This run's own new suggestion must still land.
+    assert final_suggestions["lane:aaaaaaaaaa:spk0"]["candidate_display_name"] == "田中"
+
+
+@pytest.mark.asyncio
+async def test_followup_write_does_not_resurrect_concurrently_confirmed_entry():
+    """Fable F1 companion case: a concurrent confirm (the rename/merge PATCH
+    path in meetings.py, which pops a pending suggestion with
+    status='suggested' out of speaker_suggestions once the human accepts it
+    by renaming that cluster) must also stay popped — not just reject."""
+    stale_old_entry = {
+        "candidate_display_name": "旧候補", "profile_id": 1,
+        "similarity": 0.9, "status": "suggested", "run_completed_at": "old",
+    }
+    meeting = make_meeting(id=1, user_id=5, data={
+        "speaker_suggestions": {"lane:bbbbbbbbbb:spk0": stale_old_entry},
+    })
+    # Concurrent confirm (rename) popped the entry from speaker_suggestions
+    # AND recorded the accepted name elsewhere in `data` (speaker_corrections)
+    # — that unrelated key must also survive the merge untouched.
+    fresh_row = make_meeting(id=1, user_id=5, data={
+        "speaker_suggestions": {},
+        "speaker_corrections": {"clusters": {"lane:bbbbbbbbbb:spk0": "確定済み太郎"}},
+    })
+
+    db = _mock_db(execute_results=[
+        MockResult([(_FakeVoiceprintRow(profile_id=7), "田中")]),
+        MockResult([fresh_row]),
+    ])
+    crypto = _enabled_crypto()
+    crypto.decrypt_embedding = MagicMock(return_value=[1.0, 0.0, 0.0])
+
+    with patch("meeting_api.voiceprint_matching.get_voiceprint_crypto", return_value=crypto), \
+         patch("meeting_api.voiceprint_matching.VOICEPRINT_SERVICE_URL", "http://voiceprint-service"), \
+         patch("meeting_api.voiceprint_matching.embed_clip_from_ranges",
+               new=AsyncMock(return_value=[1.0, 0.0, 0.0])), \
+         patch("meeting_api.voiceprint_matching.attributes.flag_modified", new=MagicMock()):
+        await vm.run_voiceprint_matching_followup(
+            meeting, db,
+            segments=_needs_review_segments(),
+            mixed_source=_FakeMixedSource(),
+            lane_sources=[_FakeLaneSource(lane_key="aaaaaaaaaa", storage_path="x")],
+            mode="reject_if_exists",
+        )
+
+    final_suggestions = fresh_row.data["speaker_suggestions"]
+    assert "lane:bbbbbbbbbb:spk0" not in final_suggestions
+    assert final_suggestions["lane:aaaaaaaaaa:spk0"]["candidate_display_name"] == "田中"
+    # The confirm's own record elsewhere in `data` is untouched by the
+    # speaker_suggestions-only merge.
+    assert fresh_row.data["speaker_corrections"] == {
+        "clusters": {"lane:bbbbbbbbbb:spk0": "確定済み太郎"},
+    }
+
+
+@pytest.mark.asyncio
+async def test_followup_write_preserves_untouched_old_entry_when_no_concurrent_change():
+    """Normal-path regression: when NOTHING concurrent happens, an old
+    suggestion for a cluster this run doesn't touch must still be preserved
+    by the entry-level merge (it is not itself a "new entry" this run
+    produced, but it is present in the freshly re-read row, which the merge
+    starts from) — the F1 fix must not turn into "drop everything not
+    produced by this run."""
+    stale_old_entry = {
+        "candidate_display_name": "旧候補", "profile_id": 1,
+        "similarity": 0.9, "status": "suggested", "run_completed_at": "old",
+    }
+    meeting = make_meeting(id=1, user_id=5, data={
+        "speaker_suggestions": {"lane:bbbbbbbbbb:spk0": stale_old_entry},
+    })
+    # No concurrent writer — the fresh re-SELECT sees exactly what `meeting`
+    # saw at entry.
+    fresh_row = make_meeting(id=1, user_id=5, data={
+        "speaker_suggestions": {"lane:bbbbbbbbbb:spk0": dict(stale_old_entry)},
+    })
+
+    db = _mock_db(execute_results=[
+        MockResult([(_FakeVoiceprintRow(profile_id=7), "田中")]),
+        MockResult([fresh_row]),
+    ])
+    crypto = _enabled_crypto()
+    crypto.decrypt_embedding = MagicMock(return_value=[1.0, 0.0, 0.0])
+
+    with patch("meeting_api.voiceprint_matching.get_voiceprint_crypto", return_value=crypto), \
+         patch("meeting_api.voiceprint_matching.VOICEPRINT_SERVICE_URL", "http://voiceprint-service"), \
+         patch("meeting_api.voiceprint_matching.embed_clip_from_ranges",
+               new=AsyncMock(return_value=[1.0, 0.0, 0.0])), \
+         patch("meeting_api.voiceprint_matching.attributes.flag_modified", new=MagicMock()):
+        await vm.run_voiceprint_matching_followup(
+            meeting, db,
+            segments=_needs_review_segments(),
+            mixed_source=_FakeMixedSource(),
+            lane_sources=[_FakeLaneSource(lane_key="aaaaaaaaaa", storage_path="x")],
+            mode="reject_if_exists",
+        )
+
+    final_suggestions = fresh_row.data["speaker_suggestions"]
+    # Old, untouched entry survives ...
+    assert final_suggestions["lane:bbbbbbbbbb:spk0"] == stale_old_entry
+    # ... alongside this run's new entry.
+    assert final_suggestions["lane:aaaaaaaaaa:spk0"]["candidate_display_name"] == "田中"
+
+
 def test_voiceprint_matching_reads_prefixed_budget_and_timeout_env_vars():
     """BUG-003 regression: docker-compose.yml / deploy/env-example only set
     and document VOICEPRINT_MATCH_TOTAL_BUDGET_S / VOICEPRINT_EMBED_TIMEOUT_S
