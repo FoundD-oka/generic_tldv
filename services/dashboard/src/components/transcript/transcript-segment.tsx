@@ -23,6 +23,10 @@ interface TranscriptSegmentProps {
   /** 範囲選択（まとめて話者変更）用 */
   isSelected?: boolean;
   onToggleSelect?: () => void;
+  /** 声紋照合による候補「承認」（issue #27 Phase4）: 既存のクラスタrenameフローを候補名で呼ぶ */
+  onAcceptSuggestion?: () => void;
+  /** 声紋照合による候補「却下」（issue #27 Phase4） */
+  onRejectSuggestion?: () => void;
 }
 
 function formatTimestamp(seconds: number): string {
@@ -84,6 +88,8 @@ export function TranscriptSegment({
   onSpeakerEdit,
   isSelected,
   onToggleSelect,
+  onAcceptSuggestion,
+  onRejectSuggestion,
 }: TranscriptSegmentProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState("");
@@ -211,6 +217,46 @@ export function TranscriptSegment({
               >
                 要確認
               </Badge>
+            )}
+            {/* 声紋照合による命名候補（issue #27 Phase4）: 承認まで話者名は書き換えない。
+                「要確認」バッジとは別トーン（青系＝情報提示）で表示する。 */}
+            {!isEditing && segment.speaker_suggestion?.status === "suggested" && (
+              <span className="inline-flex items-center gap-1">
+                <Badge
+                  variant="outline"
+                  className="text-[10px] h-4 px-1.5 border-sky-300 dark:border-sky-700 text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/30"
+                  title="声紋照合による命名候補です。承認すると同じ声のすべての発話にこの名前が適用されます。"
+                >
+                  候補: {segment.speaker_suggestion.candidate_display_name}{" "}
+                  {Math.round(segment.speaker_suggestion.similarity * 100)}%
+                </Badge>
+                {onAcceptSuggestion && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onAcceptSuggestion();
+                    }}
+                    className="rounded border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary hover:bg-primary/20"
+                    title="この候補名を承認して話者を確定します"
+                  >
+                    承認
+                  </button>
+                )}
+                {onRejectSuggestion && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRejectSuggestion();
+                    }}
+                    className="rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-muted"
+                    title="この候補を却下します"
+                  >
+                    却下
+                  </button>
+                )}
+              </span>
             )}
             <span className="text-xs text-muted-foreground">
               {displayTimestamp}

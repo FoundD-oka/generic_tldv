@@ -19,13 +19,16 @@ import {
   DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu";
 import { TranscriptSegment } from "./transcript-segment";
-import type { Meeting, TranscriptSegment as TranscriptSegmentType, ChatMessage, SpeakerUpdatePayload } from "@/types/vexa";
+import type { Meeting, TranscriptSegment as TranscriptSegmentType, ChatMessage, SpeakerSuggestion, SpeakerUpdatePayload } from "@/types/vexa";
 import { getSpeakerColor } from "@/types/vexa";
 import {
   buildSegmentReassign,
   buildSpeakerMerge,
   buildSpeakerRename,
   describeSpeakerUpdate,
+  getRenameEnrollCandidates,
+  reconcileRejectedSuggestions,
+  type RejectedSuggestionEntry,
 } from "@/lib/speaker-edit";
 import {
   exportToTxt,
@@ -139,6 +142,12 @@ export function TranscriptViewer({
   const [mergeTargetName, setMergeTargetName] = useState("");
   const [reassignTargetName, setReassignTargetName] = useState("");
   const [isUpdatingSpeakers, setIsUpdatingSpeakers] = useState(false);
+  // 声紋照合による命名候補（issue #27 Phase4）: 却下した候補はクライアント側で隠す。
+  // BUG-010: クラスタIDのみでなく却下時の候補内容も保持し、文字起こし再取得時に
+  // reconcileRejectedSuggestionsで再検証する（新しい照合実行の候補は再表示する）。
+  const [rejectedSuggestionClusters, setRejectedSuggestionClusters] = useState<
+    Map<string, RejectedSuggestionEntry>
+  >(new Map());
   const searchInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -368,8 +377,29 @@ export function TranscriptViewer({
   // ---- 話者編集（issue #24 Phase 1c） ----
   const canEditSpeakers = !isLive && !isLoading && !!meeting?.id;
 
+  // 声紋登録（issue #27 Phase4）: 呼び出し前に同意確認トーストを経由すること（PII方針）。
+  const handleEnrollFromCluster = useCallback(
+    async (clusterId: string, displayName: string) => {
+      if (!meeting?.id) return;
+      try {
+        await vexaAPI.enrollVoiceprintFromCluster(meeting.id, clusterId, displayName);
+        toast.success("声紋を登録しました", {
+          description: `「${displayName}」として今後の会議でも自動命名候補に使われます`,
+        });
+      } catch (error) {
+        toast.error("声紋の登録に失敗しました", {
+          description: (error as Error).message,
+        });
+      }
+    },
+    [meeting?.id]
+  );
+
   const applySpeakerUpdate = useCallback(
-    async (payload: SpeakerUpdatePayload | null) => {
+    async (
+      payload: SpeakerUpdatePayload | null,
+      options?: { suppressEnrollOfferForClusters?: string[] }
+    ) => {
       if (!payload || !meeting?.id) return;
       setIsUpdatingSpeakers(true);
       try {
@@ -384,6 +414,30 @@ export function TranscriptViewer({
         // 旧話者名のフィルタが残ると改名後のセグメントが隠れるため解除する
         setSelectedSpeakers([]);
         onTranscribeComplete?.();
+
+        // 暗黙登録オファー（issue #27 Phase4, NH-3）: renameのみが対象。
+        // merge/reassignは対象クラスタの一意性が保証できないためオファーしない。
+        // BUG-004: 声紋照合候補の「承認」もrenameとして送られるが、承認は
+        // 既に登録済みの声紋との一致確認であり登録オファーは不要 —
+        // 呼び出し側（handleAcceptSuggestion）が対象クラスタを除外指定する。
+        for (const candidate of getRenameEnrollCandidates(
+          result.affected_clusters,
+          options?.suppressEnrollOfferForClusters
+        )) {
+          toast(
+            `この声を「${candidate.display_name}」として登録しますか？（本人の同意を得ていることを確認してください）`,
+            {
+              id: `voiceprint-enroll-offer-${candidate.cluster_id}`,
+              duration: 15000,
+              action: {
+                label: "登録する",
+                onClick: () =>
+                  void handleEnrollFromCluster(candidate.cluster_id, candidate.display_name),
+              },
+              cancel: { label: "後で", onClick: () => {} },
+            }
+          );
+        }
       } catch (error) {
         toast.error("話者の更新に失敗しました", {
           description: (error as Error).message,
@@ -392,8 +446,54 @@ export function TranscriptViewer({
         setIsUpdatingSpeakers(false);
       }
     },
-    [meeting?.id, onTranscribeComplete]
+    [meeting?.id, onTranscribeComplete, handleEnrollFromCluster]
   );
+
+  // 声紋照合による候補の承認/却下（issue #27 Phase4）
+  const handleAcceptSuggestion = useCallback(
+    (clusterId: string, candidateName: string) => {
+      // BUG-004: 承認は既に登録済みの声紋との一致確認であり、暗黙登録オファー
+      // を出すべきでない。手動renameと区別するため対象クラスタを除外指定する。
+      void applySpeakerUpdate(
+        buildSpeakerRename({ speaker: "", speaker_cluster: clusterId }, candidateName),
+        { suppressEnrollOfferForClusters: [clusterId] }
+      );
+    },
+    [applySpeakerUpdate]
+  );
+
+  const handleRejectSuggestion = useCallback(
+    (clusterId: string, suggestion: SpeakerSuggestion) => {
+      if (!meeting?.id) return;
+      // 楽観的にチップを消す（失敗時は元に戻す）。BUG-010: どの候補を却下
+      // したかも保持し、再取得時に新しい候補と区別できるようにする。
+      setRejectedSuggestionClusters((prev) => {
+        const next = new Map(prev);
+        next.set(clusterId, {
+          candidateDisplayName: suggestion.candidate_display_name,
+          similarity: suggestion.similarity,
+        });
+        return next;
+      });
+      void vexaAPI.rejectSpeakerSuggestion(meeting.id, clusterId).catch((error) => {
+        setRejectedSuggestionClusters((prev) => {
+          const next = new Map(prev);
+          next.delete(clusterId);
+          return next;
+        });
+        toast.error("候補の却下に失敗しました", {
+          description: (error as Error).message,
+        });
+      });
+    },
+    [meeting?.id]
+  );
+
+  // BUG-010: 文字起こしが再取得されるたびに却下フラグを最新のsuggestionと
+  // 突き合わせ、サーバ側で反映済み/新しい照合実行の候補は追跡を外す。
+  useEffect(() => {
+    setRejectedSuggestionClusters((prev) => reconcileRejectedSuggestions(prev, segments));
+  }, [segments]);
 
   const toggleGroupSelection = useCallback((segmentIds: string[]) => {
     setSelectedSegmentIds((prev) => {
@@ -1107,6 +1207,10 @@ export function TranscriptViewer({
                   speaker_cluster: group.segments[0]?.speaker_cluster,
                   speaker_auto: group.segments[0]?.speaker_auto,
                   speaker_mapping_status: group.segments[0]?.speaker_mapping_status,
+                  // 声紋照合による命名候補（issue #27 Phase4）: 却下済みクラスタは非表示にする
+                  speaker_suggestion: rejectedSuggestionClusters.has(group.key)
+                    ? undefined
+                    : group.segments[0]?.speaker_suggestion,
                 };
 
                 const isActivePlayback = activePlaybackIndex === index;
@@ -1191,6 +1295,20 @@ export function TranscriptViewer({
                       onToggleSelect={
                         isGroupSelectable
                           ? () => toggleGroupSelection(groupSegmentIds)
+                          : undefined
+                      }
+                      onAcceptSuggestion={
+                        syntheticSegment.speaker_suggestion
+                          ? () =>
+                              handleAcceptSuggestion(
+                                group.key,
+                                syntheticSegment.speaker_suggestion!.candidate_display_name
+                              )
+                          : undefined
+                      }
+                      onRejectSuggestion={
+                        syntheticSegment.speaker_suggestion
+                          ? () => handleRejectSuggestion(group.key, syntheticSegment.speaker_suggestion!)
                           : undefined
                       }
                     />

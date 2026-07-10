@@ -2027,6 +2027,13 @@ class SpeakerUpdateResponse(BaseModel):
     speakers: List[str]
     redis_cache_cleared: bool
     drive_export_requeued: bool
+    # Issue #27 Phase 4 (plan §8 / Codex critique #11): rename/merge/reassign
+    # can each touch multiple clusters in one PATCH, so a single `cluster_id`
+    # cannot identify "what to offer implicit voiceprint enrollment for" —
+    # the dashboard uses this list instead. Only `operation="rename"`
+    # entries are eligible for the enrollment offer (merge/reassign target
+    # ambiguity is out of scope for Phase 4, plan §8).
+    affected_clusters: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 @router.patch(
@@ -2079,6 +2086,10 @@ async def update_meeting_speakers(
 
     updated = {"rename": 0, "merge": 0, "reassign": 0}
     history: List[Dict[str, Any]] = []
+    # Issue #27 Phase 4 (plan §8): echo which clusters this PATCH actually
+    # touched, per operation, so the dashboard can offer implicit voiceprint
+    # enrollment for the (unambiguous) rename case.
+    affected_clusters: List[Dict[str, Any]] = []
     now_iso = datetime.utcnow().isoformat()
 
     # Load saved corrections up-front (under the row lock) and mutate them
@@ -2093,6 +2104,12 @@ async def update_meeting_speakers(
     aliases: Dict[str, str] = {
         str(k): str(v) for k, v in dict(corrections_state.get("aliases") or {}).items()
     }
+    # Issue #27 Phase 4 / PII policy §6: "confirm" is one of the required
+    # audit events — accepting a suggestion has no dedicated endpoint (it IS
+    # this rename, plan §7), so a rename by from_cluster that matches a
+    # pending suggestion for that exact cluster is a human confirmation.
+    pending_suggestions: Dict[str, Any] = dict(data.get("speaker_suggestions") or {})
+    suggestions_changed = False
 
     for op in req.rename:
         if not op.from_cluster and not op.from_name:
@@ -2113,6 +2130,28 @@ async def update_meeting_speakers(
             for source, representative in aliases.items():
                 if representative == op.from_cluster:
                     clusters_map[source] = op.to_name
+            # Issue #27 Phase 4 (plan §8): the from_cluster id IS the
+            # affected cluster — no extra query needed. from_name-based
+            # rename targets legacy rows that by definition have no
+            # speaker_cluster (that's the fallback's whole purpose), so
+            # there is no cluster identity to echo for that branch.
+            affected_clusters.append({
+                "cluster_id": op.from_cluster, "display_name": op.to_name, "operation": "rename",
+            })
+            pending = pending_suggestions.get(op.from_cluster)
+            if isinstance(pending, dict) and pending.get("status") == "suggested":
+                del pending_suggestions[op.from_cluster]
+                suggestions_changed = True
+                from .models import VoiceprintAuditLog
+
+                db.add(VoiceprintAuditLog(
+                    user_id=current_user.id,
+                    event="confirm",
+                    actor_user_id=current_user.id,
+                    subject_profile_id=pending.get("profile_id"),
+                    meeting_id=meeting_id,
+                    detail={"cluster_id": op.from_cluster, "similarity": pending.get("similarity")},
+                ))
         history.append({
             "op": "rename", "at": now_iso,
             "from_cluster": op.from_cluster, "from_name": op.from_name,
@@ -2141,6 +2180,29 @@ async def update_meeting_speakers(
             clusters_map[cluster] = op.to_name
             if cluster != representative:
                 aliases[cluster] = representative
+            # BUG-012: mirror the rename branch's pending-suggestion cleanup
+            # here too. Without this, a merged-away cluster's pending
+            # speaker_suggestions entry is never popped/audited — an
+            # ever-growing orphaned key in the JSONB blob with no confirm
+            # audit trail, asymmetric with rename's handling.
+            pending = pending_suggestions.get(cluster)
+            if isinstance(pending, dict) and pending.get("status") == "suggested":
+                del pending_suggestions[cluster]
+                suggestions_changed = True
+                from .models import VoiceprintAuditLog
+
+                db.add(VoiceprintAuditLog(
+                    user_id=current_user.id,
+                    event="confirm",
+                    actor_user_id=current_user.id,
+                    subject_profile_id=pending.get("profile_id"),
+                    meeting_id=meeting_id,
+                    detail={
+                        "cluster_id": cluster,
+                        "similarity": pending.get("similarity"),
+                        "operation": "merge",
+                    },
+                ))
         clusters_map[representative] = op.to_name
         # Chained merges: re-point aliases whose representative was itself
         # merged away, so the whole group still follows one representative.
@@ -2148,6 +2210,13 @@ async def update_meeting_speakers(
             if rep in op.clusters and rep != representative:
                 aliases[source] = representative
                 clusters_map[source] = op.to_name
+        # Issue #27 Phase 4 (plan §8): every source cluster (and the
+        # representative it now lives under) is "affected" by a merge.
+        merged_cluster_ids = sorted(set(op.clusters) | {representative})
+        for cluster in merged_cluster_ids:
+            affected_clusters.append({
+                "cluster_id": cluster, "display_name": op.to_name, "operation": "merge",
+            })
         history.append({
             "op": "merge", "at": now_iso,
             "clusters": op.clusters, "to_cluster": representative,
@@ -2167,6 +2236,14 @@ async def update_meeting_speakers(
             .values(**values)
         )
         updated["reassign"] += result.rowcount or 0
+        # Issue #27 Phase 4 (plan §8): only reported when the request gave a
+        # target cluster id — reassign without to_cluster leaves segments'
+        # existing (possibly mixed) cluster ids untouched, so there is no
+        # single affected cluster to echo.
+        if op.to_cluster is not None:
+            affected_clusters.append({
+                "cluster_id": op.to_cluster, "display_name": op.to_name, "operation": "reassign",
+            })
         history.append({
             "op": "reassign", "at": now_iso,
             "segment_count": len(op.segment_ids),
@@ -2179,6 +2256,8 @@ async def update_meeting_speakers(
     corrections_state["history"] = (list(corrections_state.get("history") or []) + history)[-50:]
     corrections_state["updated_at"] = now_iso
     data["speaker_corrections"] = corrections_state
+    if suggestions_changed:
+        data["speaker_suggestions"] = pending_suggestions
     meeting.data = data
     attributes.flag_modified(meeting, "data")
 
@@ -2213,4 +2292,66 @@ async def update_meeting_speakers(
         speakers=speakers,
         redis_cache_cleared=cache_cleared,
         drive_export_requeued=drive_requeued,
+        affected_clusters=affected_clusters,
     )
+
+
+# --- Voiceprint suggestion rejection (issue #27 Phase 4, plan §7) ---
+
+
+@router.delete(
+    "/meetings/{meeting_id}/speaker-suggestions/{cluster_id}",
+    summary="Reject a voiceprint auto-naming suggestion for one cluster",
+    dependencies=[Depends(get_user_and_token)],
+)
+async def reject_speaker_suggestion(
+    meeting_id: int,
+    cluster_id: str,
+    auth_data: tuple = Depends(get_user_and_token),
+    db: AsyncSession = Depends(get_db),
+):
+    """Dismiss a voiceprint suggestion so it stops overlaying onto the
+    transcript read path (collector/endpoints.py's `_overlay_speaker_
+    suggestions`). Accepting a suggestion has no dedicated endpoint — it IS
+    the existing rename above (plan §7); this endpoint only covers reject.
+
+    Semantics decision (plan §7 open item, recorded here rather than left
+    implicit): logged as event="suggest" with detail.action="reject" rather
+    than a new audit enum value, keeping the audit enum at exactly the 6
+    values approved in PII policy §6 while remaining queryable via
+    `detail->>'action' = 'reject'`.
+    """
+    _, current_user = auth_data
+    meeting = (await db.execute(
+        select(Meeting)
+        .where(Meeting.id == meeting_id, Meeting.user_id == current_user.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )).scalars().first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    data = dict(meeting.data or {}) if isinstance(meeting.data, dict) else {}
+    suggestions = dict(data.get("speaker_suggestions") or {})
+    entry = suggestions.pop(cluster_id, None)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="No pending suggestion for this cluster")
+
+    data["speaker_suggestions"] = suggestions
+    meeting.data = data
+    attributes.flag_modified(meeting, "data")
+
+    from .models import VoiceprintAuditLog
+
+    db.add(VoiceprintAuditLog(
+        user_id=current_user.id,
+        event="suggest",
+        actor_user_id=current_user.id,
+        subject_profile_id=entry.get("profile_id") if isinstance(entry, dict) else None,
+        meeting_id=meeting_id,
+        detail={"cluster_id": cluster_id, "action": "reject"},
+    ))
+
+    await db.commit()
+
+    return {"message": f"Suggestion for cluster {cluster_id} rejected", "cluster_id": cluster_id}

@@ -1,0 +1,18 @@
+{
+  "timestamp": "2026-07-10T05:33:05.209141+00:00",
+  "task_id": "issue-27-voiceprint",
+  "size": "L",
+  "status": "pass",
+  "mode": "required",
+  "policy": "required_for_l",
+  "required": true,
+  "provider": "claude-fable-cli",
+  "errors": [],
+  "warnings": [],
+  "artifacts": {
+    "brief": ".pipeline/plans/issue-27-voiceprint/consultation-brief.md",
+    "response": ".pipeline/evidence/issue-27-voiceprint/external-consultation/fable.md",
+    "legacy_response": ".pipeline/evidence/issue-27-voiceprint/external-consultation/chatgpt-pro.md",
+    "summary": ".pipeline/evidence/issue-27-voiceprint/external-consultation/consultation-summary.json"
+  }
+}

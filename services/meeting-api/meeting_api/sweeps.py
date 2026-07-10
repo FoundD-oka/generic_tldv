@@ -904,6 +904,85 @@ async def _sweep_drive_export_jobs(
     return swept
 
 
+# Issue #27 Phase 4 / PII policy §3 — voiceprint retention runs ~daily, not
+# every 60s poll interval; a module-level guard timestamp is the cheapest
+# way to add a day-cadence sub-schedule inside the existing sweep loop
+# without a separate asyncio task (plan §5: "daily-ish...internal day-guard").
+VOICEPRINT_RETENTION_SWEEP_INTERVAL_SECONDS = 86400
+_voiceprint_retention_last_run: Optional[datetime] = None
+
+
+async def _sweep_voiceprint_retention(
+    db_session_factory: Callable[[], AsyncSession],
+) -> int:
+    """Issue #27 Phase 4 / PII policy §3 — delete voiceprints whose
+    COALESCE(last_matched_at, created_at) is older than
+    VOICEPRINT_RETENTION_MONTHS (default 24), recording an audit `delete`
+    event (detail.reason="retention") per row. Cascades do NOT apply here —
+    this deletes the Voiceprint row directly, leaving its SpeakerProfile
+    and any other voiceprints for that profile untouched, since a dormant
+    embedding expiring is not the same as the human deleting their profile.
+
+    Day-guarded so the 60s-cadence sweep loop doesn't re-scan every
+    iteration; returns 0 without querying when called before the next
+    day-boundary is due.
+    """
+    global _voiceprint_retention_last_run
+    from sqlalchemy import func as sa_func
+    from .models import Voiceprint, VoiceprintAuditLog
+    from .voiceprint_matching import VOICEPRINT_RETENTION_MONTHS
+
+    now = datetime.utcnow()
+    if (
+        _voiceprint_retention_last_run is not None
+        and (now - _voiceprint_retention_last_run).total_seconds()
+        < VOICEPRINT_RETENTION_SWEEP_INTERVAL_SECONDS
+    ):
+        return 0
+
+    # Calendar months approximated as 30d — acceptable for a 24-month-scale
+    # retention window; a few days of slop either way is not meaningful here.
+    cutoff = now - timedelta(days=30 * VOICEPRINT_RETENTION_MONTHS)
+    swept = 0
+
+    async with db_session_factory() as db:
+        rows = (await db.execute(
+            select(Voiceprint).where(
+                sa_func.coalesce(Voiceprint.last_matched_at, Voiceprint.created_at) < cutoff
+            )
+        )).scalars().all()
+
+        for vp in rows:
+            logger.info(
+                "[sweep] voiceprint-retention deleting voiceprint_id=%s "
+                "profile_id=%s user_id=%s (>%s months unused)",
+                vp.id, vp.profile_id, vp.user_id, VOICEPRINT_RETENTION_MONTHS,
+            )
+            db.add(VoiceprintAuditLog(
+                user_id=vp.user_id,
+                event="delete",
+                subject_profile_id=vp.profile_id,
+                detail={"reason": "retention", "voiceprint_id": vp.id},
+            ))
+            await db.delete(vp)
+            swept += 1
+
+        if swept:
+            await db.commit()
+
+    # BUG-005: stamp the day-guard only AFTER the sweep body has fully
+    # completed without raising — attempt vs success. Stamping before the
+    # fallible DB work (as this used to) would disable the 24-month PII
+    # retention sweep for a full day on any transient failure, since
+    # start_sweeps' caller only logs exceptions and never resets this
+    # guard; that repeats indefinitely if the failure persists. Leaving
+    # `_voiceprint_retention_last_run` untouched on failure lets the very
+    # next 60s-cadence sweep loop iteration retry instead.
+    _voiceprint_retention_last_run = now
+
+    return swept
+
+
 async def start_sweeps(
     db_session_factory: Callable[[], AsyncSession],
 ) -> None:
@@ -916,6 +995,7 @@ async def start_sweeps(
       - Pack E.1-sibling: unfinalized recordings repair/finalize
       - Issue #2: final transcription replacement
       - Calendar-origin Drive export after final transcription
+      - Issue #27 Phase 4: voiceprint retention (day-guarded)
 
     Pattern mirrors webhook_retry_worker.start_retry_worker — same
     shape, different responsibility.
@@ -979,6 +1059,16 @@ async def start_sweeps(
                 )
         except Exception as e:
             logger.error(f"[sweeps] iteration {sweep_iterations} drive-export error: {e}", exc_info=True)
+
+        try:
+            voiceprints_retired = await _sweep_voiceprint_retention(db_session_factory)
+            if voiceprints_retired > 0:
+                logger.info(
+                    f"[sweeps] iteration {sweep_iterations}: "
+                    f"retired {voiceprints_retired} expired voiceprint(s) (issue #27 retention)"
+                )
+        except Exception as e:
+            logger.error(f"[sweeps] iteration {sweep_iterations} voiceprint-retention error: {e}", exc_info=True)
 
         try:
             stop_summary = await _sweep_container_stops()

@@ -26,6 +26,7 @@ from ..schemas import (
 )
 from ..auth import UserProxy
 from ..redaction import redact_secrets
+from ..schemas import redact_meeting_data
 
 from .config import IMMUTABILITY_THRESHOLD
 from .filters import TranscriptionFilter
@@ -253,10 +254,39 @@ def _derive_speaker_mapping_status(
     return "needs_review"
 
 
+def _overlay_speaker_suggestions(
+    segments: List[TranscriptionSegment],
+    suggestions: Dict[str, Any],
+) -> None:
+    """Overlay voiceprint auto-naming suggestions (issue #27 Phase 4) onto
+    already-merged segments — called AFTER the PG/Redis merge below so
+    Redis-wins semantics are preserved (Codex critique FC-8: adding this
+    only to the PG branch would make a live-cache hit lose the badge).
+    Mutates `segments` in place. Never touches `Transcription.speaker` or
+    any persisted row — only adds the minimal read-time
+    `speaker_suggestion` payload, and never includes `profile_id` (plan §6
+    露出制御 — profile_id must never reach a transcript response)."""
+    if not suggestions:
+        return
+    for seg in segments:
+        if seg.speaker_mapping_status != "needs_review":
+            continue
+        cluster = seg.speaker_cluster
+        entry = suggestions.get(cluster) if cluster else None
+        if not isinstance(entry, dict) or entry.get("status") != "suggested":
+            continue
+        seg.speaker_suggestion = {
+            "candidate_display_name": entry.get("candidate_display_name"),
+            "similarity": entry.get("similarity"),
+            "status": entry.get("status"),
+        }
+
+
 async def _get_full_transcript_segments(
     internal_meeting_id: int,
     db: AsyncSession,
-    redis_c: aioredis.Redis
+    redis_c: aioredis.Redis,
+    meeting: Optional[Meeting] = None,
 ) -> List[TranscriptionSegment]:
     """
     Fetch and merge transcript segments from Postgres and Redis by segment_id.
@@ -392,13 +422,24 @@ async def _get_full_transcript_segments(
         except Exception as e:
             logger.error(f"[Segments] Redis segment error {seg_key}: {e}")
 
-    # 5. Sort by absolute_start_time (or start_time as fallback)
+    # 5. Overlay voiceprint suggestions (issue #27 Phase 4) — after the
+    # Redis-wins merge above, so a live cache hit still carries the badge.
+    suggestions: Dict[str, Any] = {}
+    meeting_data = getattr(meeting, "data", None)
+    if isinstance(meeting_data, dict):
+        raw_suggestions = meeting_data.get("speaker_suggestions")
+        if isinstance(raw_suggestions, dict):
+            suggestions = raw_suggestions
+    segment_list = list(merged.values())
+    _overlay_speaker_suggestions(segment_list, suggestions)
+
+    # 6. Sort by absolute_start_time (or start_time as fallback)
     def sort_key(seg: TranscriptionSegment):
         if seg.absolute_start_time:
             return seg.absolute_start_time
         return datetime.min.replace(tzinfo=timezone.utc)
 
-    return sorted(merged.values(), key=sort_key)
+    return sorted(segment_list, key=sort_key)
 
 @router.get("/meetings",
             response_model=MeetingListResponse,
@@ -474,7 +515,7 @@ async def get_transcript_by_native_id(
             )
 
     internal_meeting_id = meeting.id
-    sorted_segments = await _get_full_transcript_segments(internal_meeting_id, db, redis_c)
+    sorted_segments = await _get_full_transcript_segments(internal_meeting_id, db, redis_c, meeting=meeting)
 
     logger.info(f"[API Meet {internal_meeting_id}] Merged and sorted into {len(sorted_segments)} total segments.")
 
@@ -482,7 +523,11 @@ async def get_transcript_by_native_id(
     response_data = meeting_details.model_dump()
     response_data["recordings"] = (meeting.data or {}).get("recordings", []) if isinstance(meeting.data, dict) else []
     response_data["notes"] = (meeting.data or {}).get("notes") if isinstance(meeting.data, dict) else None
-    response_data["data"] = dict(meeting.data) if isinstance(meeting.data, dict) else {}
+    # speaker_suggestions must never reach a generic API response (plan §6
+    # 露出制御) — same redaction the MeetingResponse serializer applies to
+    # `data`, applied here too since this endpoint builds `data` by hand
+    # instead of going through that serializer.
+    response_data["data"] = redact_meeting_data(dict(meeting.data)) if isinstance(meeting.data, dict) else {}
     response_data["speaker_events"] = (meeting.data or {}).get("speaker_events", []) if isinstance(meeting.data, dict) else []
     response_data["segments"] = sorted_segments
     return TranscriptionResponse(**response_data)
@@ -533,7 +578,7 @@ async def get_meeting_assistant_context(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
 
     redis_c = getattr(request.app.state, "redis_client", None)
-    segments = await _get_full_transcript_segments(meeting.id, db, redis_c)
+    segments = await _get_full_transcript_segments(meeting.id, db, redis_c, meeting=meeting)
     latest_segments = [_segment_to_assistant_context(segment) for segment in segments[-limit:]]
     chat_messages = await _get_assistant_chat_messages(redis_c, meeting, limit=limit)
     url_texts = [segment["text"] for segment in latest_segments] + [
@@ -636,7 +681,7 @@ async def get_transcript_internal(
             detail=f"Meeting with ID {meeting_id} not found."
         )
 
-    segments = await _get_full_transcript_segments(meeting_id, db, redis_c)
+    segments = await _get_full_transcript_segments(meeting_id, db, redis_c, meeting=meeting)
     return segments
 
 @router.patch("/meetings/{platform}/{native_meeting_id}",
