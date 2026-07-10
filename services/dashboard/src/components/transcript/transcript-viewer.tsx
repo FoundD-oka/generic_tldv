@@ -36,6 +36,7 @@ import {
   generateFilename,
 } from "@/lib/export";
 import { cn, parseUTCTimestamp } from "@/lib/utils";
+import { buildSpeakerDisplayLabels, getSpeakerDisplayLabel, getSpeakerIdentityKey, resolveSpeakerLabelByKey } from "@/lib/speaker-label";
 import { vexaAPI } from "@/lib/api";
 import { toast } from "sonner";
 import { LanguagePicker } from "@/components/language-picker";
@@ -224,27 +225,43 @@ export function TranscriptViewer({
     | { type: "transcript"; group: SegmentGroup<TranscriptSegmentType>; index: number }
     | { type: "chat"; message: ChatMessage };
 
-  // Get unique speakers in order of appearance (excluding legacy [Chat] injected segments)
+  // Cleaned + time-sorted segments shared by grouping, speaker order, and
+  // display-label assignment so all three agree on the same identity keys
+  // and first-appearance order (excluding legacy [Chat] injected segments).
+  // Dedup by segment_id when available, otherwise by absolute_start_time.
+  const cleanedSortedSegments = useMemo(() => {
+    const cleaned = segments.filter((seg) => !seg.text?.trimStart().startsWith("[Chat]") && seg.text?.trim());
+    return sortByStartTime(deduplicateByIdentity(cleaned));
+  }, [segments, segments.length]);
+
+  // Identity key per unique speaker in order of appearance. Falls back to
+  // speaker_cluster when speaker is unset so distinct unnamed lane
+  // sub-clusters never collapse into the same identity (issue #26 B-4/FC-9).
   const speakerOrder = useMemo(() => {
     const speakers: string[] = [];
-    for (const segment of segments) {
-      if (segment.text?.trimStart().startsWith("[Chat]")) continue;
-      if (!speakers.includes(segment.speaker)) {
-        speakers.push(segment.speaker);
+    for (const segment of cleanedSortedSegments) {
+      const key = getSpeakerIdentityKey(segment);
+      if (!speakers.includes(key)) {
+        speakers.push(key);
       }
     }
     return speakers;
-  }, [segments]);
+  }, [cleanedSortedSegments]);
+
+  // identityキー → 表示ラベル（「要確認の話者A」等）。生のcluster idは
+  // ここで一度だけ解決し、以降の描画はこのラベルのみを見る（B-4）。
+  const speakerDisplayLabels = useMemo(
+    () => buildSpeakerDisplayLabels(cleanedSortedSegments),
+    [cleanedSortedSegments]
+  );
 
   // Raw segments — no grouping, no merging. Each segment rendered individually.
-  // Dedup by segment_id when available, otherwise by absolute_start_time.
   const groupedSegments = useMemo(() => {
-    const cleaned = segments.filter((seg) => !seg.text?.trimStart().startsWith("[Chat]") && seg.text?.trim());
-    const deduped = sortByStartTime(deduplicateByIdentity(cleaned));
-
-    // Wrap each segment as its own group (1 segment per group)
-    return deduped.map((seg): SegmentGroup<typeof seg> => ({
-      key: seg.speaker || "",
+    // Wrap each segment as its own group (1 segment per group). The group
+    // key is the identity key (never a display label) — grouping, filter,
+    // color, and consecutive-header logic all key off this value.
+    return cleanedSortedSegments.map((seg): SegmentGroup<typeof seg> => ({
+      key: getSpeakerIdentityKey(seg),
       startTime: seg.absolute_start_time,
       endTime: seg.absolute_end_time || seg.absolute_start_time,
       startTimeSeconds: seg.start_time ?? 0,
@@ -252,7 +269,7 @@ export function TranscriptViewer({
       combinedText: (seg.text || "").trim(),
       segments: [seg],
     }));
-  }, [segments, segments.length]);
+  }, [cleanedSortedSegments]);
 
   // Filter grouped segments by search query and selected speakers
   const filteredSegments = useMemo(() => {
@@ -269,12 +286,12 @@ export function TranscriptViewer({
       result = result.filter(
         (g) =>
           g.combinedText.toLowerCase().includes(query) ||
-          g.key.toLowerCase().includes(query)
+          resolveSpeakerLabelByKey(g.key, speakerDisplayLabels).toLowerCase().includes(query)
       );
     }
 
     return result;
-  }, [groupedSegments, searchQuery, selectedSpeakers]);
+  }, [groupedSegments, searchQuery, selectedSpeakers, speakerDisplayLabels]);
 
   // Build unified timeline: merge transcript groups + chat messages, sorted by time
   const timelineItems: TimelineItem[] = useMemo(() => {
@@ -752,6 +769,7 @@ export function TranscriptViewer({
               <DropdownMenuContent align="end" className="w-56">
                 {speakerOrder.map((speaker) => {
                   const color = getSpeakerColor(speaker, speakerOrder);
+                  const label = resolveSpeakerLabelByKey(speaker, speakerDisplayLabels);
                   return (
                     <DropdownMenuCheckboxItem
                       key={speaker}
@@ -760,7 +778,7 @@ export function TranscriptViewer({
                     >
                       <div className="flex items-center gap-2">
                         <div className={cn("w-2 h-2 rounded-full", color.avatar)} />
-                        <span className="truncate">{speaker || "不明"}</span>
+                        <span className="truncate">{label}</span>
                       </div>
                     </DropdownMenuCheckboxItem>
                   );
@@ -822,7 +840,7 @@ export function TranscriptViewer({
                 className="font-normal cursor-pointer hover:bg-destructive/20"
                 onClick={() => toggleSpeaker(speaker)}
               >
-                {speaker}
+                {resolveSpeakerLabelByKey(speaker, speakerDisplayLabels)}
                 <X className="h-3 w-3 ml-1" />
               </Badge>
             ))}
@@ -1069,7 +1087,10 @@ export function TranscriptViewer({
                 // ---- Transcript group item ----
                 const { group, index } = item;
 
-                // Create a synthetic segment for the grouped segment
+                // Create a synthetic segment for the grouped segment.
+                // `speaker` here is the resolved DISPLAY LABEL (never the raw
+                // group.key/cluster id) — issue #26 B-4. Identity for
+                // grouping/filter/color/header logic stays on group.key.
                 const syntheticSegment: TranscriptSegmentType = {
                   id: `${group.startTime}-${index}`,
                   meeting_id: meeting.id,
@@ -1078,13 +1099,14 @@ export function TranscriptViewer({
                   absolute_start_time: group.startTime,
                   absolute_end_time: group.endTime,
                   text: group.combinedText,
-                  speaker: group.key.startsWith("__unmapped_") ? (group.segments[0]?.speaker || "") : group.key,
+                  speaker: getSpeakerDisplayLabel(group.segments[0], speakerDisplayLabels),
                   language: group.segments[0]?.language || "ja",
                   completed: group.segments.every(s => s.completed !== false),
                   session_uid: group.segments[0]?.session_uid || "",
                   created_at: group.startTime,
                   speaker_cluster: group.segments[0]?.speaker_cluster,
                   speaker_auto: group.segments[0]?.speaker_auto,
+                  speaker_mapping_status: group.segments[0]?.speaker_mapping_status,
                 };
 
                 const isActivePlayback = activePlaybackIndex === index;
@@ -1108,11 +1130,10 @@ export function TranscriptViewer({
                 if (idx > 0) {
                   const prevItem = timelineItems[idx - 1];
                   if (prevItem.type === "transcript") {
-                    const prevSpeaker = prevItem.group.key.startsWith("__unmapped_")
-                      ? (prevItem.group.segments[0]?.speaker || "")
-                      : prevItem.group.key;
-                    const currSpeaker = syntheticSegment.speaker;
-                    const sameSpeaker = prevSpeaker === currSpeaker;
+                    // Compare identity keys, not display labels (issue #26
+                    // B-4): grouping/header logic must key off group.key so
+                    // distinct unnamed sub-clusters never collapse together.
+                    const sameSpeaker = prevItem.group.key === group.key;
                     const prevEndMs = new Date(prevItem.group.endTime).getTime();
                     const currStartMs = new Date(group.startTime).getTime();
                     const gapMs = Number.isFinite(prevEndMs) && Number.isFinite(currStartMs)

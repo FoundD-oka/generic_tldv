@@ -17,6 +17,7 @@
             "no_speech_prob": 0.0,
             "audio_start": 0.0,
             "audio_end": 3.26,
+            "token_count": 7,
             "speaker": "1"
         },
         {
@@ -32,6 +33,7 @@
             "no_speech_prob": 0.0,
             "audio_start": 3.6,
             "audio_end": 4.76,
+            "token_count": 4,
             "speaker": "2"
         },
         {
@@ -47,6 +49,7 @@
             "no_speech_prob": 0.0,
             "audio_start": 5.1,
             "audio_end": 6.6,
+            "token_count": 5,
             "speaker": "1"
         }
     ]

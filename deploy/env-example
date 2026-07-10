@@ -112,6 +112,12 @@ MAX_RECORDING_LANES=8
 LANE_STT_CONCURRENCY=2
 # 会議あたりレーン音声の合計上限秒数。超過時は混合masterへフォールバック
 MAX_LANE_TOTAL_DURATION_SECONDS=14400
+# Issue #26 — 同室共有マイク検出のfalse-split guard。1レーン内のクラスタが
+# 「安定」と見なされるための合計発話時間（秒）／合計トークン数の閾値。
+# 両方の閾値を満たすクラスタが2つ以上あるレーンは「共有マイク」と判定され、
+# 各サブクラスタは要確認（needs_review）扱いになる（DOM話者名は使わない）。
+LANE_SHARED_MIC_MIN_CLUSTER_DURATION_S=2.0
+LANE_SHARED_MIC_MIN_CLUSTER_TOKENS=5
 KABOSU_DRIVE_EXPORT_ENABLED=true
 # Set to true to export only Google Calendar-origin meetings.
 # Default (false) exports every completed meeting, including manual joins.

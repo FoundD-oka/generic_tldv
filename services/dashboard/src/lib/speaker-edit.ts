@@ -1,4 +1,5 @@
 import type { SpeakerUpdatePayload, TranscriptSegment } from "@/types/vexa";
+import { getSpeakerIdentityKey } from "@/lib/speaker-label";
 
 /**
  * 話者修正ペイロード構築ヘルパー（issue #24 Phase 1c）。
@@ -52,7 +53,15 @@ export function buildSpeakerMerge(
   const clusters: string[] = [];
   const clusterlessNames = new Set<string>();
   for (const seg of segments) {
-    if (!seg.speaker || !selected.has(seg.speaker)) continue;
+    // BUG-002 — `selectedSpeakers` comes from the viewer's speaker filter,
+    // which is keyed by identity (getSpeakerIdentityKey: speaker ||
+    // speaker_cluster), not by `speaker` alone. A needs_review lane
+    // sub-cluster segment has an empty `speaker`, so filtering on
+    // `seg.speaker` here would always skip it even when its cluster (its
+    // real identity key) is in `selected`. Match by the same identity key
+    // the filter UI uses instead.
+    const identity = getSpeakerIdentityKey(seg);
+    if (!identity || !selected.has(identity)) continue;
     if (seg.speaker_cluster) {
       if (!clusters.includes(seg.speaker_cluster)) clusters.push(seg.speaker_cluster);
     } else {
