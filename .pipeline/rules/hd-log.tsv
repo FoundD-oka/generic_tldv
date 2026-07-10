@@ -27,3 +27,4 @@ date	task_id	category	source	severity	note
 2026-07-10	issue-26-lane-diarization	sharedmic-env-parse-crash	tribunal	low	BUG-004 int() parse of LANE_SHARED_MIC_MIN_CLUSTER_TOKENS crashes on decimal env value
 2026-07-10	issue-26-lane-diarization	sharedmic-redis-derivation-gap	tribunal	low	BUG-005 Redis merge path trusts speaker_mapping_status instead of deriving like PG path
 2026-07-10	issue-26-lane-diarization	sharedmic-lanekey-truthiness	tribunal	low	BUG-006 shared_mic lane_key threading uses falsy-string check (monitor)
+2026-07-10	issue-27-voiceprint	codex-sandbox-readonly	harness	medium	Codex rescue runtime sandbox is read-only despite write:true job flag — critique files must be relayed via final-message text
