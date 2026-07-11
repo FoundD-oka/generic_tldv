@@ -1,0 +1,20 @@
+# kabosu-dashboard を Cloud Build でビルドする設定。
+# arm64 Mac 上の qemu エミュレーション（docker buildx --platform linux/amd64）では
+# Next.js/SWC のビルドが segfault するため、amd64 ネイティブの Cloud Build を使う。
+# 実行例:
+#   gcloud builds submit --config deploy/gcp/cloudbuild-dashboard.yaml \
+#     --substitutions _IMAGE=asia-northeast1-docker.pkg.dev/<project>/pm-qe-management/kabosu-dashboard:<tag> .
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      [
+        "build",
+        "-f", "services/dashboard/Dockerfile",
+        "--build-arg", "VEXA_API_URL=${_VEXA_API_URL}",
+        "-t", "${_IMAGE}",
+        ".",
+      ]
+images: ["${_IMAGE}"]
+timeout: 1800s
+options:
+  machineType: E2_HIGHCPU_8
