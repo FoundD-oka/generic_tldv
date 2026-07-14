@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "task_id": "status-display-completed",
+  "checkpoint_id": "status-display-completed-cp-001",
+  "size": "S",
+  "decided_at": "2026-07-14T02:52:01.013988+00:00",
+  "basis": {
+    "residual_uncertainty": "会議ステータス共通表示関数の局所変更で、API状態遷移や保存データは変更しない",
+    "not_based_on": "issue title or diff size alone"
+  },
+  "quality_gates": {
+    "required": [
+      "residency",
+      "preflight",
+      "hd-gate",
+      "doc-staleness",
+      "adapter-contract",
+      "backcast-contracts"
+    ],
+    "external_consultation": "optional"
+  }
+}

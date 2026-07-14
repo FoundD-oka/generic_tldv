@@ -1,0 +1,11 @@
+{
+  "timestamp": "2026-07-14T02:53:52.631765+00:00",
+  "status": "pass",
+  "diff_hash": "sha256:f94a70365c31151e07953cffe31cf4936e5684a479a0227728543cd590a9a242",
+  "changed_files": [
+    "services/dashboard/src/types/vexa.ts",
+    "services/dashboard/tests/test_meeting_status_display.test.ts"
+  ],
+  "flags": [],
+  "blocks": []
+}

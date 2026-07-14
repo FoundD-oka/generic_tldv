@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-07-14T02:53:52.466119+00:00",
+  "task_id": "status-display-completed",
+  "size": "S",
+  "status": "pass",
+  "plan_hash": "sha256:2cdea0d30672f40cb2573ed50cf44eca2ceb2e48cd1a0a436b77bcc2af66e67e",
+  "checks": [
+    {
+      "check": "fable-plan-review",
+      "ok": true,
+      "errors": []
+    }
+  ],
+  "errors": []
+}

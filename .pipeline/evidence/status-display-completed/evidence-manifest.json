@@ -1,0 +1,77 @@
+{
+  "manifest_version": "1.0",
+  "task_id": "status-display-completed",
+  "goal_id": "status-display-completed-goal",
+  "checkpoint_id": "status-display-completed-cp-001",
+  "repo": {
+    "base_branch": "",
+    "base_sha": "8b4c83dab36c5c0516214d95ec5608146ea602fa",
+    "head_sha": "8b4c83dab36c5c0516214d95ec5608146ea602fa",
+    "branch_name": "main",
+    "worktree_path": "/Users/bonginkan-3-gouki/project/generic_tldv",
+    "generated_at": "2026-07-14T02:52:08.438331+00:00"
+  },
+  "commands": [
+    {
+      "id": "dashboard-tests",
+      "command": "npm --prefix services/dashboard test",
+      "required": true,
+      "exit_code": 0,
+      "started_at": "2026-07-14T02:52:06.627375+00:00",
+      "finished_at": "2026-07-14T02:52:08.438196+00:00",
+      "log_path": ".pipeline/evidence/status-display-completed/logs/dashboard-tests.log"
+    }
+  ],
+  "artifacts": [],
+  "scope": {
+    "changed_files": [
+      "services/dashboard/src/types/vexa.ts"
+    ],
+    "forbidden_paths_changed": [],
+    "allowed_paths_outside_with_justification": [],
+    "changed_file_count": 1
+  },
+  "quality_conditions": [
+    {
+      "id": "completed-label",
+      "condition": "completedの終了理由に依存せず完了と表示する",
+      "ok_line": "代表的な終了理由すべてで完了になる",
+      "target_state": "代表的な終了理由すべてで完了になる",
+      "status": "passed",
+      "evidence": [
+        "command:dashboard-tests"
+      ]
+    },
+    {
+      "id": "stopping-label",
+      "condition": "最終化中と完了を混同しない",
+      "ok_line": "stoppingは停止中を維持する",
+      "target_state": "stoppingは停止中を維持する",
+      "status": "passed",
+      "evidence": [
+        "command:dashboard-tests"
+      ]
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "completed-label",
+      "status": "passed",
+      "evidence": [
+        "command:dashboard-tests"
+      ]
+    },
+    {
+      "id": "stopping-label",
+      "status": "passed",
+      "evidence": [
+        "command:dashboard-tests"
+      ]
+    }
+  ],
+  "missing_evidence": [],
+  "approval": {
+    "state": "pending",
+    "decision_path": ".pipeline/approvals/status-display-completed/approval-decision.json"
+  }
+}

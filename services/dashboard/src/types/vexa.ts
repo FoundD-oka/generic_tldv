@@ -365,46 +365,14 @@ export function getDetailedStatus(status: MeetingStatus, data?: MeetingData): De
     description: "状態を確認できません"
   };
 
-  // For completed meetings, check completion reason
-  if (status === "completed" && data?.completion_reason) {
-    switch (data.completion_reason) {
-      case "stopped":
-        return {
-          label: "停止済み",
-          color: "text-gray-600 dark:text-gray-400",
-          bgColor: "bg-gray-100 dark:bg-gray-800/50",
-          description: "ユーザーが手動で停止しました",
-        };
-      case "meeting_ended":
-        return {
-          label: "終了",
-          color: "text-green-600 dark:text-green-400",
-          bgColor: "bg-green-100 dark:bg-green-950/50",
-          description: "会議が終了しました",
-        };
-      case "kicked":
-      case "removed":
-        return {
-          label: "退出済み",
-          color: "text-orange-600 dark:text-orange-400",
-          bgColor: "bg-orange-100 dark:bg-orange-950/50",
-          description: "ボットが会議から退出しました",
-        };
-      case "awaiting_admission_rejected":
-        return {
-          label: "入室拒否",
-          color: "text-red-600 dark:text-red-400",
-          bgColor: "bg-red-100 dark:bg-red-950/50",
-          description: "ボットの入室が許可されませんでした",
-        };
-      default:
-        return {
-          ...(baseConfig || fallbackConfig),
-          color: "text-green-600 dark:text-green-400",
-          bgColor: "bg-green-100 dark:bg-green-950/50",
-          description: "文字起こしが完了しました"
-        };
-    }
+  // The status communicates processing state, not how the meeting ended.
+  // Keep completion_reason in the data for audit/history, but render every
+  // successfully finalized meeting consistently as completed.
+  if (status === "completed") {
+    return {
+      ...(baseConfig || fallbackConfig),
+      description: "文字起こしが完了しました",
+    };
   }
 
   // For failed meetings, add description based on error
