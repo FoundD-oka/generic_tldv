@@ -85,6 +85,11 @@ Every Fable brief must include:
 available plan artifacts, the current diff, and the options passed to the
 command.
 
+The generated brief is self-contained. Fable runs with `--safe-mode`, an empty
+`--tools` set, and strict MCP isolation, so it cannot spend agentic turns
+rediscovering the repository before returning the structured review. This also
+keeps project hooks, skills, and stale permission rules out of the subprocess.
+
 ## Cost Controls
 
 The default limits are:
@@ -97,6 +102,10 @@ The default limits are:
 When the max call count is reached, the script records a Codex-only fallback
 instead of starting another Fable call. Use this as a budget guard, not as a
 quality claim.
+
+Failed calls record the CLI subtype (for example `error_max_turns` or
+`error_max_budget_usd`), effective limits, turn count, raw response path, and
+reported cost in `consultation-events.jsonl`.
 
 ## Required Artifacts
 

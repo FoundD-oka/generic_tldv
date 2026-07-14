@@ -1,0 +1,13 @@
+{
+  "timestamp": "2026-07-14T15:57:14.917025+00:00",
+  "status": "pass",
+  "window_tasks": [
+    "issue-26-lane-diarization",
+    "issue-27-voiceprint",
+    "fable-consultation-reliability"
+  ],
+  "triggered_categories": [
+    "fable-cli-contract-failure"
+  ],
+  "unresolved_categories": []
+}

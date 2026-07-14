@@ -1,0 +1,1 @@
+{"date": "2026-07-15", "task_id": "fable-consultation-reliability", "category": "fable-cli-contract-failure", "action": "test_added", "artifact": "scripts/harness/review-policy-smoke.sh", "note": "context-only CLI契約、typed failure telemetry、malformed response回帰を追加"}
