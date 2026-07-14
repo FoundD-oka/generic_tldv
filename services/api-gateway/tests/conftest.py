@@ -11,7 +11,7 @@ os.environ.setdefault("MCP_URL", "http://mcp:18888")
 SERVICE_ROOT = os.path.join(os.path.dirname(__file__), "..")
 sys.path.insert(0, SERVICE_ROOT)
 
-MEETING_API = os.path.join(os.path.dirname(__file__), "..", "..", "..", "packages", "meeting-api")
+MEETING_API = os.path.join(os.path.dirname(__file__), "..", "..", "meeting-api")
 sys.path.insert(0, MEETING_API)
 
 ADMIN_MODELS = os.path.join(os.path.dirname(__file__), "..", "..", "..", "libs", "admin-models")

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useRef, useEffect, useLayoutEffect, useCallback } from "react";
-import { Search, Download, FileText, FileJson, FileVideo, X, Users, MessageSquare, Wifi, WifiOff, Loader2, AlertCircle, Sparkles, Settings, ChevronDown, Mic } from "lucide-react";
+import { Search, Download, FileText, FileJson, FileVideo, X, Users, MessageSquare, Wifi, WifiOff, Loader2, AlertCircle, Sparkles, Settings, ChevronDown, Mic, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -26,7 +26,6 @@ import {
   buildSpeakerMerge,
   buildSpeakerRename,
   describeSpeakerUpdate,
-  getRenameEnrollCandidates,
   reconcileRejectedSuggestions,
   type RejectedSuggestionEntry,
 } from "@/lib/speaker-edit";
@@ -40,12 +39,14 @@ import {
 } from "@/lib/export";
 import { cn, parseUTCTimestamp } from "@/lib/utils";
 import { buildSpeakerDisplayLabels, getSpeakerDisplayLabel, getSpeakerIdentityKey, resolveSpeakerLabelByKey } from "@/lib/speaker-label";
-import { vexaAPI } from "@/lib/api";
+import { vexaAPI, type VoiceprintSegmentsPreview } from "@/lib/api";
 import { toast } from "sonner";
 import { LanguagePicker } from "@/components/language-picker";
+import { SelectedAudioVoiceprintDialog } from "./selected-audio-voiceprint-dialog";
 import { type SegmentGroup, deduplicateByIdentity, sortByStartTime } from "@vexaai/transcript-rendering";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
+import { normalizeVoiceprintSelectionTiming } from "@/lib/voiceprint-selection";
 
 // Linkify URLs in chat message text — splits text into plain strings and clickable <a> elements
 const URL_REGEX = /(https?:\/\/[^\s<>"')\]]+)/gi;
@@ -142,6 +143,12 @@ export function TranscriptViewer({
   const [mergeTargetName, setMergeTargetName] = useState("");
   const [reassignTargetName, setReassignTargetName] = useState("");
   const [isUpdatingSpeakers, setIsUpdatingSpeakers] = useState(false);
+  const [selectedAudioDialogOpen, setSelectedAudioDialogOpen] = useState(false);
+  const [selectedAudioPreview, setSelectedAudioPreview] = useState<VoiceprintSegmentsPreview | null>(null);
+  const [selectedAudioPreviewError, setSelectedAudioPreviewError] = useState<string | null>(null);
+  const [isPreviewingSelectedAudio, setIsPreviewingSelectedAudio] = useState(false);
+  const [isEnrollingSelectedAudio, setIsEnrollingSelectedAudio] = useState(false);
+  const selectedAudioPreviewRunRef = useRef(0);
   // 声紋照合による命名候補（issue #27 Phase4）: 却下した候補はクライアント側で隠す。
   // BUG-010: クラスタIDのみでなく却下時の候補内容も保持し、文字起こし再取得時に
   // reconcileRejectedSuggestionsで再検証する（新しい照合実行の候補は再表示する）。
@@ -280,6 +287,46 @@ export function TranscriptViewer({
     }));
   }, [cleanedSortedSegments]);
 
+  const selectedVoiceprintSegments = useMemo(
+    () => cleanedSortedSegments.filter(
+      (segment) => !!segment.segment_id && selectedSegmentIds.has(segment.segment_id)
+    ),
+    [cleanedSortedSegments, selectedSegmentIds]
+  );
+  const selectedVoiceprintSegmentIds = useMemo(
+    () => selectedVoiceprintSegments
+      .map((segment) => segment.segment_id)
+      .filter((segmentId): segmentId is string => !!segmentId),
+    [selectedVoiceprintSegments]
+  );
+  const selectedVoiceprintTiming = useMemo(
+    () => normalizeVoiceprintSelectionTiming(selectedVoiceprintSegments),
+    [selectedVoiceprintSegments]
+  );
+  const selectedVoiceprintDurationSeconds = selectedVoiceprintTiming.durationSeconds;
+  const selectedVoiceprintValidationMessage = useMemo(() => {
+    if (selectedVoiceprintSegmentIds.length === 0) return "発話を1件以上選択してください";
+    if (selectedVoiceprintSegmentIds.length > 20) return "選択できる発話は20件までです";
+    const sessionUids = new Set(selectedVoiceprintSegments.map((segment) => segment.session_uid || ""));
+    if (sessionUids.size !== 1 || sessionUids.has("")) {
+      return "同じ録音セッションの発話だけを選択してください";
+    }
+    if (selectedVoiceprintTiming.hasInvalidTiming) return "発話の時間情報が不正です";
+    if (selectedVoiceprintTiming.hasOverlap) return "時間が重なる発話は同時に選択できません";
+    if (selectedVoiceprintDurationSeconds < 5) return "合計5秒以上の音声を選択してください";
+    if (selectedVoiceprintDurationSeconds > 30) return "合計30秒以内の音声を選択してください";
+    return null;
+  }, [
+    selectedVoiceprintDurationSeconds,
+    selectedVoiceprintSegmentIds.length,
+    selectedVoiceprintSegments,
+    selectedVoiceprintTiming,
+  ]);
+  const selectedAudioSelectionKey = useMemo(
+    () => `${meeting?.id || "none"}:${selectedVoiceprintSegmentIds.join("|")}`,
+    [meeting?.id, selectedVoiceprintSegmentIds]
+  );
+
   // Filter grouped segments by search query and selected speakers
   const filteredSegments = useMemo(() => {
     let result = groupedSegments;
@@ -353,15 +400,31 @@ export function TranscriptViewer({
 
   const handleTranscribe = useCallback(async () => {
     if (!meeting?.id) return;
+    if (filteredSegments.length > 0 && !window.confirm("現在の文字起こしを、最新の辞書を使った結果で置き換えますか？")) return;
     setIsTranscribing(true);
     try {
-      const result = await vexaAPI.transcribeMeeting(
+      await vexaAPI.transcribeMeeting(
         meeting.id,
-        transcribeLanguage === "auto" ? undefined : transcribeLanguage
+        transcribeLanguage === "auto" ? undefined : transcribeLanguage,
+        "replace"
       );
-      toast.success("文字起こしが完了しました", {
-        description: `${result.segment_count}件のセグメントを文字起こししました`,
-      });
+      toast.info("再文字起こしを開始しました", { description: "画面を閉じても処理は継続します" });
+      let completed = false;
+      for (let attempt = 0; attempt < 1050; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        const status = await vexaAPI.getTranscriptionStatus(meeting.id);
+        if (status.status === "completed") {
+          toast.success("文字起こしが完了しました", {
+            description: `${status.segment_count ?? 0}件のセグメントを保存しました`,
+          });
+          completed = true;
+          break;
+        }
+        if (["failed", "unknown_manual_reconcile"].includes(status.status)) {
+          throw new Error(status.message || "再文字起こしの確認が必要です");
+        }
+      }
+      if (!completed) throw new Error("処理状態の確認がタイムアウトしました");
       onTranscribeComplete?.();
     } catch (error) {
       toast.error("文字起こしに失敗しました", {
@@ -370,37 +433,98 @@ export function TranscriptViewer({
     } finally {
       setIsTranscribing(false);
     }
-  }, [meeting?.id, transcribeLanguage, onTranscribeComplete]);
+  }, [meeting?.id, transcribeLanguage, onTranscribeComplete, filteredSegments.length]);
 
   const hasActiveFilters = searchQuery.trim() || selectedSpeakers.length > 0;
 
   // ---- 話者編集（issue #24 Phase 1c） ----
   const canEditSpeakers = !isLive && !isLoading && !!meeting?.id;
 
-  // 声紋登録（issue #27 Phase4）: 呼び出し前に同意確認トーストを経由すること（PII方針）。
-  const handleEnrollFromCluster = useCallback(
-    async (clusterId: string, displayName: string) => {
-      if (!meeting?.id) return;
-      try {
-        await vexaAPI.enrollVoiceprintFromCluster(meeting.id, clusterId, displayName);
-        toast.success("声紋を登録しました", {
-          description: `「${displayName}」として今後の会議でも自動命名候補に使われます`,
-        });
-      } catch (error) {
-        toast.error("声紋の登録に失敗しました", {
-          description: (error as Error).message,
-        });
+  const discardSelectedAudioPreview = useCallback(() => {
+    selectedAudioPreviewRunRef.current += 1;
+    setSelectedAudioPreview(null);
+    setSelectedAudioPreviewError(null);
+    setIsPreviewingSelectedAudio(false);
+  }, []);
+
+  const requestSelectedAudioPreview = useCallback(async () => {
+    if (!meeting?.id || selectedVoiceprintSegmentIds.length === 0) return;
+    const runId = selectedAudioPreviewRunRef.current + 1;
+    selectedAudioPreviewRunRef.current = runId;
+    setSelectedAudioPreview(null);
+    setSelectedAudioPreviewError(null);
+    setIsPreviewingSelectedAudio(true);
+    try {
+      const preview = await vexaAPI.previewVoiceprintFromSegments(
+        meeting.id,
+        selectedVoiceprintSegmentIds
+      );
+      if (selectedAudioPreviewRunRef.current !== runId) return;
+      setSelectedAudioPreview(preview);
+    } catch (error) {
+      if (selectedAudioPreviewRunRef.current !== runId) return;
+      setSelectedAudioPreviewError((error as Error).message);
+    } finally {
+      if (selectedAudioPreviewRunRef.current === runId) {
+        setIsPreviewingSelectedAudio(false);
       }
-    },
-    [meeting?.id]
-  );
+    }
+  }, [meeting?.id, selectedVoiceprintSegmentIds]);
+
+  const openSelectedAudioVoiceprintDialog = useCallback(() => {
+    if (selectedVoiceprintValidationMessage) {
+      toast.error(selectedVoiceprintValidationMessage);
+      return;
+    }
+    setSelectedAudioDialogOpen(true);
+    void requestSelectedAudioPreview();
+  }, [requestSelectedAudioPreview, selectedVoiceprintValidationMessage]);
+
+  const handleSelectedAudioDialogOpenChange = useCallback((open: boolean) => {
+    setSelectedAudioDialogOpen(open);
+    if (!open) discardSelectedAudioPreview();
+  }, [discardSelectedAudioPreview]);
+
+  const handleSelectedAudioEnrollmentSubmit = useCallback(async (displayName: string) => {
+    if (!meeting?.id || !selectedAudioPreview || selectedVoiceprintSegmentIds.length === 0) return;
+    setIsEnrollingSelectedAudio(true);
+    try {
+      await vexaAPI.enrollVoiceprintFromSegments(
+        meeting.id,
+        selectedVoiceprintSegmentIds,
+        displayName,
+        selectedAudioPreview.clip_sha256,
+        selectedAudioPreview.source_fingerprint
+      );
+      toast.success("声紋を登録しました", {
+        description: `選択した音声を「${displayName}」として今後の話者候補に使います`,
+      });
+      setSelectedAudioDialogOpen(false);
+      discardSelectedAudioPreview();
+      setSelectedSegmentIds(new Set());
+    } catch (error) {
+      toast.error("声紋の登録に失敗しました", {
+        description: (error as Error).message,
+      });
+    } finally {
+      setIsEnrollingSelectedAudio(false);
+    }
+  }, [
+    discardSelectedAudioPreview,
+    meeting?.id,
+    selectedAudioPreview,
+    selectedVoiceprintSegmentIds,
+  ]);
+
+  // 選択が変わった時点で、以前のpreview hashと確認状態は再利用できない。
+  useEffect(() => {
+    setSelectedAudioDialogOpen(false);
+    discardSelectedAudioPreview();
+  }, [discardSelectedAudioPreview, selectedAudioSelectionKey]);
 
   const applySpeakerUpdate = useCallback(
-    async (
-      payload: SpeakerUpdatePayload | null,
-      options?: { suppressEnrollOfferForClusters?: string[] }
-    ) => {
-      if (!payload || !meeting?.id) return;
+    async (payload: SpeakerUpdatePayload | null) => {
+      if (!payload || !meeting?.id) return false;
       setIsUpdatingSpeakers(true);
       try {
         const result = await vexaAPI.updateSpeakers(meeting.id, payload);
@@ -414,49 +538,24 @@ export function TranscriptViewer({
         // 旧話者名のフィルタが残ると改名後のセグメントが隠れるため解除する
         setSelectedSpeakers([]);
         onTranscribeComplete?.();
-
-        // 暗黙登録オファー（issue #27 Phase4, NH-3）: renameのみが対象。
-        // merge/reassignは対象クラスタの一意性が保証できないためオファーしない。
-        // BUG-004: 声紋照合候補の「承認」もrenameとして送られるが、承認は
-        // 既に登録済みの声紋との一致確認であり登録オファーは不要 —
-        // 呼び出し側（handleAcceptSuggestion）が対象クラスタを除外指定する。
-        for (const candidate of getRenameEnrollCandidates(
-          result.affected_clusters,
-          options?.suppressEnrollOfferForClusters
-        )) {
-          toast(
-            `この声を「${candidate.display_name}」として登録しますか？（本人の同意を得ていることを確認してください）`,
-            {
-              id: `voiceprint-enroll-offer-${candidate.cluster_id}`,
-              duration: 15000,
-              action: {
-                label: "登録する",
-                onClick: () =>
-                  void handleEnrollFromCluster(candidate.cluster_id, candidate.display_name),
-              },
-              cancel: { label: "後で", onClick: () => {} },
-            }
-          );
-        }
+        return true;
       } catch (error) {
         toast.error("話者の更新に失敗しました", {
           description: (error as Error).message,
         });
+        return false;
       } finally {
         setIsUpdatingSpeakers(false);
       }
     },
-    [meeting?.id, onTranscribeComplete, handleEnrollFromCluster]
+    [meeting?.id, onTranscribeComplete]
   );
 
   // 声紋照合による候補の承認/却下（issue #27 Phase4）
   const handleAcceptSuggestion = useCallback(
     (clusterId: string, candidateName: string) => {
-      // BUG-004: 承認は既に登録済みの声紋との一致確認であり、暗黙登録オファー
-      // を出すべきでない。手動renameと区別するため対象クラスタを除外指定する。
       void applySpeakerUpdate(
-        buildSpeakerRename({ speaker: "", speaker_cluster: clusterId }, candidateName),
-        { suppressEnrollOfferForClusters: [clusterId] }
+        buildSpeakerRename({ speaker: "", speaker_cluster: clusterId }, candidateName)
       );
     },
     [applySpeakerUpdate]
@@ -913,6 +1012,19 @@ export function TranscriptViewer({
             </Button>
           )}
 
+          {!isLive && filteredSegments.length > 0 && meeting?.id && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 lg:h-8 gap-1.5"
+              disabled={isTranscribing}
+              onClick={handleTranscribe}
+            >
+              {isTranscribing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              <span className="hidden lg:inline">{isTranscribing ? "再文字起こし中" : "辞書を反映して再文字起こし"}</span>
+            </Button>
+          )}
+
           {/* Header actions (e.g., DocsLink) */}
           {headerActions && (
             <div className="ml-auto">
@@ -983,12 +1095,33 @@ export function TranscriptViewer({
           </div>
         )}
 
-        {/* 範囲選択 → まとめて話者変更ツールバー */}
+        {/* 選択発話の話者変更 / ユーザー確認済み音声からの声紋登録 */}
         {selectedSegmentIds.size > 0 && (
           <div className="flex flex-wrap items-center gap-2 text-sm animate-fade-in">
             <Badge variant="secondary" className="font-normal">
-              {selectedSegmentIds.size}件選択中
+              {selectedVoiceprintSegmentIds.length}件・{selectedVoiceprintDurationSeconds.toFixed(1)}秒選択中
             </Badge>
+            <Button
+              type="button"
+              size="sm"
+              className="h-7"
+              disabled={
+                !!selectedVoiceprintValidationMessage
+                || isPreviewingSelectedAudio
+                || isEnrollingSelectedAudio
+              }
+              title={selectedVoiceprintValidationMessage || "選択した音声だけを確認して声紋登録します"}
+              onClick={openSelectedAudioVoiceprintDialog}
+            >
+              {isPreviewingSelectedAudio
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                : "選択した音声で声紋登録"}
+            </Button>
+            {selectedVoiceprintValidationMessage && (
+              <span className="text-xs text-amber-600 dark:text-amber-400">
+                {selectedVoiceprintValidationMessage}
+              </span>
+            )}
             <Input
               value={reassignTargetName}
               onChange={(e) => setReassignTargetName(e.target.value)}
@@ -1301,14 +1434,17 @@ export function TranscriptViewer({
                         syntheticSegment.speaker_suggestion
                           ? () =>
                               handleAcceptSuggestion(
-                                group.key,
+                                syntheticSegment.speaker_cluster || group.key,
                                 syntheticSegment.speaker_suggestion!.candidate_display_name
                               )
                           : undefined
                       }
                       onRejectSuggestion={
                         syntheticSegment.speaker_suggestion
-                          ? () => handleRejectSuggestion(group.key, syntheticSegment.speaker_suggestion!)
+                          ? () => handleRejectSuggestion(
+                              syntheticSegment.speaker_cluster || group.key,
+                              syntheticSegment.speaker_suggestion!
+                            )
                           : undefined
                       }
                     />
@@ -1321,6 +1457,19 @@ export function TranscriptViewer({
           <div ref={bottomRef} />
         </div>
       </CardContent>
+      <SelectedAudioVoiceprintDialog
+        key={`${selectedAudioSelectionKey}:${selectedAudioDialogOpen ? "open" : "closed"}:${selectedAudioPreview?.source_fingerprint ?? "no-source"}:${selectedAudioPreview?.clip_sha256 ?? "no-clip"}`}
+        open={selectedAudioDialogOpen}
+        selectedCount={selectedVoiceprintSegmentIds.length}
+        selectedDurationSeconds={selectedVoiceprintDurationSeconds}
+        preview={selectedAudioPreview}
+        previewing={isPreviewingSelectedAudio}
+        previewError={selectedAudioPreviewError}
+        submitting={isEnrollingSelectedAudio}
+        onOpenChange={handleSelectedAudioDialogOpenChange}
+        onRetryPreview={() => void requestSelectedAudioPreview()}
+        onSubmit={handleSelectedAudioEnrollmentSubmit}
+      />
     </Card>
   );
 }

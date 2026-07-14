@@ -12,6 +12,8 @@ import {
   Zap,
   CreditCard,
   Bug,
+  BookOpenText,
+  AudioLines,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -114,6 +116,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const copy = getDashboardCopy(brand.locale);
   const navigation = [
     { name: copy.nav.meetings, href: "/meetings", icon: Video },
+    { name: copy.nav.dictionary, href: "/dictionary", icon: BookOpenText },
+    { name: "声紋管理", href: "/voiceprints", icon: AudioLines },
     ...(process.env.NEXT_PUBLIC_TRACKER_ENABLED === "true"
       ? [{ name: copy.nav.tracker, href: "/tracker", icon: Zap }]
       : []),

@@ -44,6 +44,7 @@ from meeting_api.final_transcription import (
     LANE_SHARED_MIC_MIN_CLUSTER_DURATION_S,
     LANE_SHARED_MIC_MIN_CLUSTER_TOKENS,
     LaneTranscriptionFallback,
+    ProviderTranscriptionError,
     _lane_master_sources,
     _stable_lane_clusters,
     run_deferred_transcription,
@@ -261,6 +262,49 @@ async def test_lane_failure_falls_back_to_mixed_master_entirely():
     state = meeting.data["final_transcription"]
     assert state["source"] == "deferred_recording_master"
     assert "lane" in (state["lane_fallback_reason"] or "")
+
+
+@pytest.mark.asyncio
+async def test_soniox_lane_provider_failure_falls_back_to_mixed_master_entirely(monkeypatch):
+    meeting = _meeting_with_lanes()
+    db = _db_for(meeting)
+    added: list[Transcription] = []
+    db.add = MagicMock(side_effect=lambda obj: (
+        added.append(obj) if isinstance(obj, Transcription) else None
+    ))
+    monkeypatch.setenv("DEFERRED_TRANSCRIPTION_MODEL", "stt-async-v5")
+
+    async def download(source):
+        return source.storage_path.encode("utf-8")
+
+    async def transcribe(audio, fmt, *, language):
+        if f"lane-{LANE_A_KEY}".encode("utf-8") in audio:
+            raise ProviderTranscriptionError(
+                502,
+                "lane provider failed",
+                code="provider_http_error",
+            )
+        text = "混合master経由" if b"/audio/" in audio else "別lane"
+        return {
+            "language": "ja",
+            "segments": [{"start": 0.0, "end": 1.0, "text": text}],
+        }
+
+    with patch("meeting_api.final_transcription.attributes.flag_modified", new=MagicMock()), \
+         patch("meeting_api.final_transcription._download_recording_audio", new=AsyncMock(side_effect=download)), \
+         patch("meeting_api.final_transcription._convert_audio_to_wav", side_effect=lambda audio, _fmt: (audio, "wav")), \
+         patch("meeting_api.final_transcription._call_transcription_service", new=AsyncMock(side_effect=transcribe)) as stt, \
+         patch("meeting_api.final_transcription._clear_live_transcript_cache", new=AsyncMock(return_value=True)), \
+         patch("meeting_api.final_transcription._publish_transcript_finalized", new=AsyncMock()):
+        result = await run_deferred_transcription(TEST_MEETING_ID, db, mode="reject_if_exists")
+
+    assert stt.await_count == 3, "two lane calls followed by one mixed-master fallback"
+    assert result.segment_count == 1
+    assert [item.text for item in added] == ["混合master経由"]
+    assert all(not (item.speaker_cluster or "").startswith("lane:") for item in added)
+    state = meeting.data["final_transcription"]
+    assert state["source"] == "deferred_recording_master"
+    assert "lane provider failed" in (state["lane_fallback_reason"] or "")
 
 
 @pytest.mark.asyncio

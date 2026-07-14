@@ -1,6 +1,6 @@
 import sqlalchemy
 from sqlalchemy import (
-    Column, String, Text, Integer, DateTime, Float, LargeBinary,
+    Boolean, Column, String, Text, Integer, DateTime, Float, LargeBinary,
     ForeignKey, Index, UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -93,6 +93,30 @@ class Transcription(Base):
         # Fresh installs still get it via create_all (new table = no lock).
         Index('ix_transcription_meeting_cluster', 'meeting_id', 'speaker_cluster',
               info={'online_only': True}),
+    )
+
+
+class TranscriptionDictionaryTerm(Base):
+    __tablename__ = "transcription_dictionary_terms"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    term = Column(String(100), nullable=False)
+    normalized_term = Column(String(100), nullable=False)
+    reading = Column(String(100), nullable=True)
+    enabled = Column(Boolean, nullable=False, server_default=sqlalchemy.true(), default=True)
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
+    updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "normalized_term",
+            name="uq_transcription_dictionary_user_normalized_term",
+        ),
+        Index(
+            "ix_transcription_dictionary_user_enabled",
+            "user_id", "enabled",
+        ),
     )
 
 

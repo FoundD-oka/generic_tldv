@@ -233,6 +233,18 @@ async def _get_assistant_chat_messages(
 # lane's own cluster id ("lane:{laneKey}", no second colon) is NOT a
 # sub-cluster and must not be flagged.
 _LANE_SUB_CLUSTER_RE = re.compile(r"^lane:[^:]+:.+$")
+# Geminiの会議ごと匿名話者ID。`speaker_mapping_status`自体はlane共有
+# マイク専用の意味を維持し、声紋候補overlayだけでこの形を追加許可する。
+_GEMINI_CLUSTER_RE = re.compile(r"^g:[0-9a-f]{8}:s[1-9][0-9]*$")
+
+
+def _is_unconfirmed_gemini_cluster(
+    speaker_cluster: Optional[str], speaker: Optional[str]
+) -> bool:
+    if not speaker_cluster or not _GEMINI_CLUSTER_RE.match(speaker_cluster):
+        return False
+    normalized = str(speaker or "").strip()
+    return not normalized or normalized.casefold() == "unknown"
 
 
 def _derive_speaker_mapping_status(
@@ -269,7 +281,10 @@ def _overlay_speaker_suggestions(
     if not suggestions:
         return
     for seg in segments:
-        if seg.speaker_mapping_status != "needs_review":
+        if (
+            seg.speaker_mapping_status != "needs_review"
+            and not _is_unconfirmed_gemini_cluster(seg.speaker_cluster, seg.speaker)
+        ):
             continue
         cluster = seg.speaker_cluster
         entry = suggestions.get(cluster) if cluster else None

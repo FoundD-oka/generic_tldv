@@ -39,6 +39,7 @@ describe("vexaAPI.getMeetingWithTranscripts REST mapper", () => {
               absolute_end_time: "2026-07-10T01:00:01.5",
               created_at: "2026-07-10T01:00:01.5",
               segment_id: "deferred:42:1:0.000",
+              session_uid: "session-audio-1",
               speaker_cluster: "lane:hash123:1",
               speaker_auto: null,
               speaker_mapping_status: "needs_review",
@@ -53,6 +54,7 @@ describe("vexaAPI.getMeetingWithTranscripts REST mapper", () => {
     expect(segments).toHaveLength(1);
     expect(segments[0].speaker_cluster).toBe("lane:hash123:1");
     expect(segments[0].speaker_mapping_status).toBe("needs_review");
+    expect(segments[0].session_uid).toBe("session-audio-1");
     expect(segments[0].speaker).toBe("");
   });
 
@@ -184,5 +186,70 @@ describe("vexaAPI.getMeetingWithTranscripts REST mapper", () => {
 
     expect(segments[0].speaker_suggestion).toBeUndefined();
     expect(segments[1].speaker_suggestion).toBeUndefined();
+  });
+
+  it("keeps Gemini clusters distinct by normalizing only their Unknown placeholder", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ...baseResponse,
+          segments: [
+            {
+              start: 0,
+              end: 1,
+              text: "一人目",
+              speaker: "Unknown",
+              language: "ja",
+              absolute_start_time: "2026-07-10T01:00:00",
+              absolute_end_time: "2026-07-10T01:00:01",
+              created_at: "2026-07-10T01:00:01",
+              segment_id: "deferred:42:0:0.000",
+              speaker_cluster: "g:78225710:s1",
+              speaker_suggestion: {
+                candidate_display_name: "田中",
+                similarity: 0.91,
+                status: "suggested",
+              },
+            },
+            {
+              start: 1,
+              end: 2,
+              text: "二人目",
+              speaker: "Unknown",
+              language: "ja",
+              absolute_start_time: "2026-07-10T01:00:01",
+              absolute_end_time: "2026-07-10T01:00:02",
+              created_at: "2026-07-10T01:00:02",
+              segment_id: "deferred:42:1:1.000",
+              speaker_cluster: "g:78225710:s2",
+            },
+            {
+              start: 2,
+              end: 3,
+              text: "従来経路",
+              speaker: "Unknown",
+              language: "ja",
+              absolute_start_time: "2026-07-10T01:00:02",
+              absolute_end_time: "2026-07-10T01:00:03",
+              created_at: "2026-07-10T01:00:03",
+              segment_id: "deferred:42:2:2.000",
+              speaker_cluster: "legacy-1",
+            },
+          ],
+        }),
+      })
+    );
+
+    const { segments } = await vexaAPI.getMeetingWithTranscripts("google_meet", "abc-defg-hij");
+
+    expect(segments[0].speaker).toBe("");
+    expect(segments[1].speaker).toBe("");
+    expect(segments[0].speaker_cluster).toBe("g:78225710:s1");
+    expect(segments[1].speaker_cluster).toBe("g:78225710:s2");
+    expect(segments[0].speaker_suggestion?.candidate_display_name).toBe("田中");
+    expect(segments[2].speaker).toBe("Unknown");
   });
 });

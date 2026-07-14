@@ -108,7 +108,107 @@ function mapMeeting(raw: RawMeeting): Meeting {
   };
 }
 
+export interface TranscriptionDictionaryTerm {
+  id: number;
+  term: string;
+  reading: string | null;
+  enabled: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface TranscriptionRunStatus {
+  status: "idle" | "queued" | "running" | "completed" | "failed" | "unknown_manual_reconcile";
+  run_id?: string;
+  segment_count?: number;
+  error_code?: string;
+  message?: string;
+}
+
+export interface SpeakerProfileSummary {
+  id: number;
+  display_name: string;
+  created_at: string | null;
+  voiceprint_count: number;
+}
+
+export interface VoiceprintSegmentsPreview {
+  audio_base64: string;
+  media_format: "wav";
+  content_type: "audio/wav";
+  duration_seconds: number;
+  selection_count: number;
+  clip_sha256: string;
+  source_fingerprint: string;
+}
+
+export interface VoiceprintEnrollmentResult {
+  profile_id: number;
+  display_name: string;
+  voiceprint_id: number;
+  consent_id: number;
+}
+
+export interface DirectVoiceprintEnrollmentInput {
+  displayName: string;
+  audioBase64: string;
+  mediaFormat: string;
+}
+
 export const vexaAPI = {
+  async getSpeakerProfiles(): Promise<{ profiles: SpeakerProfileSummary[] }> {
+    const response = await fetch(withBasePath("/api/vexa/speaker-profiles"), {
+      cache: "no-store",
+    });
+    return handleResponse(response);
+  },
+
+  async deleteSpeakerProfile(profileId: number): Promise<void> {
+    const response = await fetch(withBasePath(`/api/vexa/speaker-profiles/${profileId}`), {
+      method: "DELETE",
+    });
+    if (!response.ok) await handleResponse(response);
+  },
+
+  async getTranscriptionDictionary(): Promise<{ terms: TranscriptionDictionaryTerm[]; limit: number }> {
+    const response = await fetch(withBasePath("/api/vexa/transcription-dictionary"), {
+      cache: "no-store",
+    });
+    return handleResponse(response);
+  },
+
+  async createTranscriptionDictionaryTerm(input: {
+    term: string;
+    reading?: string;
+    enabled?: boolean;
+  }): Promise<TranscriptionDictionaryTerm> {
+    const response = await fetch(withBasePath("/api/vexa/transcription-dictionary"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    return handleResponse(response);
+  },
+
+  async updateTranscriptionDictionaryTerm(
+    id: number,
+    input: Partial<Pick<TranscriptionDictionaryTerm, "term" | "reading" | "enabled">>
+  ): Promise<TranscriptionDictionaryTerm> {
+    const response = await fetch(withBasePath(`/api/vexa/transcription-dictionary/${id}`), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    return handleResponse(response);
+  },
+
+  async deleteTranscriptionDictionaryTerm(id: number): Promise<void> {
+    const response = await fetch(withBasePath(`/api/vexa/transcription-dictionary/${id}`), {
+      method: "DELETE",
+    });
+    if (!response.ok) await handleResponse(response);
+  },
+
   // Meetings
   async getMeetings(params?: {
     limit?: number;
@@ -185,6 +285,7 @@ export const vexaAPI = {
       absolute_end_time: string;
       created_at: string;
       segment_id?: string | null;
+      session_uid?: string | null;
       speaker_cluster?: string | null;
       speaker_auto?: string | null;
       speaker_mapping_status?: string | null;
@@ -236,10 +337,16 @@ export const vexaAPI = {
       absolute_start_time: seg.absolute_start_time,
       absolute_end_time: seg.absolute_end_time,
       text: seg.text,
-      speaker: seg.speaker || "",
+      // Geminiの匿名clusterはmeeting-apiでspeaker="Unknown"になる。
+      // UIのidentityをUnknownに潰さずspeaker_clusterへfallbackさせる。
+      speaker:
+        /^g:[0-9a-f]{8}:s[1-9][0-9]*$/.test(seg.speaker_cluster || "")
+        && (seg.speaker || "").trim().toLowerCase() === "unknown"
+          ? ""
+          : seg.speaker || "",
       language: seg.language,
       completed: true,
-      session_uid: "",
+      session_uid: seg.session_uid || "",
       created_at: seg.created_at,
       segment_id: seg.segment_id || undefined,
       speaker_cluster: seg.speaker_cluster || undefined,
@@ -515,23 +622,63 @@ export const vexaAPI = {
     return handleResponse<SpeakerUpdateResult>(response);
   },
 
-  // 声紋登録（issue #27 Phase4）: クラスタの声を明示登録する。
-  // 呼び出し前に「本人の同意を得ているか」の確認UIを経由すること（PII方針）。
-  async enrollVoiceprintFromCluster(
+  // ユーザーが会議内で明示選択した発話だけを、登録前に同一WAVとして確認する。
+  async previewVoiceprintFromSegments(
     meetingId: string | number,
-    clusterId: string,
-    displayName: string
-  ): Promise<{ status: string; profile_id?: number; voiceprint_id?: number }> {
-    const response = await fetch(withBasePath("/api/vexa/voiceprints/enroll-from-cluster"), {
+    segmentIds: string[]
+  ): Promise<VoiceprintSegmentsPreview> {
+    const response = await fetch(withBasePath("/api/vexa/voiceprints/preview-from-segments"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         meeting_id: meetingId,
-        cluster_id: clusterId,
-        display_name: displayName,
+        segment_ids: segmentIds,
       }),
     });
-    return handleResponse<{ status: string; profile_id?: number; voiceprint_id?: number }>(response);
+    return handleResponse<VoiceprintSegmentsPreview>(response);
+  },
+
+  // previewで確認したclip hashとmaster source fingerprintを両方再検証する。
+  async enrollVoiceprintFromSegments(
+    meetingId: string | number,
+    segmentIds: string[],
+    displayName: string,
+    clipSha256: string,
+    sourceFingerprint: string
+  ): Promise<VoiceprintEnrollmentResult> {
+    const response = await fetch(withBasePath("/api/vexa/voiceprints/enroll-from-segments"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        meeting_id: meetingId,
+        segment_ids: segmentIds,
+        display_name: displayName,
+        clip_sha256: clipSha256,
+        source_fingerprint: sourceFingerprint,
+        audio_review_confirmed: true,
+        consent_confirmed: true,
+      }),
+    });
+    return handleResponse<VoiceprintEnrollmentResult>(response);
+  },
+
+  // 会議に依存しない事前録音。呼び出し元で確認再生した同じ音声を送り、
+  // API境界でも音声確認と本人同意を明示する。
+  async enrollVoiceprintFromAudio(
+    input: DirectVoiceprintEnrollmentInput
+  ): Promise<VoiceprintEnrollmentResult> {
+    const response = await fetch(withBasePath("/api/vexa/voiceprints/enroll-from-audio"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        display_name: input.displayName,
+        audio_base64: input.audioBase64,
+        media_format: input.mediaFormat,
+        audio_review_confirmed: true,
+        consent_confirmed: true,
+      }),
+    });
+    return handleResponse<VoiceprintEnrollmentResult>(response);
   },
 
   // 声紋サジェストの棄却（issue #27 Phase4）: 候補チップの「却下」ボタンから呼ぶ。
@@ -552,16 +699,25 @@ export const vexaAPI = {
   // Transcribe a recorded meeting (deferred transcription)
   async transcribeMeeting(
     meetingId: string | number,
-    language?: string
-  ): Promise<{ status: string; segment_count: number; language: string }> {
-    const body: Record<string, string> = {};
+    language?: string,
+    mode: "reject_if_exists" | "replace" = "replace"
+  ): Promise<{ status: string; run_id: string; meeting_id: number }> {
+    const body: Record<string, string> = { mode };
     if (language) body.language = language;
     const response = await fetch(withBasePath(`/api/vexa/meetings/${meetingId}/transcribe`), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    return handleResponse<{ status: string; segment_count: number; language: string }>(response);
+    return handleResponse<{ status: string; run_id: string; meeting_id: number }>(response);
+  },
+
+  async getTranscriptionStatus(meetingId: string | number): Promise<TranscriptionRunStatus> {
+    const response = await fetch(
+      withBasePath(`/api/vexa/meetings/${meetingId}/transcription-status`),
+      { cache: "no-store" }
+    );
+    return handleResponse(response);
   },
 
   // Connection test

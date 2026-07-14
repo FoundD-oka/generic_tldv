@@ -63,6 +63,11 @@ def _meeting_with_audio_master(**overrides):
 @pytest.mark.asyncio
 async def test_run_deferred_transcription_replace_replaces_existing_rows_after_success():
     meeting = _meeting_with_audio_master()
+    meeting.data["final_transcription"] = {
+        "status": "failed",
+        "error_code": "incomplete_response",
+        "last_error": "Transcription provider failed",
+    }
     db = AsyncMock()
     db.execute = AsyncMock(side_effect=[
         MockResult([meeting]),
@@ -75,10 +80,16 @@ async def test_run_deferred_transcription_replace_replaces_existing_rows_after_s
     db.add = MagicMock(side_effect=added.append)
     clear_cache = AsyncMock(return_value=True)
 
-    call_transcription = AsyncMock(return_value={
-        "language": "ja",
-        "segments": [{"start": 0.25, "end": 1.25, "text": "  hello final  "}],
-    })
+    async def transcribe_after_running_state(*_args, **_kwargs):
+        assert meeting.data["final_transcription"]["status"] == "running"
+        assert meeting.data["final_transcription"]["error_code"] is None
+        assert meeting.data["final_transcription"]["last_error"] is None
+        return {
+            "language": "ja",
+            "segments": [{"start": 0.25, "end": 1.25, "text": "  hello final  "}],
+        }
+
+    call_transcription = AsyncMock(side_effect=transcribe_after_running_state)
     publish_finalized = AsyncMock(return_value=True)
 
     with patch("meeting_api.final_transcription.attributes.flag_modified", new=MagicMock()), \
@@ -105,6 +116,8 @@ async def test_run_deferred_transcription_replace_replaces_existing_rows_after_s
     assert meeting.data["final_transcription"]["source_recording_path"].endswith("/audio/master.wav")
     assert meeting.data["final_transcription"]["redis_cache_cleared"] is True
     assert meeting.data["final_transcription"]["language"] == "ja"
+    assert meeting.data["final_transcription"]["error_code"] is None
+    assert meeting.data["final_transcription"]["last_error"] is None
     assert meeting.data["drive_export"]["status"] == "queued"
     call_transcription.assert_awaited_once()
     assert call_transcription.await_args.kwargs["language"] == "ja"
@@ -392,7 +405,22 @@ def test_parse_segments_falls_back_to_text_only_response():
 def test_queue_final_transcription_sets_queued_state():
     meeting = make_meeting(
         status=MeetingStatus.COMPLETED.value,
-        data={"transcribe_enabled": True, "recording_enabled": True},
+        data={
+            "transcribe_enabled": True,
+            "recording_enabled": True,
+            "final_transcription": {
+                "status": "failed",
+                "retryable": True,
+                "last_error": "old failure",
+                "error_code": "incomplete_response",
+                "run_id": "old-run",
+                "lease_expires_at": "2099-01-01T00:00:00",
+                "provider_started_at": "2026-07-13T00:00:00",
+                "heartbeat_at": "2026-07-13T00:01:00",
+                "started_at": "2026-07-13T00:00:00",
+                "failed_at": "2026-07-13T00:02:00",
+            },
+        },
     )
 
     with patch("meeting_api.final_transcription.attributes.flag_modified", new=MagicMock()):
@@ -401,7 +429,40 @@ def test_queue_final_transcription_sets_queued_state():
     assert changed is True
     assert meeting.data["final_transcription"]["status"] == "queued"
     assert meeting.data["final_transcription"]["attempts"] == 0
+    assert meeting.data["final_transcription"]["last_error"] is None
+    assert meeting.data["final_transcription"]["error_code"] is None
+    assert meeting.data["final_transcription"]["run_id"] is None
+    assert meeting.data["final_transcription"]["lease_expires_at"] is None
+    assert meeting.data["final_transcription"]["provider_started_at"] is None
+    assert meeting.data["final_transcription"]["heartbeat_at"] is None
+    assert meeting.data["final_transcription"]["started_at"] is None
+    assert meeting.data["final_transcription"]["failed_at"] is None
     assert meeting.data["final_transcription_status"] == "queued"
+
+
+def test_queue_final_transcription_keeps_unknown_terminal_for_manual_reconciliation():
+    final_state = {
+        "status": "unknown_manual_reconcile",
+        "retryable": False,
+        "last_error": "provider result is unknown",
+        "error_code": "unknown_manual_reconcile",
+        "provider_started_at": "2026-07-14T00:00:00",
+        "run_id": "run-unknown",
+    }
+    meeting = make_meeting(
+        status=MeetingStatus.COMPLETED.value,
+        data={
+            "transcribe_enabled": True,
+            "recording_enabled": True,
+            "final_transcription": dict(final_state),
+        },
+    )
+
+    with patch("meeting_api.final_transcription.attributes.flag_modified", new=MagicMock()):
+        changed = queue_final_transcription(meeting, triggered_by="post_meeting")
+
+    assert changed is False
+    assert meeting.data["final_transcription"] == final_state
 
 
 @pytest.mark.asyncio
@@ -439,6 +500,85 @@ async def test_sweep_final_transcription_jobs_runs_replace_mode():
         mode="replace",
         triggered_by="final_transcription_sweep",
     )
+
+
+@pytest.mark.asyncio
+async def test_sweep_recovers_stale_running_job_before_provider_start():
+    meeting = _meeting_with_audio_master(data={
+        "final_transcription": {
+            "status": "running",
+            "attempts": 1,
+            "run_id": "stale-run",
+            "lease_expires_at": "2000-01-01T00:00:00",
+            "provider_started_at": None,
+        },
+    })
+    db = AsyncMock()
+    db.execute = AsyncMock(side_effect=[
+        FetchAllResult([(TEST_MEETING_ID,)]),
+        MockResult([meeting]),
+    ])
+    db.commit = AsyncMock()
+
+    @asynccontextmanager
+    async def db_session_factory():
+        yield db
+
+    with patch("meeting_api.final_transcription.attributes.flag_modified", new=MagicMock()), \
+         patch(
+             "meeting_api.final_transcription.run_deferred_transcription",
+             new=AsyncMock(return_value=DeferredTranscriptionResult(
+                 meeting_id=TEST_MEETING_ID,
+                 segment_count=1,
+                 speakers=["Alice"],
+                 source_recording_path="recordings/5/1001/sess-1/audio/master.wav",
+                 replaced_realtime_count=0,
+             )),
+         ) as run:
+        swept = await sweeps._sweep_final_transcription_jobs(db_session_factory)
+
+    selection_sql = str(db.execute.await_args_list[0].args[0])
+    assert "final_transcription,status}' = 'running'" in selection_sql
+    assert swept == 1
+    run.assert_awaited_once()
+    assert meeting.data["final_transcription"]["run_id"] is None
+    assert meeting.data["final_transcription"]["lease_expires_at"] is None
+
+
+@pytest.mark.asyncio
+async def test_sweep_marks_stale_started_gemini_job_unknown_terminal():
+    meeting = _meeting_with_audio_master(data={
+        "final_transcription": {
+            "status": "running",
+            "attempts": 1,
+            "run_id": "stale-run",
+            "lease_expires_at": "2000-01-01T00:00:00",
+            "provider": "gemini",
+            "provider_started_at": "2026-07-13T00:00:00",
+        },
+    })
+    db = AsyncMock()
+    db.execute = AsyncMock(side_effect=[
+        FetchAllResult([(TEST_MEETING_ID,)]),
+        MockResult([meeting]),
+    ])
+    db.commit = AsyncMock()
+
+    @asynccontextmanager
+    async def db_session_factory():
+        yield db
+
+    with patch("meeting_api.final_transcription.attributes.flag_modified", new=MagicMock()), \
+         patch(
+             "meeting_api.final_transcription.run_deferred_transcription",
+             new=AsyncMock(),
+         ) as run:
+        swept = await sweeps._sweep_final_transcription_jobs(db_session_factory)
+
+    assert swept == 0
+    run.assert_not_awaited()
+    assert meeting.data["final_transcription"]["status"] == "unknown_manual_reconcile"
+    assert meeting.data["final_transcription"]["retryable"] is False
 
 
 def test_deferred_transcription_endpoint_override(monkeypatch):
