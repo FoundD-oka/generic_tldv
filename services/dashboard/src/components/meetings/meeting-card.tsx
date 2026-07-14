@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { formatDistanceToNow, format } from "date-fns";
 import { ja } from "date-fns/locale";
-import { Clock, ChevronRight, Calendar, MessageSquare, FileText, Pencil, Check, X } from "lucide-react";
+import { ChevronRight, Calendar, MessageSquare, Pencil, Check, X, Monitor } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ import { withBasePath } from "@/lib/base-path";
 
 interface MeetingCardProps {
   meeting: Meeting;
+  participantsTitleTemplate?: string;
 }
 
 // Platform icons using actual icon files from public folder
@@ -65,15 +66,29 @@ function ZoomIcon({ className }: { className?: string }) {
 function PlatformIcon({ platform, className }: { platform: string; className?: string }) {
   if (platform === "google_meet") return <GoogleMeetIcon className={className} />;
   if (platform === "teams") return <TeamsIcon className={className} />;
+  if (platform === "browser_session") {
+    return (
+      <div className={cn("flex items-center justify-center bg-muted text-muted-foreground", className)}>
+        <Monitor className="h-3.5 w-3.5" />
+      </div>
+    );
+  }
   return <ZoomIcon className={className} />;
 }
 
-export function MeetingCard({ meeting }: MeetingCardProps) {
+export function MeetingCard({
+  meeting,
+  participantsTitleTemplate = "{names}との会議",
+}: MeetingCardProps) {
   const statusConfig = getDetailedStatus(meeting.status, meeting.data);
   const updateMeetingData = useMeetingsStore((state) => state.updateMeetingData);
-  const isGoogleMeet = meeting.platform === "google_meet";
-  // Display title from API data (name or title field)
-  const displayTitle = meeting.data?.name || meeting.data?.title;
+  const participants = meeting.data?.participants || [];
+  const rawTitle = meeting.data?.name || meeting.data?.title;
+  const participantsTitle = participants.length > 0
+    ? participantsTitleTemplate.replace("{names}", participants.join(", "))
+    : null;
+  const displayTitle = rawTitle || participantsTitle || meeting.platform_specific_id || "無題の会議";
+  const timeSource = meeting.start_time || meeting.created_at;
   const isActive = meeting.status === "active";
   
   // Title editing state
@@ -135,7 +150,7 @@ export function MeetingCard({ meeting }: MeetingCardProps) {
         try {
           const timestamp = parseUTCTimestamp(lastTransition.timestamp);
           lines.push(`最終更新: ${formatDistanceToNow(timestamp, { addSuffix: true, locale: ja })}`);
-        } catch (e) {
+        } catch {
           // Ignore parsing errors
         }
       }
@@ -151,7 +166,7 @@ export function MeetingCard({ meeting }: MeetingCardProps) {
       try {
         const startTime = parseUTCTimestamp(meeting.start_time);
         lines.push(`開始: ${format(startTime, "M月d日 HH:mm", { locale: ja })}`);
-      } catch (e) {
+      } catch {
         // Ignore parsing errors
       }
     }
@@ -160,7 +175,7 @@ export function MeetingCard({ meeting }: MeetingCardProps) {
       try {
         const endTime = parseUTCTimestamp(meeting.end_time);
         lines.push(`終了: ${format(endTime, "M月d日 HH:mm", { locale: ja })}`);
-      } catch (e) {
+      } catch {
         // Ignore parsing errors
       }
     }
@@ -174,7 +189,7 @@ export function MeetingCard({ meeting }: MeetingCardProps) {
   const handleStartEdit = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setEditedTitle(displayTitle || "");
+    setEditedTitle(rawTitle || participantsTitle || "");
     setIsEditingTitle(true);
   };
 
@@ -192,7 +207,7 @@ export function MeetingCard({ meeting }: MeetingCardProps) {
       });
       setIsEditingTitle(false);
       toast.success("タイトルを更新しました");
-    } catch (error) {
+    } catch {
       toast.error("タイトルの更新に失敗しました");
     } finally {
       setIsSavingTitle(false);
@@ -217,7 +232,7 @@ export function MeetingCard({ meeting }: MeetingCardProps) {
         });
         setIsEditingTitle(false);
         toast.success("タイトルを更新しました");
-      } catch (error) {
+      } catch {
         toast.error("タイトルの更新に失敗しました");
       } finally {
         setIsSavingTitle(false);
@@ -231,227 +246,168 @@ export function MeetingCard({ meeting }: MeetingCardProps) {
   };
 
   return (
-    <Link href={`/meetings/${meeting.id}`} className="block group" onClick={(e) => isEditingTitle && e.preventDefault()}>
-      <Card className={cn(
-        "relative overflow-hidden transition-all duration-300 ease-out",
-        "border-0 shadow-sm hover:shadow-lg",
-        "bg-gradient-to-br from-card to-card/80",
-        "hover:scale-[1.01] hover:-translate-y-0.5",
-        isActive && "ring-2 ring-green-500/30 shadow-green-500/10"
-      )}>
-        {/* Platform color accent */}
-        <div className={cn(
-          "absolute top-0 left-0 w-1 h-full transition-all duration-300",
-          meeting.platform === "google_meet" ? "bg-green-500" : meeting.platform === "teams" ? "bg-[#5059C9]" : "bg-blue-500",
-          "group-hover:w-1.5"
-        )} />
+    <Link
+      href={`/meetings/${meeting.id}`}
+      className="group block h-full rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+      onClick={(event) => isEditingTitle && event.preventDefault()}
+    >
+      <Card
+        className={cn(
+          "relative flex h-full min-h-32 flex-col gap-0 overflow-hidden border-border/70 bg-card p-3 shadow-sm",
+          "transition-all duration-300 ease-out hover:-translate-y-1 hover:border-primary/25 hover:shadow-lg",
+          isActive && "border-green-500/40 shadow-green-500/10"
+        )}
+      >
+        <div
+          className={cn(
+            "absolute inset-x-0 top-0 h-0.5",
+            meeting.platform === "google_meet"
+              ? "bg-green-500"
+              : meeting.platform === "teams"
+                ? "bg-[#5059C9]"
+                : meeting.platform === "browser_session"
+                  ? "bg-violet-500"
+                  : "bg-blue-500"
+          )}
+        />
 
-        {/* Active meeting glow effect */}
         {isActive && (
-          <div className="absolute inset-0 bg-gradient-to-r from-green-500/5 to-transparent pointer-events-none" />
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-green-500/8 via-transparent to-transparent" />
         )}
 
-        <div className="py-3 px-4">
-          <div className="flex items-center gap-3">
-            {/* Platform Icon */}
-            <div className={cn(
-              "flex-shrink-0 relative",
-              "transition-transform duration-300 group-hover:scale-110"
-            )}>
-              <PlatformIcon platform={meeting.platform} className="h-10 w-10 rounded-lg" />
-              {/* Active indicator */}
-              {isActive && (
-                <div className="absolute -top-1 -right-1">
-                  <span className="relative flex h-3 w-3">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500 border-2 border-white dark:border-gray-900" />
-                  </span>
-                </div>
-              )}
-            </div>
+        <div className="relative flex items-start justify-between gap-3">
+          <div className="relative">
+            <PlatformIcon platform={meeting.platform} className="h-6 w-6 rounded-md" />
+            {isActive && (
+              <span className="absolute -right-1 -top-1 flex h-3 w-3">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+                <span className="relative inline-flex h-3 w-3 rounded-full border-2 border-card bg-green-500" />
+              </span>
+            )}
+          </div>
 
-            {/* Content */}
-            <div className="flex-1 min-w-0 space-y-1">
-              {/* Header row */}
-              <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  {isEditingTitle ? (
-                    <div className="flex items-center gap-2">
-                      <Input
-                        value={editedTitle}
-                        onChange={(e) => setEditedTitle(e.target.value)}
-                        className="text-base font-semibold h-8 flex-1"
-                        placeholder="会議タイトル..."
-                        autoFocus
-                        disabled={isSavingTitle}
-                        onKeyDown={handleKeyDown}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-8 w-8"
-                        onClick={handleSaveTitle}
-                        disabled={isSavingTitle}
-                      >
-                        <Check className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-8 w-8"
-                        onClick={handleCancelEdit}
-                        disabled={isSavingTitle}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2 group/title">
-                      <h3 className={cn(
-                        "font-semibold text-base truncate",
-                        "transition-colors duration-200",
-                        "group-hover:text-primary"
-                      )}>
-                        {displayTitle || meeting.platform_specific_id}
-                      </h3>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-8 w-8 opacity-0 group-hover/title:opacity-100 transition-opacity"
-                        onClick={handleStartEdit}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                    </div>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div>
+                <Badge
+                  variant="secondary"
+                  className={cn(
+                    "cursor-help px-2 py-0.5 text-[11px] font-medium",
+                    statusConfig.bgColor,
+                    statusConfig.color,
+                    isActive && "animate-pulse"
                   )}
-                  {meeting.data?.participants && meeting.data.participants.length > 0 ? (
-                    <p className="text-xs text-muted-foreground truncate mt-0.5">
-                      参加者: {meeting.data.participants.slice(0, 3).join(", ")}
-                      {meeting.data.participants.length > 3 && ` ほか${meeting.data.participants.length - 3}名`}
-                    </p>
-                  ) : displayTitle && !isEditingTitle && (
-                    <p className="text-xs text-muted-foreground font-mono truncate mt-0.5">
-                      {meeting.platform_specific_id}
-                    </p>
-                  )}
-                </div>
-
-                {/* Status badge with tooltip */}
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div>
-                      <Badge
-                        variant="secondary"
-                        className={cn(
-                          "flex-shrink-0 text-xs font-medium px-2 py-0.5 cursor-help",
-                          statusConfig.bgColor,
-                          statusConfig.color,
-                          isActive && "animate-pulse"
-                        )}
-                      >
-                        {statusConfig.label}
-                      </Badge>
-                    </div>
-                  </TooltipTrigger>
-                  {tooltipContent.length > 0 && (
-                    <TooltipContent side="top" className="max-w-xs">
-                      <div className="space-y-1">
-                        {tooltipContent.map((line, index) => (
-                          <div key={index} className="text-xs">
-                            {line}
-                          </div>
-                        ))}
-                      </div>
-                    </TooltipContent>
-                  )}
-                </Tooltip>
+                >
+                  {statusConfig.label}
+                </Badge>
               </div>
-
-              {/* Status description */}
-              {statusConfig.description && (
-                <div className="text-xs text-muted-foreground">
-                  {statusConfig.description}
+            </TooltipTrigger>
+            {tooltipContent.length > 0 && (
+              <TooltipContent side="top" className="max-w-xs">
+                <div className="space-y-1">
+                  {tooltipContent.map((line, index) => (
+                    <div key={index} className="text-xs">
+                      {line}
+                    </div>
+                  ))}
                 </div>
-              )}
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </div>
 
-              {/* Meta row */}
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                {meeting.start_time && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex items-center gap-1.5 text-muted-foreground cursor-help">
-                        <Calendar className="h-3.5 w-3.5" />
-                        <span>{format(parseUTCTimestamp(meeting.start_time), "yyyy年M月d日", { locale: ja })}</span>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent side="top">
-                      <p className="text-xs">
-                        {parseUTCTimestamp(meeting.start_time).toLocaleString(undefined, {
-                          dateStyle: "medium",
-                          timeStyle: "long",
-                          timeZone: browserTz,
-                        })}
-                      </p>
-                      <p className="text-[11px] text-muted-foreground/80">
-                        UTC: {format(parseUTCTimestamp(meeting.start_time), "yyyy-MM-dd HH:mm:ss 'UTC'")}
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                )}
-
-                {meeting.start_time && (
-                  <div className="flex items-center gap-1.5 text-muted-foreground">
-                    <Clock className="h-3.5 w-3.5" />
-                    <span>{formatDistanceToNow(parseUTCTimestamp(meeting.start_time), { addSuffix: true, locale: ja })}</span>
-                  </div>
-                )}
-
-                {duration && (
-                  <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-muted/50">
-                    <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="text-muted-foreground">{formatDuration(duration)}</span>
-                  </div>
-                )}
-
-                {meeting.data?.notes && meeting.data.notes.trim() && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex items-center gap-1.5 text-muted-foreground cursor-help">
-                        <FileText className="h-3.5 w-3.5" />
-                        <span>メモ</span>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="max-w-xs">
-                      <div className="text-xs">
-                        <div className="font-medium mb-1">メモ:</div>
-                        <div className="text-muted-foreground">
-                          {typeof meeting.data.notes === "string" && meeting.data.notes.length > 100
-                            ? `${meeting.data.notes.substring(0, 100)}...`
-                            : String(meeting.data.notes)}
-                        </div>
-                      </div>
-                    </TooltipContent>
-                  </Tooltip>
-                )}
+        <div className="relative mt-2 min-w-0 flex-1">
+          {isEditingTitle ? (
+            <div onClick={(event) => event.stopPropagation()}>
+              <div className="flex items-center gap-1.5">
+                <Input
+                  value={editedTitle}
+                  onChange={(event) => setEditedTitle(event.target.value)}
+                  className="h-9 min-w-0 flex-1 text-sm font-semibold"
+                  placeholder="会議タイトル..."
+                  aria-label="会議タイトル"
+                  autoFocus
+                  disabled={isSavingTitle}
+                  onFocus={(event) => event.currentTarget.select()}
+                  onKeyDown={handleKeyDown}
+                  onClick={(event) => event.stopPropagation()}
+                />
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 shrink-0"
+                  aria-label="タイトルを保存"
+                  onClick={handleSaveTitle}
+                  disabled={isSavingTitle || !editedTitle.trim()}
+                >
+                  <Check className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 shrink-0"
+                  aria-label="タイトル編集を取り消す"
+                  onClick={handleCancelEdit}
+                  disabled={isSavingTitle}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
               </div>
-
             </div>
+          ) : (
+            <button
+              type="button"
+              className="group/title -m-1 flex w-[calc(100%+0.5rem)] items-start gap-2 rounded-lg p-1 text-left hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+              title="クリックしてタイトルを編集"
+              aria-label={`「${displayTitle}」のタイトルを編集`}
+              onClick={handleStartEdit}
+            >
+              <h3 className="line-clamp-2 flex-1 text-sm font-semibold leading-snug tracking-tight transition-colors group-hover/title:text-primary">
+                {displayTitle}
+              </h3>
+              <Pencil className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/70 transition-colors group-hover/title:text-primary" />
+            </button>
+          )}
 
-            {/* Arrow */}
-            <div className={cn(
-              "flex-shrink-0 self-center",
-              "p-1.5 rounded-full",
-              "transition-all duration-300",
-              "group-hover:bg-primary/10",
-              "group-hover:translate-x-1"
-            )}>
-              <ChevronRight className={cn(
-                "h-4 w-4 text-muted-foreground",
-                "transition-colors duration-200",
-                "group-hover:text-primary"
-              )} />
-            </div>
+        </div>
+
+        <div className="relative mt-2 border-t border-border/60 pt-2">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 pr-8 text-[11px]">
+            {timeSource && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex cursor-help items-center gap-1.5 text-muted-foreground">
+                    <Calendar className="h-3 w-3" />
+                    <span>{format(parseUTCTimestamp(timeSource), "M月d日", { locale: ja })}</span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  <p className="text-xs">
+                    {parseUTCTimestamp(timeSource).toLocaleString(undefined, {
+                      dateStyle: "medium",
+                      timeStyle: "long",
+                      timeZone: browserTz,
+                    })}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground/80">
+                    UTC: {parseUTCTimestamp(timeSource).toISOString().replace("T", " ").slice(0, 19)} UTC
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+
+            {duration !== null && (
+              <div className="flex items-center gap-1.5 text-muted-foreground">
+                <MessageSquare className="h-3 w-3" />
+                <span>{formatDuration(duration)}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="absolute bottom-0 right-0 rounded-full p-1 transition-all duration-300 group-hover:translate-x-0.5 group-hover:bg-primary/10">
+            <ChevronRight className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-primary" />
           </div>
         </div>
       </Card>
