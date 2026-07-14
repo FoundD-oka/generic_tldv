@@ -4,6 +4,7 @@ Validates frozen API contracts (response shapes, field names) and
 verifies Runtime API delegation via httpx mocks.
 """
 
+import asyncio
 import json
 from datetime import datetime
 from types import SimpleNamespace
@@ -270,6 +271,68 @@ class TestCreateMeeting:
 class TestDeferredTranscription:
 
     @pytest.mark.asyncio
+    async def test_transcribe_replace_returns_202_run_id(self, client, mock_db):
+        meeting = make_meeting(
+            id=TEST_MEETING_ID,
+            status=MeetingStatus.COMPLETED.value,
+            data={
+                "transcribe_enabled": True,
+                "recording_enabled": True,
+                "final_transcription": {
+                    "status": "failed",
+                    "last_error": "old provider failure",
+                    "error_code": "schema_invalid",
+                    "attempts": 3,
+                    "provider_started_at": "2026-07-13T00:00:00",
+                    "heartbeat_at": "2026-07-13T00:01:00",
+                    "started_at": "2026-07-13T00:00:00",
+                    "failed_at": "2026-07-13T00:02:00",
+                    "completed_at": "2026-07-12T00:00:00",
+                },
+            },
+        )
+        mock_db.execute = AsyncMock(side_effect=[
+            MockResult([meeting]),
+            MockResult(scalar_value=0),
+        ])
+        with patch("meeting_api.final_transcription.attributes.flag_modified", MagicMock()), \
+             patch("meeting_api.meetings._execute_manual_transcription", AsyncMock()):
+            resp = await client.post(
+                f"/meetings/{TEST_MEETING_ID}/transcribe",
+                json={"mode": "replace", "language": "ja"},
+            )
+            await asyncio.sleep(0)
+
+        assert resp.status_code == 202
+        payload = resp.json()
+        assert payload["status"] == "queued"
+        assert len(payload["run_id"]) == 32
+        assert meeting.data["final_transcription"]["run_id"] == payload["run_id"]
+        assert meeting.data["final_transcription"]["last_error"] is None
+        assert meeting.data["final_transcription"]["error_code"] is None
+        assert meeting.data["final_transcription"]["attempts"] == 0
+        assert meeting.data["final_transcription"]["provider_started_at"] is None
+        assert meeting.data["final_transcription"]["heartbeat_at"] is None
+        assert meeting.data["final_transcription"]["started_at"] is None
+        assert meeting.data["final_transcription"]["failed_at"] is None
+        assert meeting.data["final_transcription"]["completed_at"] is None
+
+    @pytest.mark.asyncio
+    async def test_transcription_status_maps_succeeded_to_completed(self, client, mock_db):
+        meeting = make_meeting(
+            id=TEST_MEETING_ID,
+            status=MeetingStatus.COMPLETED.value,
+            data={"final_transcription": {"status": "succeeded", "run_id": "r1", "segment_count": 9}},
+        )
+        mock_db.execute = AsyncMock(return_value=MockResult([meeting]))
+        resp = await client.get(f"/meetings/{TEST_MEETING_ID}/transcription-status")
+        assert resp.status_code == 200
+        assert resp.json() == {
+            "status": "completed", "run_id": "r1", "segment_count": 9,
+            "error_code": None, "message": None,
+        }
+
+    @pytest.mark.asyncio
     async def test_transcribe_meeting_default_mode_rejects_existing_transcript(self, client, mock_db):
         meeting = make_meeting(
             id=TEST_MEETING_ID,
@@ -277,7 +340,6 @@ class TestDeferredTranscription:
             data={"transcribe_enabled": True, "recording_enabled": True},
         )
         mock_db.execute = AsyncMock(side_effect=[
-            MockResult([meeting]),
             MockResult([meeting]),
             MockResult(scalar_value=1),
         ])

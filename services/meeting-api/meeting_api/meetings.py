@@ -1948,14 +1948,59 @@ class TranscribeRequest(BaseModel):
 
 class TranscribeResponse(BaseModel):
     meeting_id: int
-    segment_count: int
-    message: str
+    run_id: str
+    status: str
+
+
+class TranscriptionStatusResponse(BaseModel):
+    status: str
+    run_id: Optional[str] = None
+    segment_count: Optional[int] = None
+    error_code: Optional[str] = None
+    message: Optional[str] = None
+
+
+_manual_transcription_tasks: set[asyncio.Task] = set()
+
+
+async def _execute_manual_transcription(
+    meeting_id: int,
+    run_id: str,
+    *,
+    mode: str,
+    language: Optional[str],
+    force: bool,
+) -> None:
+    from .final_transcription import run_deferred_transcription
+
+    try:
+        async with async_session_local() as task_db:
+            await run_deferred_transcription(
+                meeting_id,
+                task_db,
+                mode=mode,
+                language=language,
+                force=force,
+                triggered_by="manual_api",
+                expected_run_id=run_id,
+            )
+    except HTTPException as exc:
+        logger.warning(
+            "Manual deferred transcription ended meeting_id=%s run_id=%s status=%s",
+            meeting_id, run_id, exc.status_code,
+        )
+    except Exception:
+        logger.exception(
+            "Manual deferred transcription crashed meeting_id=%s run_id=%s",
+            meeting_id, run_id,
+        )
 
 
 @router.post(
     "/meetings/{meeting_id}/transcribe",
     summary="Trigger deferred transcription for a completed meeting",
     response_model=TranscribeResponse,
+    status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(get_user_and_token)],
 )
 async def transcribe_meeting(
@@ -1970,24 +2015,86 @@ async def transcribe_meeting(
     )).scalars().first()
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
-    from .final_transcription import run_deferred_transcription
+    existing_count = (await db.execute(
+        select(func.count(Transcription.id)).where(Transcription.meeting_id == meeting_id)
+    )).scalar() or 0
+    if existing_count and req.mode == "reject_if_exists":
+        raise HTTPException(
+            status_code=409,
+            detail=f"This meeting is already transcribed ({existing_count} segments). Use mode='replace' to regenerate the final transcript.",
+        )
 
-    result = await run_deferred_transcription(
-        meeting_id,
-        db,
-        mode=req.mode,
-        language=req.language,
-        force=req.force,
+    from .final_transcription import _lease_expires_at, _meeting_data, _set_final_transcription_state
+
+    current = dict(_meeting_data(meeting).get("final_transcription") or {})
+    if current.get("status") in {"queued", "running"}:
+        raise HTTPException(status_code=409, detail="Deferred transcription is already queued or running")
+    run_id = uuid_lib.uuid4().hex
+    _set_final_transcription_state(
+        meeting,
+        status="queued",
+        run_id=run_id,
+        queued_at=datetime.utcnow().isoformat(),
+        updated_at=datetime.utcnow().isoformat(),
+        lease_expires_at=_lease_expires_at(),
+        last_error=None,
+        error_code=None,
+        retryable=True,
+        attempts=0,
+        provider_started_at=None,
+        heartbeat_at=None,
+        started_at=None,
+        failed_at=None,
+        completed_at=None,
         triggered_by="manual_api",
     )
+    await db.commit()
+
+    task = asyncio.create_task(
+        _execute_manual_transcription(
+            meeting_id,
+            run_id,
+            mode=req.mode,
+            language=req.language,
+            force=req.force,
+        ),
+        name=f"manual-deferred-transcription-{meeting_id}-{run_id[:8]}",
+    )
+    _manual_transcription_tasks.add(task)
+    task.add_done_callback(_manual_transcription_tasks.discard)
 
     return TranscribeResponse(
         meeting_id=meeting_id,
-        segment_count=result.segment_count,
-        message=(
-            f"Transcribed {result.segment_count} final segments from recording "
-            f"({len(result.speakers)} speakers: {', '.join(result.speakers)})"
-        ),
+        run_id=run_id,
+        status="queued",
+    )
+
+
+@router.get(
+    "/meetings/{meeting_id}/transcription-status",
+    response_model=TranscriptionStatusResponse,
+    dependencies=[Depends(get_user_and_token)],
+)
+async def get_transcription_status(
+    meeting_id: int,
+    auth_data: tuple = Depends(get_user_and_token),
+    db: AsyncSession = Depends(get_db),
+):
+    _, current_user = auth_data
+    meeting = (await db.execute(
+        select(Meeting).where(Meeting.id == meeting_id, Meeting.user_id == current_user.id)
+    )).scalars().first()
+    if meeting is None:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    state = dict((meeting.data or {}).get("final_transcription") or {})
+    raw_status = str(state.get("status") or "idle")
+    public_status = "completed" if raw_status == "succeeded" else raw_status
+    return TranscriptionStatusResponse(
+        status=public_status,
+        run_id=state.get("run_id"),
+        segment_count=state.get("segment_count"),
+        error_code=state.get("error_code"),
+        message=state.get("last_error"),
     )
 
 

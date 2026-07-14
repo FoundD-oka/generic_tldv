@@ -4,6 +4,7 @@ const EN_DASHBOARD_COPY = {
   nav: {
     meetings: "Meetings",
     tracker: "Tracker",
+    dictionary: "Transcription Dictionary",
     joinMeeting: "Join Meeting",
     webhooks: "Webhooks",
     mcpSetup: "MCP Setup",
@@ -179,6 +180,7 @@ const JA_DASHBOARD_COPY: typeof EN_DASHBOARD_COPY = {
   nav: {
     meetings: "会議",
     tracker: "トラッカー",
+    dictionary: "文字起こし辞書",
     joinMeeting: "会議に参加",
     webhooks: "Webhook設定",
     mcpSetup: "MCP設定",
