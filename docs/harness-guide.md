@@ -97,6 +97,14 @@ scripts/harness/worktree.sh create <task-id> --base HEAD
 scripts/harness/build.sh <task-id> --worktree .pipeline/worktrees/<task-id>/checkout -- \
   sh -lc '<implementation command or agent command>'
 
+# Codex App などですでに実装済みの場合。検証はcheckpoint contractから1回だけ実行する。
+scripts/harness/build.sh <task-id> --worktree .pipeline/worktrees/<task-id>/checkout \
+  --implementation-complete
+
+# Codex Appの実行証跡を記録する。別のCodex CLIは起動しない。
+scripts/harness/codex-session-ledger.sh record <task-id> \
+  --profile codex-app --status succeeded --summary "実装と検証が完了"
+
 scripts/harness/backcast-approval.sh <task-id> approved --approver "<name>"
 scripts/harness/backcast-current.sh update <task-id> --actor "<name>"
 scripts/harness/backcast-next-checkpoint.sh <task-id> \
@@ -113,6 +121,9 @@ bash .claude/hooks/pr-ready-gate.sh <task-id>
 implementation changes outside `.pipeline/`, runs verification commands from
 the checkpoint contract, writes the Evidence Manifest, generates the Evidence
 Pack, and advances the checkpoint state toward `awaiting_approval`.
+`--implementation-complete` skips only the implementation command. It does not
+skip verification, so an interactive implementation no longer needs a dummy
+test/build command that would be executed again by the Evidence Manifest step.
 `backcast-current.sh` promotes only approved or manual-override checkpoints into
 `.pipeline/current/`. `backcast-next-checkpoint.sh` then drafts the next
 checkpoint from that Current record, closing the fixture full-loop beyond

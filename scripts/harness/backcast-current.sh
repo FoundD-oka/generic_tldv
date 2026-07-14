@@ -59,6 +59,7 @@ fi
 python3 - "$task_id" "$summary" "$actor" <<'PY'
 import json
 import pathlib
+import subprocess
 import sys
 from datetime import datetime, timezone
 
@@ -124,6 +125,30 @@ if approval.get("checkpoint_id") != checkpoint_id:
     )
 
 repo = manifest.get("repo") if isinstance(manifest.get("repo"), dict) else {}
+target = approval.get("target") if isinstance(approval.get("target"), dict) else {}
+if target.get("kind") != "git_commit":
+    fail("approval target.kind must be git_commit")
+for key in ("base_sha", "head_sha"):
+    if target.get(key) != repo.get(key):
+        fail(
+            f"approval target.{key} mismatch: "
+            f"approval={target.get(key)} manifest={repo.get(key)}"
+        )
+current_head = subprocess.check_output(
+    ["git", "rev-parse", "HEAD"], cwd=root, text=True
+).strip()
+if target.get("head_sha") != current_head:
+    fail(f"approval target is stale: approval={target.get('head_sha')} current={current_head}")
+dirty = subprocess.check_output(
+    [
+        "git", "status", "--porcelain", "--untracked-files=all", "--", ".",
+        ":(exclude).pipeline", ":(exclude).gitnexus",
+    ],
+    cwd=root,
+    text=True,
+).strip()
+if dirty:
+    fail("implementation tree has uncommitted changes after approval")
 target_state = checkpoint.get("target_state") if isinstance(checkpoint.get("target_state"), dict) else {}
 quality_conditions = [
     item for item in manifest.get("quality_conditions", [])

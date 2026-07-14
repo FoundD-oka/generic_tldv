@@ -80,6 +80,9 @@
         },
         "sidechain_synthesis": {
           "type": "string"
+        },
+        "tribunal_report": {
+          "type": "string"
         }
       }
     }
@@ -124,8 +127,19 @@
         "properties": {
           "evidence": {
             "required": [
-              "session_ledger",
-              "sidechain_synthesis"
+              "session_ledger"
+            ],
+            "anyOf": [
+              {
+                "required": [
+                  "sidechain_synthesis"
+                ]
+              },
+              {
+                "required": [
+                  "tribunal_report"
+                ]
+              }
             ]
           }
         }

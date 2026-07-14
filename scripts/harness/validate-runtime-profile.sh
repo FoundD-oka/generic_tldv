@@ -46,6 +46,7 @@ required_paths=(
   "scripts/harness/build.sh"
   "scripts/harness/codex-build.sh"
   "scripts/harness/full-loop-smoke.sh"
+  "scripts/harness/delivery-integrity-smoke.sh"
   "scripts/harness/backcast-manifest.sh"
   "scripts/harness/backcast-evidence-pack.sh"
   "scripts/harness/backcast-approval.sh"
@@ -103,7 +104,7 @@ except Exception as exc:
     sys.exit(1)
 ' ".codex/config.toml"
 
-for executable in scripts/harness/codex-session-ledger.sh scripts/harness/outcome-judge.sh scripts/harness/backcast-checkpoint.sh scripts/harness/sml-decision.sh scripts/harness/backcast-state.sh scripts/harness/worktree.sh scripts/harness/build.sh scripts/harness/codex-build.sh scripts/harness/full-loop-smoke.sh scripts/harness/backcast-manifest.sh scripts/harness/backcast-evidence-pack.sh scripts/harness/backcast-approval.sh scripts/harness/external-consultation.sh; do
+for executable in scripts/harness/codex-session-ledger.sh scripts/harness/outcome-judge.sh scripts/harness/backcast-checkpoint.sh scripts/harness/sml-decision.sh scripts/harness/backcast-state.sh scripts/harness/worktree.sh scripts/harness/build.sh scripts/harness/codex-build.sh scripts/harness/full-loop-smoke.sh scripts/harness/delivery-integrity-smoke.sh scripts/harness/backcast-manifest.sh scripts/harness/backcast-evidence-pack.sh scripts/harness/backcast-approval.sh scripts/harness/external-consultation.sh; do
   if [[ ! -x "$executable" ]]; then
     echo "not executable: $executable" >&2
     exit 1

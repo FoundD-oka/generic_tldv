@@ -5,10 +5,12 @@ usage() {
   cat >&2 <<'USAGE'
 Usage:
   scripts/harness/build.sh <task-id> [--worktree <path>] [--commit-message <text>] [--no-commit] [--no-verify] [--no-pack] [--no-state] -- <build command>
+  scripts/harness/build.sh <task-id> [--worktree <path>] --implementation-complete [--commit-message <text>] [--no-commit] [--no-verify] [--no-pack] [--no-state]
 
-Runs the build command inside the chosen checkout, then collects evidence through
-backcast-manifest.sh. This is the thin Phase-1 runner; Codex or another agent can
-be placed behind the build command later.
+Runs the implementation command inside the chosen checkout, then collects
+evidence through backcast-manifest.sh. Use --implementation-complete when the
+implementation was already completed interactively (for example in Codex App):
+no placeholder build command is run, so checkpoint verification executes once.
 
 Writes:
   .pipeline/evidence/<task-id>/build/build.log
@@ -30,6 +32,7 @@ run_verify=1
 run_pack=1
 run_state=1
 auto_commit=1
+implementation_complete=0
 commit_message="harness: build $task_id"
 while [[ "$#" -gt 0 ]]; do
   case "$1" in
@@ -57,6 +60,10 @@ while [[ "$#" -gt 0 ]]; do
       run_state=0
       shift
       ;;
+    --implementation-complete)
+      implementation_complete=1
+      shift
+      ;;
     --)
       shift
       break
@@ -73,7 +80,13 @@ while [[ "$#" -gt 0 ]]; do
   esac
 done
 
-if [[ "$#" -eq 0 ]]; then
+if [[ "$implementation_complete" = "1" && "$#" -gt 0 ]]; then
+  echo "--implementation-complete cannot be combined with a build command" >&2
+  usage
+  exit 2
+fi
+
+if [[ "$implementation_complete" = "0" && "$#" -eq 0 ]]; then
   echo "build command is required after --" >&2
   usage
   exit 2
@@ -109,13 +122,18 @@ if [[ ! -x "$pre_review_gate" ]]; then
   echo "pre-implementation review gate is missing" >&2
   exit 1
 fi
-(cd "$worktree" && "$pre_review_gate" "$task_id") >/dev/null
+(cd "$worktree" && HARNESS_TASK_ID="$task_id" bash "$pre_review_gate" "$task_id") >/dev/null
 
 mkdir -p "$root/.pipeline/evidence/$task_id/build"
 mkdir -p "$worktree/.pipeline/evidence/$task_id/build"
 build_log="$worktree/.pipeline/evidence/$task_id/build/build.log"
 summary="$worktree/.pipeline/evidence/$task_id/build/build-summary.json"
 command_text="$*"
+build_mode="command"
+if [[ "$implementation_complete" = "1" ]]; then
+  command_text="<implementation-complete>"
+  build_mode="implementation_complete"
+fi
 
 state_script="$worktree/scripts/harness/backcast-state.sh"
 if [[ ! -x "$state_script" ]]; then
@@ -126,27 +144,36 @@ if [[ "$run_state" = "1" && -x "$state_script" ]]; then
   (cd "$worktree" && "$state_script" "$task_id" planned --allow-same --reason "build runner started") >/dev/null 2>&1 || true
   (cd "$worktree" && "$state_script" "$task_id" build_authorized --reason "build command accepted") >/dev/null 2>&1 || true
   (cd "$worktree" && "$state_script" "$task_id" worktree_created --reason "worktree selected: $worktree") >/dev/null 2>&1 || true
-  (cd "$worktree" && "$state_script" "$task_id" building --reason "running build command") >/dev/null 2>&1 || true
+  if [[ "$implementation_complete" = "1" ]]; then
+    (cd "$worktree" && "$state_script" "$task_id" building --reason "collecting completed interactive implementation") >/dev/null 2>&1 || true
+  else
+    (cd "$worktree" && "$state_script" "$task_id" building --reason "running build command") >/dev/null 2>&1 || true
+  fi
 fi
 
 started_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-set +e
-(
-  cd "$worktree"
-  printf '$ %s\n' "$command_text"
-  "$@"
-) >"$build_log" 2>&1
-build_exit=$?
-set -e
+if [[ "$implementation_complete" = "1" ]]; then
+  printf '%s\n' 'implementation already complete; checkpoint verification will run once' >"$build_log"
+  build_exit=0
+else
+  set +e
+  (
+    cd "$worktree"
+    printf '$ %s\n' "$command_text"
+    "$@"
+  ) >"$build_log" 2>&1
+  build_exit=$?
+  set -e
+fi
 finished_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
-python3 - "$task_id" "$worktree" "$command_text" "$build_exit" "$started_at" "$finished_at" "$build_log" "$summary" <<'PY'
+python3 - "$task_id" "$worktree" "$command_text" "$build_mode" "$build_exit" "$started_at" "$finished_at" "$build_log" "$summary" <<'PY'
 import json
 import pathlib
 import subprocess
 import sys
 
-task_id, worktree, command, exit_code, started_at, finished_at, log_path, summary_path = sys.argv[1:9]
+task_id, worktree, command, mode, exit_code, started_at, finished_at, log_path, summary_path = sys.argv[1:10]
 worktree_path = pathlib.Path(worktree)
 root = pathlib.Path.cwd()
 
@@ -165,6 +192,7 @@ payload = {
     "worktree_path": str(worktree_path),
     "branch_name": branch,
     "head_sha": head,
+    "mode": mode,
     "command": command,
     "exit_code": int(exit_code),
     "started_at": started_at,
