@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0",
+  "task_id": "status-display-completed",
+  "runtime_profile": "codex-app",
+  "size": "S",
+  "result": {
+    "at_pass": true,
+    "fp_pass": true,
+    "nft_pass": true,
+    "hd_resolved": true,
+    "blocking_findings": 0
+  },
+  "evidence": {
+    "verification": [
+      "npm test -- tests/test_meeting_status_display.test.ts -> 7件成功",
+      "npx eslint src/types/vexa.ts tests/test_meeting_status_display.test.ts -> 成功",
+      "npm --prefix services/dashboard test -> 24ファイル・177件成功",
+      "node .gitnexus/run.cjs detect-changes --repo generic_tldv --scope all -> リスク低、変更シンボルはgetDetailedStatusのみ",
+      "HARNESS_TASK_ID=status-display-completed bash .claude/hooks/pr-ready-gate.sh status-display-completed -> ready"
+    ]
+  },
+  "notes": [
+    "内部状態がcompletedの会議は、終了理由に関係なく完了と表示する。",
+    "最終化処理中のstoppingは停止中のまま維持する。",
+    "completion_reasonは監査・履歴用データとして保持し、APIや保存形式は変更していない。",
+    "Fableプラン確認はClaude CLIの廃止済みMultiEdit権限名エラーにより実行できず、設定済みのCodex-onlyフォールバックを記録した。"
+  ]
+}

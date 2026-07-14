@@ -1,0 +1,21 @@
+{
+  "timestamp": "2026-07-14T02:53:53.047414+00:00",
+  "task_id": "status-display-completed",
+  "size": "S",
+  "status": "pass",
+  "checks": [
+    {
+      "stage": "plan",
+      "required": false,
+      "status": "pass",
+      "errors": []
+    },
+    {
+      "stage": "post",
+      "required": false,
+      "status": "pass",
+      "errors": []
+    }
+  ],
+  "errors": []
+}

@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-07-14T02:53:52.852906+00:00",
+  "task_id": "status-display-completed",
+  "status": "pass",
+  "mode": "active",
+  "details": {
+    "checkpoint_contract": ".pipeline/plans/status-display-completed/checkpoint-contract.json",
+    "evidence_manifest": ".pipeline/evidence/status-display-completed/evidence-manifest.json",
+    "approval_decision": ".pipeline/approvals/status-display-completed/approval-decision.json",
+    "state_machine": ".pipeline/rules/backcast-state-machine.json",
+    "mode": "optional"
+  },
+  "errors": [],
+  "warnings": []
+}
