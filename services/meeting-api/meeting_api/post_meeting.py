@@ -20,6 +20,7 @@ from .webhook_delivery import deliver_with_result, build_envelope
 
 from .config import TRANSCRIPTION_COLLECTOR_URL, POST_MEETING_HOOKS
 from .webhooks import send_completion_webhook
+from .participant_roster import merge_participant_roster_data
 
 logger = logging.getLogger("meeting_api.post_meeting")
 
@@ -129,6 +130,17 @@ async def aggregate_transcription(meeting: Meeting, db: AsyncSession):
             return False
 
         segments = response.json()
+        existing_data = meeting.data or {}
+        projected_data = merge_participant_roster_data(
+            existing_data,
+            existing_data.get("participant_roster") if isinstance(existing_data, dict) else [],
+            id_salt=f"meeting:{meeting_id}",
+        )
+        roster_projected = projected_data != existing_data
+        if roster_projected:
+            meeting.data = projected_data
+            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(meeting, "data")
         if not segments:
             # Empty result is legitimate (zero-segment meeting); clear any
             # prior failure_class to indicate aggregation completed cleanly.
@@ -150,6 +162,7 @@ async def aggregate_transcription(meeting: Meeting, db: AsyncSession):
         changed = False
         if "participants" not in existing_data and unique_speakers:
             existing_data["participants"] = sorted(unique_speakers)
+            existing_data["participants_source"] = "transcript_speakers"
             changed = True
         if "languages" not in existing_data and unique_languages:
             existing_data["languages"] = sorted(unique_languages)

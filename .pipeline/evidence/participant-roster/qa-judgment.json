@@ -1,0 +1,37 @@
+{
+  "schema_version": "1.0",
+  "task_id": "participant-roster",
+  "verdict": "pass",
+  "reviewer": "codex-app-independent-qa",
+  "summary": "計画、検証契約、最新の実装差分、evidence manifest、bot・meeting-api・dashboardのログを独立に照合した。People panel root誤認、話者検出混入、チャット送信との競合、入れ子自己DOMと多言語自己名除外を修正し、実Chromium DOM 7件を含むbot 53件、meeting-api全585件、dashboard 10件が成功した。最新manifestは21ファイル、必須6コマンドexit 0。blocking findingは0件。",
+  "blocking_findings": [],
+  "resolved_findings": [
+    {
+      "id": "QA-PR-001",
+      "title": "participant tile regionをPeople panel rootとして誤認する可能性",
+      "resolution": "fallback rootからrole=regionを除外し、Peopleボタンのaria-controls先だけをregionとして許可。回帰テスト追加後に再QAで解消確認。"
+    },
+    {
+      "id": "G1",
+      "title": "Peopleパネル行が既存の話者検出へ混入する",
+      "resolution": "People rootを初回・周期speaker scanより先に確立し、speaker observer、名前lookup、500ms pollからpanel行を除外した。イベント時にも所属を再判定し、Peopleボタン差し替えを実Chromiumで検証した。"
+    },
+    {
+      "id": "G2",
+      "title": "定期パネル切替がチャット送信と競合する",
+      "resolution": "chat sendとPeople snapshotの共有ロック、入力DOMの接続性確認と再取得、統合テストを追加した。"
+    },
+    {
+      "id": "G3",
+      "title": "ローカライズされた自己表示名でボット除外が破れる",
+      "resolution": "祖先のdata-self-nameをブラウザで優先除外し、Node normalizerでもis_selfと半角・全角のローカライズ括弧接尾辞を防御的に除外した。"
+    }
+  ],
+  "residual_risks": [
+    "実Google Meet E2Eは未実施。初回canaryでPeopleパネル表示人数とobserved_participants件数を照合する。",
+    "Google Meet DOMと仮想スクロール依存のため、大規模会議ではベストエフォート。",
+    "同一表示名の参加者は1名へ統合する。",
+    "共通callbackのGitNexus影響度はCRITICAL。任意末尾引数・任意JSONフィールドと全API回帰で緩和したが、Zoom・Teamsの実会議回帰は未実施。",
+    "Sol Ultraの最終判定はSHIP/MUST_FIX 0。追加のDOMタイミング、chat復元遅延、deferred再試行、受信前サイズ制限、同時PATCH競合はSHOULD_FIXとして残る。"
+  ]
+}

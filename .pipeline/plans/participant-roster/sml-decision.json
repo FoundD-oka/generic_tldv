@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0",
+  "task_id": "participant-roster",
+  "checkpoint_id": "",
+  "size": "M",
+  "decided_at": "2026-07-14T05:36:25.984877+00:00",
+  "basis": {
+    "residual_uncertainty": "Google Meet DOM収集、共通終了コールバック、meeting-api永続化に跨る後方互換変更",
+    "not_based_on": "issue title or diff size alone"
+  },
+  "quality_gates": {
+    "required": [
+      "residency",
+      "preflight",
+      "hd-gate",
+      "doc-staleness",
+      "adapter-contract",
+      "backcast-contracts",
+      "evidence-pack",
+      "qa-judgment"
+    ],
+    "external_consultation": "optional"
+  }
+}

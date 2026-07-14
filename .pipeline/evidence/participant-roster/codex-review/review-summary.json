@@ -1,0 +1,90 @@
+{
+  "schema_version": "1.0",
+  "task_id": "participant-roster",
+  "status": "completed",
+  "mode": "post",
+  "model": "gpt-5.6-sol",
+  "reasoning_effort": "ultra",
+  "sandbox": "read-only",
+  "target_kind": "diff",
+  "target_hash": "sha256:3f30547562e6da63e43c7a81b61ecaec2444a6f78051dcf12a05e3bf9cca09fc",
+  "prompt_hash": "sha256:eb225c9a1c831ec87f3feeb2b6f33ebfea05090affb6c997433ba59aaa357993",
+  "response_hash": "sha256:8f73575296a42f919fd5ef5d9ad720f57f3a8ec0143fafff14a4efeede7ecd9a",
+  "response_path": ".pipeline/evidence/participant-roster/codex-review/codex-post.md",
+  "raw_response_path": null,
+  "verdict": "SHIP",
+  "confidence": "high",
+  "summary": "ブロッキングな不整合はなく、現時点の実装は出荷可能です。承認済み計画・検証契約に対し、非 .pipeline 差分21ファイル、必須6コマンドの終了コード0、bot 53件（Zoom 18、roster 18、実ブラウザDOM 7、chat lock 5、callback 5）、meeting-api 115件、全API 585件、dashboard 10件を証跡ログで照合しました。差分ハッシュは sha256:3f30547562e6da63e43c7a81b61ecaec2444a6f78051dcf12a05e3bf9cca09fc と再一致し、preflight の blocks は空です。G3のネストしたself DOM・ローカライズ括弧・前方一致誤判定、任意コールバック互換、opaque ID、手動編集優先、旧botの話者フォールバックも、具体的なソースとテストで成立を確認しました。以下は通常経路を止めない堅牢化課題です。",
+  "findings": [
+    {
+      "id": "R1",
+      "severity": "SHOULD_FIX",
+      "title": "Peopleルート確立は初期表示とツールバー置換の一部タイミングに依存する",
+      "evidence": "services/vexa-bot/core/src/platforms/googlemeet/recording.ts:702-750 の ensurePeoplePanelSnapshot() はパネルを開いた後のスキャンを非同期予約して即時復帰し、同ファイル:767-768 は直後に初回speaker scanを実行します。同ファイル:624-632 は各セレクタの最初の querySelector() 結果だけを評価し、同ファイル:523-527 のイベント経路は切断済み要素を明示的には拒否しません。services/vexa-bot/core/src/platforms/googlemeet/__tests__/googlemeet-roster-dom.test.ts:61-80 は開始時点で aria-controls 付きPeopleボタンとルートを用意し、同テスト:119-139 の置換では旧ボタンと旧パネルをDOMから除去します。したがって、aria-controlsが遅れて付く初回オープン、先頭に非表示の旧ボタンが残る置換、切断済みルートからの遅延通知は未検証です。",
+      "recommendation": "初回speaker scanをPeopleボタン／ルート確立後まで待機させ、querySelectorAll()から可視ボタンを選択し、speakerイベントでは isConnected も確認してください。実ブラウザfixtureに遅延aria-controls、非表示旧ボタン、切断済みobserver通知を追加すると不変条件を固定できます。"
+    },
+    {
+      "id": "R2",
+      "severity": "SHOULD_FIX",
+      "title": "Peopleスナップショット後のチャット復元完了とロック解放の間に競合余地がある",
+      "evidence": "services/vexa-bot/core/src/platforms/googlemeet/recording.ts:702-750 はチャット復元ボタンをクリックした直後にroster snapshotフラグを解除します。一方、services/vexa-bot/core/src/platforms/googlemeet/chat.ts:369-482 の sendGoogleMeetChat() は入力欄がまだ再マウントされていなければチャットボタンを再クリックし、入力欄の切断後再取得は同ファイル:444-453 で行います。services/vexa-bot/core/src/platforms/googlemeet/__tests__/googlemeet-chat-lock.test.ts の「waits for roster snapshot and reacquires a detached chat input」はロック待機と入力差し替えを検証しますが、復元クリック後・aria-expandedのまま入力未接続という遷移は再現していません。",
+      "recommendation": "復元後に接続済み入力欄または明示的なパネル状態を確認してからsnapshotロックを解除し、送信側も aria-expanded と入力欄の有無を組み合わせて開閉を判断してください。"
+    },
+    {
+      "id": "R3",
+      "severity": "SHOULD_FIX",
+      "title": "STOPPING中のdeferred応答をbot側が成功として扱わず、不要な再試行を行う",
+      "evidence": "services/meeting-api/app/api/v1/callbacks.py:852-885 はSTOPPING中のcompleted callbackでrosterをコミットして status=\"deferred\" を返し、services/meeting-api/tests/test_callbacks.py の test_stopping_deferred_status_persists_participant_roster がこの契約を固定しています。しかし services/vexa-bot/core/src/services/unified-callback.ts:198-203 の成功集合は processed、ok、container_updated、ignored のみで、deferredを含みません。services/vexa-bot/core/src/services/__tests__/unified-callback.test.ts の5件にもdeferredケースがありません。rosterは初回で保存され、終了処理も例外を捕捉するため、今回のデータ完全性を阻害するブロッカーではありません。",
+      "recommendation": "deferredを終端コールバックの受理済み成功状態に加え、再試行しないことをcallback単体テストで固定してください。"
+    },
+    {
+      "id": "R4",
+      "severity": "SHOULD_FIX",
+      "title": "API入力上限は正規化前ではなく、受信・展開後に適用される",
+      "evidence": "services/meeting-api/app/api/v1/callbacks.py:287 の participant_roster は上限なしの List としてリクエスト全体をデコードします。services/meeting-api/app/services/participant_roster.py:125-140 も既存値と受信値を結合・展開した後に最大1000件へ正規化します。通常bot経路は services/vexa-bot/core/src/services/participant-roster.ts の出力250件制限でboundedですが、callback境界へ直接大きな配列が届くと、1000件制限より前のメモリ・検証コストは抑えられません。",
+      "recommendation": "PydanticモデルまたはHTTPリクエスト境界で配列長／本文サイズを先に制限し、1001件超や過大本文を拒否または明示的に切り詰めるテストを追加してください。"
+    },
+    {
+      "id": "R5",
+      "severity": "SHOULD_FIX",
+      "title": "手動編集優先は逐次処理で成立するが、同時更新のlost updateまでは防げない",
+      "evidence": "services/meeting-api/app/api/v1/collector/endpoints.py:702-783 はPATCH時に participants_source=\"manual\" を記録し、services/meeting-api/app/services/post_meeting.py:107-143 は外部GET後に手元のmeeting.dataへrosterをマージします。TestUpdateMeetingData.test_participant_patch_marks_names_as_manual と test_post_meeting_projects_roster_even_when_transcript_is_empty は逐次的な手動優先を検証しますが、GET待機中にPATCHがコミットされた場合の再読込・行ロック・楽観ロックはなく、古いJSONB全体のコミットで手動更新を戻す可能性があります。これは既存の集約更新競合に属し、今回の通常フローと検証契約を止めるものではありません。",
+      "recommendation": "外部I/O後またはコミット直前にmeeting.dataを再読込してmanual sourceを再評価するか、行ロック／バージョン条件付き更新を採用してください。PATCHとpost-meetingを並行実行する回帰テストも追加すると保証範囲が明確になります。"
+    }
+  ],
+  "adoption_status": [
+    {
+      "id": "R1",
+      "severity": "SHOULD_FIX",
+      "status": "open",
+      "note": ""
+    },
+    {
+      "id": "R2",
+      "severity": "SHOULD_FIX",
+      "status": "open",
+      "note": ""
+    },
+    {
+      "id": "R3",
+      "severity": "SHOULD_FIX",
+      "status": "open",
+      "note": ""
+    },
+    {
+      "id": "R4",
+      "severity": "SHOULD_FIX",
+      "status": "open",
+      "note": ""
+    },
+    {
+      "id": "R5",
+      "severity": "SHOULD_FIX",
+      "status": "open",
+      "note": ""
+    }
+  ],
+  "open_must_fix_count": 0,
+  "not_source_of_truth": true,
+  "created_at": "2026-07-14T07:32:20.651144+00:00"
+}

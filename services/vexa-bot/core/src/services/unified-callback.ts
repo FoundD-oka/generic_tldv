@@ -74,6 +74,13 @@ export interface UnifiedCallbackPayload {
   failure_stage?: FailureStage;
   timestamp?: string;
   speaker_events?: any[];
+  participant_roster?: Array<{
+    participant_id: string;
+    participant_name: string;
+    first_seen_at_ms: number;
+    last_seen_at_ms: number;
+    source: 'people_panel' | 'participant_tile';
+  }>;
   // v0.10.5.3 Pack O: ring-buffer of last N structured-JSON log lines from
   // the bot's stdout, sent on terminal status_change for forensic capture.
   // meeting-api persists these into meetings.data.bot_logs JSONB.
@@ -110,7 +117,8 @@ export async function callStatusChangeCallback(
   // terminal status (failed/completed). meeting-api persists both into
   // meetings.data JSONB on the status_change handler.
   botLogs?: string[],
-  botResources?: UnifiedCallbackPayload["bot_resources"]
+  botResources?: UnifiedCallbackPayload["bot_resources"],
+  participantRoster?: UnifiedCallbackPayload["participant_roster"],
 ): Promise<void> {log(`🔥 UNIFIED CALLBACK: ${status.toUpperCase()} - reason: ${reason || 'none'}`);
   
   if (!botConfig.meetingApiCallbackUrl) {log("Warning: No callback URL configured. Cannot send status change callback.");
@@ -151,6 +159,7 @@ export async function callStatusChangeCallback(
         failure_stage: failureStage,
         timestamp: new Date().toISOString(),
         speaker_events: speakerEvents,
+        participant_roster: participantRoster,
         bot_logs: botLogs,
         bot_resources: botResources,
       };

@@ -34,6 +34,7 @@ from .meetings import (
 )
 from .post_meeting import run_all_tasks
 from .recording_finalizer import finalize_recording_master
+from .participant_roster import merge_participant_roster_data
 from .collector.auth import require_internal_secret
 
 logger = logging.getLogger("meeting_api.callbacks")
@@ -283,6 +284,7 @@ class BotStatusChangePayload(BaseModel):
     failure_stage: Optional[MeetingFailureStage] = Field(None)
     timestamp: Optional[str] = Field(None)
     speaker_events: Optional[List[Dict]] = Field(None)
+    participant_roster: Optional[List[Dict[str, Any]]] = Field(None)
     # v0.10.5.3 Pack O — last N structured-JSON log lines from bot stdout.
     # Sent only on terminal status (failed/completed). Persisted into
     # meetings.data.bot_logs JSONB after a 50 KB cap (apply at write-time
@@ -742,7 +744,7 @@ async def bot_status_change_callback(
 
     await db.refresh(meeting)
 
-    # v0.10.5.3 Pack O + Pack T: persist forensic fields on terminal transitions.
+    # Persist terminal-only bot artifacts before status-specific branches.
     # - bot_logs: last ~200 structured-JSON log lines from bot stdout (ring
     #   buffer via Pack O). Capped at 50 KB to bound JSONB row size.
     # - bot_resources: cgroup memory + CPU summary from Pack T's sampler.
@@ -752,7 +754,9 @@ async def bot_status_change_callback(
     # them. Future operators querying a failed meeting now have the bot's
     # last log lines + memory peak in the meeting row.
     if new_status in (MeetingStatus.FAILED, MeetingStatus.COMPLETED) and (
-        payload.bot_logs or payload.bot_resources
+        payload.bot_logs
+        or payload.bot_resources
+        or payload.participant_roster is not None
     ):
         if not meeting.data:
             meeting.data = {}
@@ -773,6 +777,12 @@ async def bot_status_change_callback(
             d["bot_logs_truncated"] = len(kept) < len(payload.bot_logs)
         if payload.bot_resources:
             d["bot_resources"] = payload.bot_resources
+        if payload.participant_roster is not None:
+            d = merge_participant_roster_data(
+                d,
+                payload.participant_roster,
+                id_salt=f"meeting-session:{payload.connection_id}",
+            )
         meeting.data = d
         attributes.flag_modified(meeting, "data")
         # Don't commit here — leaves it to the branch logic below to commit

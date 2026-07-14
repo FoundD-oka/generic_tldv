@@ -1,0 +1,21 @@
+{
+  "timestamp": "2026-07-14T07:33:18.289929+00:00",
+  "task_id": "participant-roster",
+  "size": "M",
+  "status": "pass",
+  "checks": [
+    {
+      "stage": "plan",
+      "required": false,
+      "status": "pass",
+      "errors": []
+    },
+    {
+      "stage": "post",
+      "required": false,
+      "status": "pass",
+      "errors": []
+    }
+  ],
+  "errors": []
+}

@@ -1,0 +1,227 @@
+{
+  "manifest_version": "1.0",
+  "task_id": "participant-roster",
+  "goal_id": "participant-roster-goal",
+  "checkpoint_id": "participant-roster-cp-001",
+  "repo": {
+    "base_branch": "",
+    "base_sha": "8cb85dbdf3bd76affdb593120ea0ff5156f47ad4",
+    "head_sha": "8cb85dbdf3bd76affdb593120ea0ff5156f47ad4",
+    "branch_name": "codex/participant-roster",
+    "worktree_path": "/Users/bonginkan-3-gouki/project/generic_tldv/.pipeline/worktrees/participant-roster/checkout",
+    "generated_at": "2026-07-14T07:13:38.654418+00:00"
+  },
+  "commands": [
+    {
+      "id": "bot-test",
+      "command": "cd services/vexa-bot/core && npm test",
+      "required": true,
+      "exit_code": 0,
+      "started_at": "2026-07-14T07:12:42.491472+00:00",
+      "finished_at": "2026-07-14T07:12:52.326460+00:00",
+      "log_path": ".pipeline/evidence/participant-roster/logs/bot-test.log"
+    },
+    {
+      "id": "bot-build",
+      "command": "cd services/vexa-bot/core && npm run build",
+      "required": true,
+      "exit_code": 0,
+      "started_at": "2026-07-14T07:12:52.326648+00:00",
+      "finished_at": "2026-07-14T07:12:56.354895+00:00",
+      "log_path": ".pipeline/evidence/participant-roster/logs/bot-build.log"
+    },
+    {
+      "id": "api-target",
+      "command": "docker run --rm --user root -e PYTHONDONTWRITEBYTECODE=1 -e PYTHONPATH=/src/services/meeting-api:/src/libs/admin-models -v \"$PWD:/src:ro\" -w /src/services/meeting-api vexaai/meeting-api:latest sh -lc 'python -m pip install --disable-pip-version-check --no-cache-dir -q pytest pytest-asyncio && python -m pytest -p no:cacheprovider tests/test_participant_roster.py tests/test_callbacks.py tests/test_post_meeting_idempotency.py tests/test_meetings.py -q'",
+      "required": true,
+      "exit_code": 0,
+      "started_at": "2026-07-14T07:12:56.355076+00:00",
+      "finished_at": "2026-07-14T07:13:13.387296+00:00",
+      "log_path": ".pipeline/evidence/participant-roster/logs/api-target.log"
+    },
+    {
+      "id": "api-all",
+      "command": "docker run --rm --user root -e PYTHONDONTWRITEBYTECODE=1 -e PYTHONPATH=/src/services/meeting-api:/src/libs/admin-models -v \"$PWD:/src:ro\" -w /src/services/meeting-api vexaai/meeting-api:latest sh -lc 'python -m pip install --disable-pip-version-check --no-cache-dir -q pytest pytest-asyncio && python -m pytest -p no:cacheprovider tests -q --ignore=tests/integration/test_transcription_dictionary_postgres.py'",
+      "required": true,
+      "exit_code": 0,
+      "started_at": "2026-07-14T07:13:13.387747+00:00",
+      "finished_at": "2026-07-14T07:13:34.544591+00:00",
+      "log_path": ".pipeline/evidence/participant-roster/logs/api-all.log"
+    },
+    {
+      "id": "dashboard-test",
+      "command": "cd services/dashboard && npm test -- tests/test_meeting_cards_ui.test.ts tests/test_export_and_bot_defaults.test.ts",
+      "required": true,
+      "exit_code": 0,
+      "started_at": "2026-07-14T07:13:34.544790+00:00",
+      "finished_at": "2026-07-14T07:13:36.551028+00:00",
+      "log_path": ".pipeline/evidence/participant-roster/logs/dashboard-test.log"
+    },
+    {
+      "id": "gitnexus",
+      "command": "node /Users/bonginkan-3-gouki/project/generic_tldv/.gitnexus/run.cjs detect-changes --repo generic_tldv-participant-roster --scope compare --base-ref main",
+      "required": true,
+      "exit_code": 0,
+      "started_at": "2026-07-14T07:13:36.551298+00:00",
+      "finished_at": "2026-07-14T07:13:38.654272+00:00",
+      "log_path": ".pipeline/evidence/participant-roster/logs/gitnexus.log"
+    }
+  ],
+  "artifacts": [],
+  "scope": {
+    "changed_files": [
+      "docs/api/meetings.mdx",
+      "docs/speaker-identification.mdx",
+      "services/meeting-api/meeting_api/callbacks.py",
+      "services/meeting-api/meeting_api/collector/endpoints.py",
+      "services/meeting-api/meeting_api/participant_roster.py",
+      "services/meeting-api/meeting_api/post_meeting.py",
+      "services/meeting-api/tests/test_callbacks.py",
+      "services/meeting-api/tests/test_meetings.py",
+      "services/meeting-api/tests/test_participant_roster.py",
+      "services/vexa-bot/core/package.json",
+      "services/vexa-bot/core/src/index.ts",
+      "services/vexa-bot/core/src/platforms/googlemeet/recording.ts",
+      "services/vexa-bot/core/src/platforms/googlemeet/selectors.ts",
+      "services/vexa-bot/core/src/services/chat-roster-lock.test.ts",
+      "services/vexa-bot/core/src/services/chat.ts",
+      "services/vexa-bot/core/src/services/googlemeet-roster-dom.test.ts",
+      "services/vexa-bot/core/src/services/participant-roster.test.ts",
+      "services/vexa-bot/core/src/services/participant-roster.ts",
+      "services/vexa-bot/core/src/services/unified-callback.test.ts",
+      "services/vexa-bot/core/src/services/unified-callback.ts",
+      "services/vexa-bot/docs/speaker-name-resolution.md"
+    ],
+    "forbidden_paths_changed": [],
+    "allowed_paths_outside_with_justification": [],
+    "changed_file_count": 21
+  },
+  "quality_conditions": [
+    {
+      "id": "qc-001",
+      "condition": "無言・途中退出参加者を累積する",
+      "ok_line": "bot roster tests pass",
+      "target_state": "bot roster tests pass",
+      "status": "passed",
+      "evidence": [
+        "command:bot-test"
+      ]
+    },
+    {
+      "id": "qc-002",
+      "condition": "既存callback契約を維持する",
+      "ok_line": "bot callback tests pass",
+      "target_state": "bot callback tests pass",
+      "status": "passed",
+      "evidence": [
+        "command:bot-test"
+      ]
+    },
+    {
+      "id": "qc-003",
+      "condition": "TypeScript全体が型検査とbundle生成に成功する",
+      "ok_line": "bot build passes",
+      "target_state": "bot build passes",
+      "status": "passed",
+      "evidence": [
+        "command:bot-build"
+      ]
+    },
+    {
+      "id": "qc-004",
+      "condition": "terminal・deferred・手動優先・旧fallbackを保持する",
+      "ok_line": "meeting-api targeted tests pass",
+      "target_state": "meeting-api targeted tests pass",
+      "status": "passed",
+      "evidence": [
+        "command:api-target"
+      ]
+    },
+    {
+      "id": "qc-005",
+      "condition": "meeting-apiの既存単体回帰を壊さない",
+      "ok_line": "meeting-api suite passes",
+      "target_state": "meeting-api suite passes",
+      "status": "passed",
+      "evidence": [
+        "command:api-all"
+      ]
+    },
+    {
+      "id": "qc-006",
+      "condition": "既存ダッシュボード参加者表示契約を維持する",
+      "ok_line": "dashboard contract tests pass",
+      "target_state": "dashboard contract tests pass",
+      "status": "passed",
+      "evidence": [
+        "command:dashboard-test"
+      ]
+    },
+    {
+      "id": "qc-007",
+      "condition": "変更影響が想定範囲内である",
+      "ok_line": "GitNexus change detection passes",
+      "target_state": "GitNexus change detection passes",
+      "status": "passed",
+      "evidence": [
+        "command:gitnexus"
+      ]
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "qc-001",
+      "status": "passed",
+      "evidence": [
+        "command:bot-test"
+      ]
+    },
+    {
+      "id": "qc-002",
+      "status": "passed",
+      "evidence": [
+        "command:bot-test"
+      ]
+    },
+    {
+      "id": "qc-003",
+      "status": "passed",
+      "evidence": [
+        "command:bot-build"
+      ]
+    },
+    {
+      "id": "qc-004",
+      "status": "passed",
+      "evidence": [
+        "command:api-target"
+      ]
+    },
+    {
+      "id": "qc-005",
+      "status": "passed",
+      "evidence": [
+        "command:api-all"
+      ]
+    },
+    {
+      "id": "qc-006",
+      "status": "passed",
+      "evidence": [
+        "command:dashboard-test"
+      ]
+    },
+    {
+      "id": "qc-007",
+      "status": "passed",
+      "evidence": [
+        "command:gitnexus"
+      ]
+    }
+  ],
+  "missing_evidence": [],
+  "approval": {
+    "state": "pending",
+    "decision_path": ".pipeline/approvals/participant-roster/approval-decision.json"
+  }
+}
