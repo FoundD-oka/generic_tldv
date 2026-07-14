@@ -50,7 +50,7 @@ sha256:
 承認記録:
 
 ```text
-.pipeline/evidence/<issue-or-task>/approvals.jsonl
+.pipeline/approvals/<issue-or-task>/approval-decision.json
 ```
 
 ## 残リスク

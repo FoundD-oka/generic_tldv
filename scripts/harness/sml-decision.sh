@@ -94,7 +94,7 @@ if checkpoint_path.exists():
 
 required_gates = {
     "S": ["residency", "preflight", "hd-gate", "doc-staleness", "adapter-contract", "backcast-contracts"],
-    "M": ["residency", "preflight", "hd-gate", "doc-staleness", "adapter-contract", "backcast-contracts", "evidence-pack", "qa-judgment"],
+    "M": ["residency", "preflight", "hd-gate", "doc-staleness", "adapter-contract", "backcast-contracts", "evidence-manifest", "evidence-pack", "qa-judgment", "outcome-judgment"],
     "L": [
         "residency",
         "preflight",
@@ -102,8 +102,10 @@ required_gates = {
         "doc-staleness",
         "adapter-contract",
         "backcast-contracts",
+        "evidence-manifest",
         "evidence-pack",
         "qa-judgment",
+        "outcome-judgment",
         "tribunal-or-sidechain",
         "external-consultation",
         "approval-hash",

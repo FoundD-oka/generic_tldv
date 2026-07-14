@@ -7,7 +7,29 @@
     "type"
   ],
   "properties": {
+    "schema_version": {
+      "type": "string"
+    },
     "type": {
+      "type": "string"
+    },
+    "task_id": {
+      "type": "string"
+    },
+    "runtime_profile": {
+      "type": "string"
+    },
+    "timestamp": {
+      "type": "string"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "status": {
       "type": "string"
     },
     "thread_id": {
@@ -23,5 +45,29 @@
       "type": "object"
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "schema_version": {
+            "const": "2.0"
+          }
+        },
+        "required": [
+          "schema_version"
+        ]
+      },
+      "then": {
+        "required": [
+          "task_id",
+          "runtime_profile",
+          "timestamp",
+          "sequence",
+          "run_id",
+          "status"
+        ]
+      }
+    }
+  ],
   "additionalProperties": true
 }

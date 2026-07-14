@@ -8,6 +8,7 @@
     "task_id",
     "checkpoint_id",
     "decision",
+    "target",
     "approver",
     "reviewed_evidence"
   ],
@@ -32,6 +33,28 @@
         "scope_change_requested",
         "manual_override"
       ]
+    },
+    "target": {
+      "type": "object",
+      "required": [
+        "kind",
+        "base_sha",
+        "head_sha"
+      ],
+      "properties": {
+        "kind": {
+          "const": "git_commit"
+        },
+        "base_sha": {
+          "type": "string",
+          "minLength": 40
+        },
+        "head_sha": {
+          "type": "string",
+          "minLength": 40
+        }
+      },
+      "additionalProperties": true
     },
     "approver": {
       "type": "object",

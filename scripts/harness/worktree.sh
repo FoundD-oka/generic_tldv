@@ -5,6 +5,7 @@ usage() {
   cat >&2 <<'USAGE'
 Usage:
   scripts/harness/worktree.sh create <task-id> [--base <ref>] [--path <path>] [--branch <name>] [--force]
+  scripts/harness/worktree.sh bootstrap <task-id>
   scripts/harness/worktree.sh status <task-id>
   scripts/harness/worktree.sh remove <task-id> [--force]
 
@@ -64,7 +65,9 @@ fi
 
 python3 - "$cmd" "$task_id" "$base_ref" "$path_arg" "$branch_name" "$force" <<'PY'
 import json
+import os
 import pathlib
+import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -114,6 +117,53 @@ def write_meta(status, extra=None):
     return payload
 
 
+def bootstrap_checkout(path):
+    if not path.exists():
+        raise SystemExit(f"worktree path does not exist: {path}")
+
+    copied = {}
+    for section in ("plans", "evidence"):
+        source = root / ".pipeline" / section / task_id
+        destination = path / ".pipeline" / section / task_id
+        if destination.exists():
+            copied[section] = "present"
+        elif source.exists():
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(source, destination)
+            copied[section] = "copied"
+        else:
+            copied[section] = "not_found"
+
+    links = []
+    claude_dir = path / ".claude"
+    claude_dir.mkdir(parents=True, exist_ok=True)
+    for name in ("agents", "hooks", "rules", "skills"):
+        source = root / ".claude" / name
+        destination = claude_dir / name
+        if not source.is_symlink():
+            continue
+        target = os.readlink(source)
+        if destination.is_symlink():
+            if os.readlink(destination) != target:
+                raise SystemExit(
+                    f"worktree bootstrap conflict: {destination} points to "
+                    f"{os.readlink(destination)}, expected {target}"
+                )
+        elif destination.exists():
+            raise SystemExit(f"worktree bootstrap conflict: {destination} already exists")
+        else:
+            destination.symlink_to(target, target_is_directory=True)
+        if not destination.exists():
+            raise SystemExit(f"worktree bootstrap created a broken symlink: {destination} -> {target}")
+        links.append({"path": rel(destination), "target": target})
+
+    return {
+        "completed_at": datetime.now(timezone.utc).isoformat(),
+        "task_artifacts": copied,
+        "claude_links": links,
+    }
+
+
 if cmd == "create":
     if worktree_path.exists() and force:
         run(["worktree", "remove", "--force", str(worktree_path)], check=False)
@@ -129,16 +179,19 @@ if cmd == "create":
     else:
         args.extend(["-b", branch_name, str(worktree_path), base_ref])
     run(args)
-    plan_src = root / ".pipeline" / "plans" / task_id
-    plan_dst = worktree_path / ".pipeline" / "plans" / task_id
-    if plan_src.exists() and not plan_dst.exists():
-        import shutil
-
-        plan_dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(plan_src, plan_dst)
+    bootstrap = bootstrap_checkout(worktree_path)
     head = run(["rev-parse", "HEAD"], cwd=worktree_path).stdout.strip()
-    payload = write_meta("created", {"head_sha": head})
+    payload = write_meta("created", {"head_sha": head, "bootstrap": bootstrap})
     print(f"created {payload['relative_path']} on {branch_name}")
+elif cmd == "bootstrap":
+    if not meta_path.exists():
+        raise SystemExit(f"missing worktree metadata: {rel(meta_path)}")
+    payload = json.loads(meta_path.read_text(encoding="utf-8"))
+    path = pathlib.Path(payload.get("path", ""))
+    payload["bootstrap"] = bootstrap_checkout(path)
+    payload["updated_at"] = datetime.now(timezone.utc).isoformat()
+    meta_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(f"bootstrapped {rel(path)}")
 elif cmd == "status":
     if not meta_path.exists():
         raise SystemExit(f"missing worktree metadata: {rel(meta_path)}")

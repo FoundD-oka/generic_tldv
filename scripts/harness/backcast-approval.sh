@@ -78,6 +78,7 @@ fi
 python3 - "$task_id" "$decision" "$approver" "$role" "$notes" <<'PY'
 import json
 import pathlib
+import subprocess
 import sys
 from datetime import datetime, timezone
 
@@ -114,11 +115,48 @@ if not manifest_path.exists():
 if not pack_path.exists():
     print(f"missing evidence pack: {rel(pack_path)}", file=sys.stderr)
     raise SystemExit(1)
+if pack_path.stat().st_size == 0:
+    print(f"evidence pack is empty: {rel(pack_path)}", file=sys.stderr)
+    raise SystemExit(1)
 
 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+if manifest.get("task_id") != task_id:
+    print(
+        f"manifest task_id mismatch: expected {task_id}, got {manifest.get('task_id')}",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
 checkpoint_id = manifest.get("checkpoint_id")
 if not checkpoint_id:
     print("manifest missing checkpoint_id", file=sys.stderr)
+    raise SystemExit(1)
+
+repo = manifest.get("repo") if isinstance(manifest.get("repo"), dict) else {}
+base_sha = repo.get("base_sha")
+head_sha = repo.get("head_sha")
+if not base_sha or not head_sha:
+    print("manifest repo.base_sha and repo.head_sha are required", file=sys.stderr)
+    raise SystemExit(1)
+current_head = subprocess.check_output(
+    ["git", "rev-parse", "HEAD"], cwd=root, text=True
+).strip()
+if current_head != head_sha:
+    print(
+        f"manifest head is stale: manifest={head_sha} current={current_head}",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+dirty = subprocess.check_output(
+    [
+        "git", "status", "--porcelain", "--untracked-files=all", "--", ".",
+        ":(exclude).pipeline", ":(exclude).gitnexus",
+    ],
+    cwd=root,
+    text=True,
+).strip()
+if dirty:
+    print("implementation tree must be clean before approval:", file=sys.stderr)
+    print(dirty, file=sys.stderr)
     raise SystemExit(1)
 
 approved_at = None
@@ -132,10 +170,16 @@ if decision == "manual_override" and not notes:
     raise SystemExit(2)
 
 approval = {
+    "schema_version": "1.1",
     "approval_id": f"approval-{checkpoint_id}",
     "task_id": task_id,
     "checkpoint_id": checkpoint_id,
     "decision": decision,
+    "target": {
+        "kind": "git_commit",
+        "base_sha": base_sha,
+        "head_sha": head_sha,
+    },
     "approver": {
         "name": approver_name,
         "role": approver_role,

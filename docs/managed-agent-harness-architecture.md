@@ -183,6 +183,8 @@ task contract だけを見る。QA runtime は `plan_why` と evidence / outcome
 - Fable consultation uses bounded `claude -p --model fable` review and must not mutate repository state.
 - hooks は補助 enforcement として使い、最終判定は deterministic gate に置く。
 - session ledger は append-only とし、後から都合よく上書きしない。
+- interactive runtime は `codex-session-ledger.sh record` でv2 eventを追記し、証跡作成のためだけに別の実装workerを起動しない。
+- Outcomeは最新のterminal turnが成功していることを判定し、過去の失敗を消さずにretry後の回復を表現する。
 - runtime profile は task ごとに選び、profile をまたいだ責務混在を避ける。
 
 ## Implementation Targets
@@ -204,6 +206,7 @@ scripts/harness/
   build.sh
   codex-build.sh
   full-loop-smoke.sh
+  delivery-integrity-smoke.sh
   validate-runtime-profile.sh
 schemas/
   harness-agent.schema.json
