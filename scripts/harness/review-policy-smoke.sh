@@ -17,12 +17,16 @@ USAGE
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then usage; exit 0; fi
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-project_root="$(cd "$script_dir/../.." && pwd)"
 skill_root="/Users/bonginkan-3-gouki/project/claude-dotfiles/skills/harness-init"
-if [[ "$skill_root" == "/Users/bonginkan-3-gouki/project/claude-dotfiles/skills/harness-init" ]]; then
-  skill_root="$(cd "$script_dir/../../.." && pwd)"
-fi
 install_script="$skill_root/scripts/install_harness.sh"
+if [[ ! -x "$install_script" ]]; then
+  skill_root="$(cd "$script_dir/../../.." && pwd)"
+  install_script="$skill_root/scripts/install_harness.sh"
+fi
+if [[ ! -x "$install_script" ]]; then
+  echo "canonical harness installer not found: $install_script" >&2
+  exit 1
+fi
 fixture="$(mktemp -d /tmp/harness-review-policy-smoke.XXXXXX)"
 cd "$fixture"
 git init -q
@@ -33,13 +37,7 @@ printf 'before\n' > src/value.txt
 git add src/value.txt
 git commit -qm "seed"
 
-if [[ -x "$install_script" ]]; then
-  HARNESS_SKIP_GITNEXUS=1 bash "$install_script" "ReviewPolicySmoke" >/dev/null
-else
-  cp -R "$project_root/.ai" "$project_root/.pipeline" "$project_root/.ci" "$project_root/.codex" "$project_root/docs" "$project_root/schemas" "$project_root/scripts" .
-  cp "$project_root/CLAUDE.md" "$project_root/AGENTS.md" .
-  cp -R "$project_root/.claude" .
-fi
+HARNESS_SKIP_GITNEXUS=1 bash "$install_script" "ReviewPolicySmoke" >/dev/null
 chmod +x scripts/harness/*.sh .claude/hooks/*.sh 2>/dev/null || true
 git add .
 git commit -qm "install harness"
