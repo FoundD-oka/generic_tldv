@@ -1,12 +1,8 @@
 "use client";
 
-import { useEffect, useState, useMemo, useRef, useCallback } from "react";
-import { Plus, RefreshCw, CreditCard, Video, Loader2, Search, Monitor } from "lucide-react";
-import Image from "next/image";
+import { useEffect, useState, useRef, useCallback } from "react";
+import { Plus, RefreshCw, CreditCard, Video, Loader2, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { format, formatDistanceToNow } from "date-fns";
-import { ja } from "date-fns/locale";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -18,117 +14,17 @@ import {
 import { ErrorState } from "@/components/ui/error-state";
 import { useMeetingsStore } from "@/stores/meetings-store";
 import { useJoinModalStore } from "@/stores/join-modal-store";
-import type { Platform, MeetingStatus, Meeting } from "@/types/vexa";
-import { getDetailedStatus } from "@/types/vexa";
+import type { Platform, MeetingStatus } from "@/types/vexa";
 import { DocsLink } from "@/components/docs/docs-link";
+import { MeetingCard } from "@/components/meetings/meeting-card";
 import { getWebappUrl } from "@/lib/docs/webapp-url";
 import { Input } from "@/components/ui/input";
-import { cn, parseUTCTimestamp } from "@/lib/utils";
 import { usePendingMeeting } from "@/hooks/use-pending-meeting";
 import { toast } from "sonner";
 import { withBasePath } from "@/lib/base-path";
 import { DEFAULT_DASHBOARD_BRAND } from "@/lib/dashboard-brand";
-import { getDashboardCopy, type DashboardCopy } from "@/lib/dashboard-copy";
+import { getDashboardCopy } from "@/lib/dashboard-copy";
 import { useRuntimeConfig } from "@/hooks/use-runtime-config";
-
-function PlatformIcon({ platform }: { platform: string }) {
-  if (platform === "google_meet") {
-    return (
-      <Image
-        src={withBasePath("/icons/icons8-google-meet-96.png")}
-        alt="Google Meet"
-        width={20}
-        height={20}
-        className="rounded"
-        unoptimized
-      />
-    );
-  }
-  if (platform === "teams") {
-    return (
-      <Image
-        src={withBasePath("/icons/icons8-teams-96.png")}
-        alt="Teams"
-        width={20}
-        height={20}
-        className="rounded"
-        unoptimized
-      />
-    );
-  }
-  if (platform === "browser_session") {
-    return <Monitor className="h-5 w-5 text-muted-foreground" />;
-  }
-  return (
-    <Image
-      src={withBasePath("/icons/icons8-zoom-96.png")}
-      alt="Zoom"
-      width={20}
-      height={20}
-      className="rounded"
-      unoptimized
-    />
-  );
-}
-
-// Maps the (always Japanese) label returned by getDetailedStatus() to a
-// dashboard-copy status description key, so the status badge tooltip can be
-// localized even though the underlying label text is not.
-const STATUS_LABEL_TO_DESC_KEY: Record<string, keyof DashboardCopy["meetings"]["statusDescriptions"]> = {
-  "停止済み": "stopped",
-  "終了": "meetingEnded",
-  "退出済み": "kicked",
-  "入室拒否": "admissionRejected",
-  "完了": "completed",
-  "失敗": "failed",
-  "要対応": "needsHumanHelp",
-  "記録中": "active",
-  "参加中": "joining",
-  "入室待ち": "awaitingAdmission",
-  "受付済み": "requested",
-  "停止中": "stopping",
-  "不明": "unknown",
-};
-
-function StatusDot({ status }: { status: string }) {
-  return (
-    <span
-      className={cn(
-        "inline-block w-2 h-2 rounded-full",
-        status === "completed" && "bg-emerald-400",
-        status === "active" && "bg-emerald-400 animate-pulse",
-        status === "joining" && "bg-blue-400",
-        status === "awaiting_admission" && "bg-amber-400",
-        status === "stopping" && "bg-amber-400",
-        status === "failed" && "bg-red-400",
-        status === "requested" && "bg-blue-400"
-      )}
-    />
-  );
-}
-
-function formatDuration(startTime: string | null, endTime: string | null): string {
-  if (!startTime || !endTime) return "—";
-  const minutes = Math.round(
-    (new Date(endTime).getTime() - new Date(startTime).getTime()) / 60000
-  );
-  if (minutes < 1) return "1分未満";
-  if (minutes < 60) return `${minutes}分`;
-  const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  return mins > 0 ? `${hours}時間${mins}分` : `${hours}時間`;
-}
-
-// v0.10.5.3 Pack D-1 (#265): parseUTCTimestamp interprets the unsuffixed-ISO
-// API timestamp as UTC. date-fns format() then renders in browser-local tz.
-// Pre-fix: new Date(dateStr) with unsuffixed-ISO was treated as local time,
-// producing a tz-shifted display.
-// Absolute date/time including the year, used as a hover tooltip for the
-// relative time shown in the meetings table (e.g. "7日前").
-function formatDateWithYear(dateStr: string): string {
-  const d = parseUTCTimestamp(dateStr);
-  return format(d, "yyyy年M月d日 HH:mm", { locale: ja });
-}
 
 export default function MeetingsPage() {
   usePendingMeeting();
@@ -323,7 +219,7 @@ export default function MeetingsPage() {
         </div>
       </div>
 
-      {/* Meetings table */}
+      {/* Meetings cards */}
       {error ? (
         <ErrorState error={error} onRetry={fetchMeetings} />
       ) : subscriptionRequired && meetings.length === 0 ? (
@@ -335,139 +231,50 @@ export default function MeetingsPage() {
           onAction={handleSubscribe}
         />
       ) : (
-        <Card className="overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b text-xs text-muted-foreground uppercase tracking-wider">
-                  <th className="hidden sm:table-cell text-left px-5 py-3 font-medium">{copy.table.platform}</th>
-                  <th className="text-left px-5 py-3 font-medium">{copy.table.meeting}</th>
-                  <th className="text-left px-5 py-3 font-medium">{copy.table.status}</th>
-                  <th className="text-left px-5 py-3 font-medium">{copy.table.duration}</th>
-                  <th className="hidden lg:table-cell text-left px-5 py-3 font-medium">{copy.table.participants}</th>
-                  <th className="hidden sm:table-cell text-left px-5 py-3 font-medium">{copy.table.time}</th>
-                </tr>
-              </thead>
-              <tbody className="text-sm">
-                {isLoadingMeetings ? (
-                  <tr>
-                    <td colSpan={6} className="px-5 py-12 text-center">
-                      <Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
-                    </td>
-                  </tr>
-                ) : filteredMeetings.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-5 py-12 text-center">
-                      <div className="flex flex-col items-center gap-2">
-                        <Video className="h-8 w-8 text-muted-foreground/50" />
-                        <p className="text-sm text-muted-foreground">
-                          {searchQuery.trim() || platformFilter !== "all" || statusFilter !== "all"
-                            ? copy.noMatches
-                            : copy.noMeetings}
-                        </p>
-                        {!searchQuery.trim() && platformFilter === "all" && statusFilter === "all" && !subscriptionRequired && (
-                          <Button onClick={openJoinModal} size="sm" variant="outline" className="mt-2">
-                            <Plus className="mr-2 h-3.5 w-3.5" />
-                            {copy.joinFirst}
-                          </Button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  filteredMeetings.map((meeting) => (
-                    <MeetingRow key={meeting.id} meeting={meeting} copy={copy} />
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+        <div>
+          {isLoadingMeetings ? (
+            <div className="flex min-h-48 items-center justify-center rounded-2xl border border-border/60 bg-card/40">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : filteredMeetings.length === 0 ? (
+            <div className="flex min-h-56 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-card/40 px-5 text-center">
+              <Video className="h-8 w-8 text-muted-foreground/50" />
+              <p className="text-sm text-muted-foreground">
+                {searchQuery.trim() || platformFilter !== "all" || statusFilter !== "all"
+                  ? copy.noMatches
+                  : copy.noMeetings}
+              </p>
+              {!searchQuery.trim() && platformFilter === "all" && statusFilter === "all" && !subscriptionRequired && (
+                <Button onClick={openJoinModal} size="sm" variant="outline" className="mt-2">
+                  <Plus className="mr-2 h-3.5 w-3.5" />
+                  {copy.joinFirst}
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+              {filteredMeetings.map((meeting, index) => (
+                <div
+                  key={meeting.id}
+                  className="animate-fade-in-up"
+                  style={{ animationDelay: `${Math.min(index, 10) * 30}ms`, animationFillMode: "backwards" }}
+                >
+                  <MeetingCard
+                    meeting={meeting}
+                    participantsTitleTemplate={copy.participantsMeetingTitle}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
           {(hasMore || isLoadingMore) && (
             <div ref={sentinelRef} className="flex justify-center py-4">
               {isLoadingMore && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
             </div>
           )}
-        </Card>
+        </div>
       )}
 
     </div>
-  );
-}
-
-function MeetingRow({ meeting, copy }: { meeting: Meeting; copy: DashboardCopy["meetings"] }) {
-  const router = useRouter();
-  const statusConfig = getDetailedStatus(meeting.status, meeting.data);
-  const participants = meeting.data?.participants || [];
-  const rawTitle = meeting.data?.name || meeting.data?.title;
-  const participantsHeading =
-    !rawTitle && participants.length > 0
-      ? copy.participantsMeetingTitle.replace("{names}", participants.join(", "))
-      : null;
-  const displayTitle = rawTitle || participantsHeading || meeting.platform_specific_id;
-  const showCodeBelow = Boolean(rawTitle || participantsHeading);
-
-  const descKey = STATUS_LABEL_TO_DESC_KEY[statusConfig.label];
-  const statusDescription = (descKey && copy.statusDescriptions[descKey]) || statusConfig.description;
-
-  const timeSource = meeting.start_time || meeting.created_at;
-
-  return (
-      <tr
-        className="border-b border-border/50 hover:bg-muted/30 cursor-pointer transition-colors"
-        onClick={() => router.push(`/meetings/${meeting.id}`)}
-      >
-        <td className="hidden sm:table-cell px-5 py-3">
-          <PlatformIcon platform={meeting.platform} />
-        </td>
-        <td className="px-5 py-3">
-          <span className="font-medium">{displayTitle}</span>
-          {showCodeBelow && (
-            <span className="block text-xs text-muted-foreground font-mono mt-0.5">
-              {meeting.platform_specific_id}
-            </span>
-          )}
-        </td>
-        <td className="px-5 py-3">
-          <span className="inline-flex items-center gap-1.5" title={statusDescription}>
-            <StatusDot status={meeting.status} />
-            <span
-              className={cn(
-                "text-xs",
-                (meeting.status === "completed") && "text-emerald-400",
-                (meeting.status === "active" || meeting.status === "joining") && "text-emerald-400",
-                (meeting.status === "awaiting_admission" || meeting.status === "stopping") && "text-amber-400",
-                meeting.status === "failed" && "text-red-400"
-              )}
-            >
-              {statusConfig.label}
-            </span>
-          </span>
-        </td>
-        <td className="px-5 py-3 text-muted-foreground">
-          {formatDuration(meeting.start_time, meeting.end_time)}
-        </td>
-        <td
-          className="hidden lg:table-cell px-5 py-3 text-muted-foreground text-xs"
-          title={participants.length > 2 ? participants.join(", ") : undefined}
-        >
-          {participants.length > 0 ? (
-            <span>
-              {participants.slice(0, 2).join(", ")}
-              {participants.length > 2 && ` +${participants.length - 2}`}
-            </span>
-          ) : (
-            "—"
-          )}
-        </td>
-        <td className="hidden sm:table-cell px-5 py-3 text-muted-foreground text-xs whitespace-nowrap">
-          {timeSource ? (
-            <span title={formatDateWithYear(timeSource)}>
-              {formatDistanceToNow(parseUTCTimestamp(timeSource), { addSuffix: true, locale: ja })}
-            </span>
-          ) : (
-            "—"
-          )}
-        </td>
-      </tr>
   );
 }
