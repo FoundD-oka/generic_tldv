@@ -24,6 +24,11 @@ chmod +x scripts/harness/*.sh .claude/hooks/*.sh 2>/dev/null || true
 git add .
 git commit -qm "install harness"
 
+# Runtime validation must not descend into nested task checkouts or node_modules.
+mkdir -p .pipeline/worktrees/ignored/checkout/node_modules/fake
+printf '{jsonc: true}\n' > .pipeline/worktrees/ignored/checkout/node_modules/fake/tsconfig.json
+scripts/harness/validate-runtime-profile.sh --quiet
+
 task="delivery-integrity-m"
 verify_command="python3 -c 'from pathlib import Path; p=Path(\".pipeline/verification-count\"); n=int(p.read_text()) if p.exists() else 0; p.write_text(str(n+1)); assert \"after\" in Path(\"src/value.txt\").read_text()'"
 scripts/harness/backcast-checkpoint.sh "$task" \

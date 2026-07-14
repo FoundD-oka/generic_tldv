@@ -65,17 +65,19 @@ if [[ "$missing" -ne 0 ]]; then
   exit 1
 fi
 
-json_files=()
-while IFS= read -r -d '' path; do
-  json_files+=("$path")
-done < <(find .codex .pipeline schemas -type f -name '*.json' -print0)
-
-python3 -c '
+{
+  find .codex schemas -type f -name '*.json' -print0
+  find .pipeline -path .pipeline/worktrees -prune -o -type f -name '*.json' -print0
+} | python3 -c '
 import json
+import os
 import sys
 
 failed = False
-for path in sys.argv[1:]:
+for raw_path in sys.stdin.buffer.read().split(b"\0"):
+    if not raw_path:
+        continue
+    path = os.fsdecode(raw_path)
     try:
         with open(path, "r", encoding="utf-8") as handle:
             json.load(handle)
@@ -85,7 +87,7 @@ for path in sys.argv[1:]:
 
 if failed:
     sys.exit(1)
-' "${json_files[@]}"
+'
 
 python3 -c '
 import sys

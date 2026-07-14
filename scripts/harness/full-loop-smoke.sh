@@ -14,20 +14,13 @@ USAGE
 
 task_id="${1:-smoke-$(date +%Y%m%d%H%M%S)}"
 skill_root="/Users/bonginkan-3-gouki/.claude/skills/harness-init"
-if [[ "$skill_root" == "/Users/bonginkan-3-gouki/.claude/skills/harness-init" ]]; then
-  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  project_root="$(cd "$script_dir/../.." && pwd)"
-  if [[ -x "$project_root/.ci/harness-doctor.sh" && -d "$project_root/scripts/harness" ]]; then
-    skill_root=""
-  else
-    skill_root="$(cd "$script_dir/../../.." && pwd)"
-  fi
-fi
-install_script=""
-if [[ -n "$skill_root" && -x "$skill_root/scripts/install_harness.sh" ]]; then
+install_script="${HARNESS_INIT_INSTALLER:-}"
+if [[ -z "$install_script" && -x "$skill_root/scripts/install_harness.sh" ]]; then
   install_script="$skill_root/scripts/install_harness.sh"
-elif [[ -n "${HARNESS_INIT_INSTALLER:-}" && -x "${HARNESS_INIT_INSTALLER:-}" ]]; then
-  install_script="$HARNESS_INIT_INSTALLER"
+fi
+if [[ ! -x "$install_script" ]]; then
+  echo "harness-init installer が見つかりません: ${install_script:-$skill_root/scripts/install_harness.sh}" >&2
+  exit 1
 fi
 
 fixture="$(mktemp -d /tmp/harness-full-loop-smoke.XXXXXX)"
@@ -40,16 +33,7 @@ printf 'export function message() { return "before"; }\n' > src/smoke.js
 git add src/smoke.js
 git commit -qm "seed smoke fixture"
 
-if [[ -n "$install_script" ]]; then
-  HARNESS_SKIP_GITNEXUS=1 bash "$install_script" "HarnessSmoke" >/tmp/harness-full-loop-smoke-install.log
-else
-  source_root="$project_root"
-  mkdir -p .claude
-  cp -R "$source_root/.ai" "$source_root/.pipeline" "$source_root/.ci" "$source_root/.codex" "$source_root/docs" "$source_root/schemas" "$source_root/scripts" .
-  cp "$source_root/CLAUDE.md" "$source_root/AGENTS.md" .
-  cp -R "$source_root/.claude" .
-  chmod +x .ci/harness-doctor.sh scripts/harness/*.sh 2>/dev/null || true
-fi
+HARNESS_SKIP_GITNEXUS=1 bash "$install_script" "HarnessSmoke" >/tmp/harness-full-loop-smoke-install.log
 git add .
 git commit -qm "install harness"
 
@@ -62,7 +46,12 @@ scripts/harness/backcast-checkpoint.sh "$task_id" \
   --allowed "src/**" \
   --approval-required
 
+printf '# Plan\n\n- intent: prove the harness full loop works\n- approach: change the smoke return value and verify it\n' > ".pipeline/plans/$task_id/plan.md"
 scripts/harness/sml-decision.sh "$task_id" --size S --write-verification-contract
+mkdir -p .pipeline/tmp
+printf '%s\n' '{"verdict":"SHIP","summary":"S plan intent reviewed","confidence":"high","findings":[]}' > .pipeline/tmp/fable-plan-response.json
+scripts/harness/external-consultation.sh record "$task_id" --mode plan \
+  --response-file .pipeline/tmp/fable-plan-response.json >/dev/null
 scripts/harness/worktree.sh create "$task_id" --base HEAD
 
 worktree="$(python3 - "$task_id" <<'PY'
