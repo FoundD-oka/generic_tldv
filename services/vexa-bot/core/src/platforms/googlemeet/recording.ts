@@ -5,6 +5,7 @@ import { RecordingService } from "../../services/recording";
 import { getSegmentPublisher } from "../../index";
 import { ensureBrowserUtils } from "../../utils/injection";
 import { MediaRecorderCapture, UnifiedRecordingPipeline } from "../../services/audio-pipeline";
+import { observeParticipantRoster, resetParticipantRoster } from "../../services/participant-roster";
 import {
   googleParticipantSelectors,
   googleSpeakingClassNames,
@@ -12,7 +13,8 @@ import {
   googleParticipantContainerSelectors,
   googleNameSelectors,
   googleSpeakingIndicators,
-  googlePeopleButtonSelectors
+  googlePeopleButtonSelectors,
+  googlePeoplePanelRootSelectors
 } from "./selectors";
 
 // Pack U.2 (v0.10.6): module-level pipeline holder so the leave path
@@ -23,6 +25,16 @@ let recordingService: RecordingService | null = null;
 
 export async function startGoogleRecording(page: Page, botConfig: BotConfig): Promise<void> {
   log("Starting Google Meet recording");
+  resetParticipantRoster();
+  try {
+    await page.exposeFunction('__vexaObserveParticipantRoster', (entries: unknown) => {
+      observeParticipantRoster(entries, botConfig.botName, Date.now(), botConfig.connectionId);
+    });
+  } catch (error: any) {
+    // A reused page may already have the binding. Keep recording functional;
+    // browser-side accumulation is still available for the final snapshot.
+    log(`[Participant Roster] Browser binding unavailable: ${error?.message}`);
+  }
 
   // (Segment publisher session-start re-alignment is owned by
   // UnifiedRecordingPipeline — it subscribes to source.on('started')
@@ -259,6 +271,7 @@ export async function startGoogleRecording(page: Page, botConfig: BotConfig): Pr
         nameSelectors: string[];
         speakingIndicators: string[];
         peopleButtonSelectors: string[];
+        peoplePanelRootSelectors: string[];
       };
     }) => {
       const { botConfigData, selectors } = pageArgs;
@@ -283,6 +296,94 @@ export async function startGoogleRecording(page: Page, botConfig: BotConfig): Pr
             const selectorsTyped = selectors as any;
 
             const speakingStates = new Map<string, string>();
+            const priorParticipantRoster = (window as any).__vexaParticipantRoster;
+            const participantRoster = Object.assign(
+              Object.create(null),
+              priorParticipantRoster && typeof priorParticipantRoster === 'object'
+                ? priorParticipantRoster
+                : {},
+            ) as Record<string, {
+              participant_id: string;
+              participant_name: string;
+              first_seen_at_ms: number;
+              last_seen_at_ms: number;
+              source: 'people_panel' | 'participant_tile';
+            }>;
+            (window as any).__vexaParticipantRoster = participantRoster;
+            let participantRosterSize = Object.keys(participantRoster).length;
+            let peopleButton: HTMLElement | null = null;
+            let peoplePanelSnapshotInFlight = false;
+            let lastPeoplePanelOpenAttemptAt = 0;
+            const PEOPLE_PANEL_REACQUIRE_INTERVAL_MS = 15_000;
+
+            const normalizeRosterName = (value: string): string =>
+              (value || '').replace(/\s+/g, ' ').trim();
+
+            const isUsableRosterName = (name: string): boolean => {
+              if (!name || name.length > 120) return false;
+              if (/^Google Participant \(/i.test(name) || /spaces\//i.test(name) || /devices\//i.test(name)) {
+                return false;
+              }
+              const lower = name.toLowerCase();
+              if (['let participants', 'send messages', 'turn on captions'].some((value) => lower.includes(value))) {
+                return false;
+              }
+              const configuredBotName = normalizeRosterName(
+                String(botConfigData?.botName || botConfigData?.name || ''),
+              ).toLowerCase();
+              const comparableName = lower
+                .replace(/\s*\((?:you|あなた)\)\s*$/i, '')
+                .replace(/\s*（あなた）\s*$/i, '')
+                .trim();
+              const withoutLocalizedSelfSuffix = comparableName
+                .replace(/\s*[（(][^()（）]{1,32}[）)]\s*$/u, '')
+                .trim();
+              return !configuredBotName || (
+                comparableName !== configuredBotName &&
+                withoutLocalizedSelfSuffix !== configuredBotName
+              );
+            };
+
+            const rosterParticipantId = (element: HTMLElement, name: string): string => {
+              const nested = element.querySelector('[data-participant-id]') as HTMLElement | null;
+              const id = element.getAttribute('data-participant-id') || nested?.getAttribute('data-participant-id');
+              return (id || `name:${name.toLowerCase()}`).slice(0, 200);
+            };
+
+            const upsertRosterParticipant = (
+              element: HTMLElement,
+              source: 'people_panel' | 'participant_tile',
+            ) => {
+              const isSelfParticipant = !!(
+                element.closest('[data-self-name]') ||
+                element.querySelector('[data-self-name]')
+              );
+              if (isSelfParticipant) return;
+              const name = normalizeRosterName(getGoogleParticipantName(element));
+              if (!isUsableRosterName(name)) return;
+              const now = Date.now();
+              const key = `name:${name.toLowerCase()}`;
+              const existing = Object.prototype.hasOwnProperty.call(participantRoster, key)
+                ? participantRoster[key]
+                : undefined;
+              const participantId = rosterParticipantId(element, name);
+              if (existing) {
+                existing.last_seen_at_ms = now;
+                if (source === 'people_panel' && existing.source !== 'people_panel') {
+                  existing.source = source;
+                }
+                return;
+              }
+              if (participantRosterSize >= 250) return;
+              participantRoster[key] = {
+                participant_id: participantId,
+                participant_name: name,
+                first_seen_at_ms: now,
+                last_seen_at_ms: now,
+                source,
+              };
+              participantRosterSize++;
+            };
 
             function getGoogleParticipantId(element: HTMLElement) {
               let id = element.getAttribute('data-participant-id');
@@ -413,14 +514,17 @@ export async function startGoogleRecording(page: Page, botConfig: BotConfig): Pr
               classMutationCount++;
               // Log first 20 mutations and then every 50th to avoid spam
               if (classMutationCount <= 20 || classMutationCount % 50 === 0) {
-                const id = getGoogleParticipantId(participantElement);
                 const name = getGoogleParticipantName(participantElement);
                 const classes = mutatedClassList ? Array.from(mutatedClassList).join(' ') : '(no classList)';
-                (window as any).logBot(`[SpeakerDebug] #${classMutationCount} ${name} (${id}): classes=[${classes}]`);
+                (window as any).logBot(`[SpeakerDebug] #${classMutationCount} ${name}: classes=[${classes}]`);
               }
             }
 
             function logGoogleSpeakerEvent(participantElement: HTMLElement, mutatedClassList?: DOMTokenList) {
+              // Meet can recycle/move a previously observed tile into the
+              // People panel. Re-check on every mutation so a stale observer
+              // cannot turn a panel-row class change into a speaker event.
+              if (isInsidePeoplePanel(participantElement)) return;
               const participantId = getGoogleParticipantId(participantElement);
               const participantName = getGoogleParticipantName(participantElement);
               const previousLogicalState = speakingStates.get(participantId) || 'silent';
@@ -478,42 +582,192 @@ export async function startGoogleRecording(page: Page, botConfig: BotConfig): Pr
               }
             }
 
-            function scanForAllGoogleParticipants() {
+            function scanForAllGoogleParticipants(debugStructure = false) {
               const participantSelectors: string[] = selectorsTyped.participantSelectors || [];
-              // Debug: dump participant tile structure on first scan
-              (window as any).logBot(`[SpeakerDebug] Scanning for participants with selectors: ${participantSelectors.join(', ')}`);
-              let foundCount = 0;
-              for (const sel of participantSelectors) {
-                document.querySelectorAll(sel).forEach((el) => {
-                  foundCount++;
-                  const elh = el as HTMLElement;
-                  const outerClasses = elh.className;
-                  const childClasses = Array.from(elh.querySelectorAll('*')).slice(0, 5).map(c => (c as HTMLElement).className).filter(Boolean);
-                  (window as any).logBot(`[SpeakerDebug] Participant tile (${sel}): classes=[${outerClasses}], children=[${childClasses.join(' | ')}], innerHTML=${elh.innerHTML.substring(0, 200)}`);
-                });
+              if (debugStructure) {
+                // Debug: dump participant tile structure on first scan only.
+                (window as any).logBot(`[SpeakerDebug] Scanning for participants with selectors: ${participantSelectors.join(', ')}`);
+                let foundCount = 0;
+                for (const sel of participantSelectors) {
+                  document.querySelectorAll(sel).forEach((el) => {
+                    foundCount++;
+                    const elh = el as HTMLElement;
+                    const outerClasses = elh.className;
+                    const childClasses = Array.from(elh.querySelectorAll('*')).slice(0, 5).map(c => (c as HTMLElement).className).filter(Boolean);
+                    (window as any).logBot(`[SpeakerDebug] Participant tile (${sel}): classes=[${outerClasses}], children=[${childClasses.join(' | ')}]`);
+                  });
+                }
+                (window as any).logBot(`[SpeakerDebug] Found ${foundCount} participant tiles total`);
               }
-              (window as any).logBot(`[SpeakerDebug] Found ${foundCount} participant tiles total`);
               for (const sel of participantSelectors) {
                 document.querySelectorAll(sel).forEach((el) => {
                   const elh = el as HTMLElement;
+                  // People-panel rows reuse data-participant-id but are not
+                  // speaker tiles. Observing them can emit a false SPEAKER_END
+                  // immediately after the real tile emits SPEAKER_START.
+                  if (isInsidePeoplePanel(elh)) return;
                   if (!(elh as any).dataset.vexaObserverAttached) {
                     observeGoogleParticipant(elh);
+                  }
+                  const hasParticipantMarker = !!(
+                    elh.getAttribute('data-participant-id') ||
+                    elh.getAttribute('data-self-name') ||
+                    elh.querySelector('[data-participant-id]')
+                  );
+                  if (hasParticipantMarker) {
+                    upsertRosterParticipant(elh, 'participant_tile');
                   }
                 });
               }
             }
 
-            // Attempt to click People button to stabilize DOM if available
-            try {
-              const peopleSelectors: string[] = selectorsTyped.peopleButtonSelectors || [];
-              for (const sel of peopleSelectors) {
-                const btn = document.querySelector(sel) as HTMLElement | null;
-                if (btn && isVisible(btn)) { btn.click(); break; }
+            const findVisibleButton = (buttonSelectors: string[]): HTMLElement | null => {
+              for (const selector of buttonSelectors) {
+                try {
+                  const button = document.querySelector(selector) as HTMLElement | null;
+                  if (button && isVisible(button)) return button;
+                } catch {}
               }
-            } catch {}
+              return null;
+            };
+
+            const refreshPeopleButton = (): HTMLElement | null => {
+              if (!peopleButton?.isConnected || !isVisible(peopleButton)) {
+                const peopleSelectors: string[] = selectorsTyped.peopleButtonSelectors || [];
+                peopleButton = findVisibleButton(peopleSelectors);
+              }
+              return peopleButton;
+            };
+
+            const isInsidePeoplePanel = (element: HTMLElement): boolean => {
+              const controlledId = refreshPeopleButton()?.getAttribute('aria-controls');
+              if (controlledId) {
+                const controlled = document.getElementById(controlledId);
+                if (controlled && (controlled === element || controlled.contains(element))) {
+                  return true;
+                }
+              }
+              const panelSelectors: string[] = selectorsTyped.peoplePanelRootSelectors || [];
+              for (const selector of panelSelectors) {
+                try {
+                  if (element.closest(selector)) return true;
+                } catch {}
+              }
+              return false;
+            };
+
+            function scanPeoplePanelRoster(): number {
+              const roots = new Set<HTMLElement>();
+              const controlledId = peopleButton?.getAttribute('aria-controls');
+              if (controlledId) {
+                const controlled = document.getElementById(controlledId);
+                if (controlled && isVisible(controlled)) roots.add(controlled);
+              }
+              const panelSelectors: string[] = selectorsTyped.peoplePanelRootSelectors || [];
+              for (const selector of panelSelectors) {
+                try {
+                  document.querySelectorAll(selector).forEach((root) => {
+                    const element = root as HTMLElement;
+                    if (isVisible(element)) roots.add(element);
+                  });
+                } catch {}
+              }
+
+              roots.forEach((root) => {
+                const candidates = root.querySelectorAll(
+                  '[data-participant-id], [role="listitem"], [role="menuitem"]',
+                );
+                candidates.forEach((candidate) => {
+                  const element = candidate as HTMLElement;
+                  const hasIdentityMarker = !!(
+                    element.getAttribute('data-participant-id') ||
+                    element.querySelector('[data-participant-id]') ||
+                    element.querySelector('span.notranslate') ||
+                    element.querySelector('img, [role="img"]')
+                  );
+                  if (hasIdentityMarker) upsertRosterParticipant(element, 'people_panel');
+                });
+              });
+              return roots.size;
+            }
+
+            const deliverParticipantRoster = () => {
+              const observeRoster = (window as any).__vexaObserveParticipantRoster;
+              if (typeof observeRoster !== 'function') return;
+              Promise.resolve(observeRoster(Object.values(participantRoster))).catch((error: any) => {
+                (window as any).logBot?.(`[Participant Roster] Snapshot delivery failed: ${error?.message || error}`);
+              });
+            };
+
+            const ensurePeoplePanelSnapshot = (force = false) => {
+              const browserState = window as any;
+              // Refresh the controlling button before any early return. This
+              // establishes aria-controls even while chat owns the side panel
+              // or Meet has replaced the toolbar button node.
+              refreshPeopleButton();
+              if (
+                peoplePanelSnapshotInFlight ||
+                browserState.__vexaPeoplePanelSnapshotInFlight ||
+                browserState.__vexaChatSendInFlight ||
+                scanPeoplePanelRoster() > 0
+              ) return;
+              const now = Date.now();
+              if (!force && now - lastPeoplePanelOpenAttemptAt < PEOPLE_PANEL_REACQUIRE_INTERVAL_MS) return;
+              lastPeoplePanelOpenAttemptAt = now;
+
+              if (!peopleButton) return;
+
+              const chatButton = findVisibleButton([
+                'button[aria-label*="Chat with everyone"]',
+                'button[aria-label*="chat"]',
+                'button[aria-label*="Chat"]',
+                'button[data-tooltip*="Chat"]',
+              ]);
+              const restoreChatPanel = !!(
+                chatButton?.getAttribute('aria-expanded') === 'true' ||
+                document.querySelector('textarea[aria-label*="message" i], textarea[aria-label*="chat" i], [contenteditable="true"][aria-label*="message" i]')
+              );
+
+              peoplePanelSnapshotInFlight = true;
+              browserState.__vexaPeoplePanelSnapshotInFlight = true;
+              if (peopleButton.getAttribute('aria-expanded') !== 'true') peopleButton.click();
+              setTimeout(() => {
+                try {
+                  scanPeoplePanelRoster();
+                  deliverParticipantRoster();
+                  if (
+                    restoreChatPanel &&
+                    chatButton?.isConnected &&
+                    chatButton.getAttribute('aria-expanded') !== 'true'
+                  ) {
+                    chatButton.click();
+                  }
+                } finally {
+                  peoplePanelSnapshotInFlight = false;
+                  browserState.__vexaPeoplePanelSnapshotInFlight = false;
+                }
+              }, 400);
+            }
+
+            function scanGoogleParticipantRoster() {
+              // Re-establish the People-panel root before touching selectors
+              // that are shared by both participant tiles and list rows.
+              ensurePeoplePanelSnapshot();
+              scanForAllGoogleParticipants();
+              const visiblePeoplePanels = scanPeoplePanelRoster();
+              deliverParticipantRoster();
+              if (visiblePeoplePanels === 0) ensurePeoplePanelSnapshot();
+            }
 
             // Initialize
-            scanForAllGoogleParticipants();
+            // Resolve the People button/root first. Meet's People panel can be
+            // a generic role="region" that is safe to identify only through
+            // aria-controls; scanning speaker tiles before this would attach
+            // observers to participant-list rows.
+            ensurePeoplePanelSnapshot(true);
+            scanForAllGoogleParticipants(true);
+            deliverParticipantRoster();
+            setInterval(scanGoogleParticipantRoster, 2000);
 
             // Expose participant name lookup to Node (used by speaker-identity.ts)
             // Returns a map of all known participant names from DOM tiles,
@@ -526,6 +780,7 @@ export async function startGoogleRecording(page: Page, botConfig: BotConfig): Pr
               participantSelectors.forEach(sel => {
                 document.querySelectorAll(sel).forEach(el => {
                   const elh = el as HTMLElement;
+                  if (isInsidePeoplePanel(elh)) return;
                   const id = getGoogleParticipantId(elh);
                   if (seen.has(id)) return;
                   seen.add(id);
@@ -545,7 +800,10 @@ export async function startGoogleRecording(page: Page, botConfig: BotConfig): Pr
               const participantSelectors: string[] = selectorsTyped.participantSelectors || [];
               const elements: HTMLElement[] = [];
               participantSelectors.forEach(sel => {
-                document.querySelectorAll(sel).forEach(el => elements.push(el as HTMLElement));
+                document.querySelectorAll(sel).forEach(el => {
+                  const element = el as HTMLElement;
+                  if (!isInsidePeoplePanel(element)) elements.push(element);
+                });
               });
               elements.forEach((container) => {
                 const id = getGoogleParticipantId(container);
@@ -568,9 +826,10 @@ export async function startGoogleRecording(page: Page, botConfig: BotConfig): Pr
             }, 500);
           };
 
-          if (!degradedNoMedia) {
-            initializeGoogleSpeakerDetection(audioService, botConfigData);
-          }
+          // Participant roster collection is independent of audio capture. In
+          // degraded/no-media mode speaker events remain empty, but silent
+          // attendees should still be retained from the People panel.
+          initializeGoogleSpeakerDetection(audioService, botConfigData);
 
           // Participant counting: uses data-participant-id tiles, but falls back to
           // "Leave call" button visibility to avoid false-positive "alone" during screen share.
@@ -858,7 +1117,8 @@ export async function startGoogleRecording(page: Page, botConfig: BotConfig): Pr
         containerSelectors: googleParticipantContainerSelectors,
         nameSelectors: googleNameSelectors,
         speakingIndicators: googleSpeakingIndicators,
-        peopleButtonSelectors: googlePeopleButtonSelectors
+        peopleButtonSelectors: googlePeopleButtonSelectors,
+        peoplePanelRootSelectors: googlePeoplePanelRootSelectors
       } as any
     }
   );

@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-07-14T07:12:38.283855+00:00",
+  "task_id": "participant-roster",
+  "size": "M",
+  "status": "pass",
+  "plan_hash": "sha256:cce0c463508b88466044417200244f559ef5cb899cdbb21db969e0d0c825609f",
+  "checks": [
+    {
+      "check": "fable-plan-review",
+      "ok": true,
+      "errors": []
+    }
+  ],
+  "errors": []
+}

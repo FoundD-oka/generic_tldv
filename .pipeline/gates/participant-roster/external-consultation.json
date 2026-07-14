@@ -1,0 +1,26 @@
+{
+  "timestamp": "2026-07-14T07:33:18.147463+00:00",
+  "task_id": "participant-roster",
+  "size": "M",
+  "status": "pass",
+  "policy": "plan_required_all_sizes_post_required_for_l",
+  "provider": "claude-fable-cli",
+  "checks": [
+    {
+      "stage": "plan",
+      "required": true,
+      "status": "pass",
+      "path": ".pipeline/evidence/participant-roster/external-consultation/consultation-plan-summary.json",
+      "errors": []
+    },
+    {
+      "stage": "post",
+      "required": false,
+      "status": "pass",
+      "path": ".pipeline/evidence/participant-roster/external-consultation/consultation-post-summary.json",
+      "errors": []
+    }
+  ],
+  "errors": [],
+  "warnings": []
+}

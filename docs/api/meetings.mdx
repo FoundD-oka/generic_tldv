@@ -3,6 +3,36 @@ title: "Meetings API"
 ---
 Meetings are created/updated as bots run. You can list history, attach metadata (notes), and delete/anonymize artifacts.
 
+## 参加者データ（Google Meet）
+
+Google Meetでは、文字起こしの話者とは別に、ボットが会議中に観測した参加者ロスターを`data`へ保存します。これにより、発言しなかった参加者や、会議終了前に退出した参加者もダッシュボードの参加者一覧へ反映できます。
+
+| フィールド | 意味 |
+|---|---|
+| `participants` | ダッシュボード、会議タイトル、エクスポートで使う表示名の一覧 |
+| `observed_participants` | ボットが実際に観測した表示名の一覧。`participants`を手動編集しても観測結果はここに残る |
+| `participant_roster` | 表示名、初回・最終観測時刻、取得元を含む監査用ロスター |
+| `participants_source` | `participant_roster`、`transcript_speakers`、`manual`のいずれか |
+
+```json
+{
+  "participants": ["Alice", "Silent Bob"],
+  "observed_participants": ["Alice", "Silent Bob"],
+  "participants_source": "participant_roster",
+  "participant_roster": [
+    {
+      "participant_id": "participant:2a7ddf11e34b9b92",
+      "participant_name": "Silent Bob",
+      "first_seen_at_ms": 1784000000000,
+      "last_seen_at_ms": 1784000300000,
+      "source": "people_panel"
+    }
+  ]
+}
+```
+
+`participant_id`は会議単位で不透明化したIDで、Google Meet内部のIDは保存しません。ロスターは最大250件です。Google Meetの画面構造に依存するベストエフォート取得であり、同じ表示名の参加者は1名として統合されます。ロスターを取得できない旧ボットや他プラットフォームでは、従来どおり文字起こしの話者から`participants`を補完します。
+
 ## GET /meetings
 
 List meetings for the authenticated user.
@@ -114,6 +144,8 @@ curl -X PATCH "$API_BASE/meetings/zoom/12345678901" \
 </Tabs>
 
 Returns the updated meeting record.
+
+`participants`をPATCHした場合は手動指定が優先され、以後の自動ロスター更新では上書きされません。ボットが観測した値は`observed_participants`で確認できます。
 
 <Accordion title="Response (200)">
 

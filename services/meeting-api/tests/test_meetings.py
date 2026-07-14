@@ -534,6 +534,39 @@ class TestAssistantContext:
         assert response["shared_urls"] == ["https://[REDACTED]@example.com/db", "https://example.com/docs"]
 
 
+class TestUpdateMeetingData:
+
+    @pytest.mark.asyncio
+    async def test_participant_patch_marks_names_as_manual(self, client, mock_db, mock_redis):
+        """A user edit must survive later automatic roster refreshes."""
+        from meeting_api.participant_roster import merge_participant_roster_data
+
+        meeting = make_meeting(data={
+            "participants": ["Observed Alice"],
+            "participants_source": "participant_roster",
+        })
+        mock_db.execute = AsyncMock(return_value=MockResult([meeting]))
+
+        with patch("sqlalchemy.orm.attributes.flag_modified"):
+            response = await client.patch(
+                f"/meetings/{TEST_PLATFORM}/{TEST_NATIVE_MEETING_ID}",
+                json={"data": {"participants": ["手動参加者"]}},
+            )
+
+        assert response.status_code == 200
+        assert meeting.data["participants"] == ["手動参加者"]
+        assert meeting.data["participants_source"] == "manual"
+
+        refreshed = merge_participant_roster_data(meeting.data, [{
+            "participant_id": "participant:1111111111111111",
+            "participant_name": "Observed Alice",
+            "first_seen_at_ms": 1000,
+            "last_seen_at_ms": 2000,
+            "source": "people_panel",
+        }], id_salt="meeting:1")
+        assert refreshed["participants"] == ["手動参加者"]
+
+
 # ===================================================================
 # GET /bots/status — list running bots
 # ===================================================================

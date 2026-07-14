@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0",
+  "task_id": "participant-roster",
+  "runtime_profile": "codex-app",
+  "size": "M",
+  "result": {
+    "at_pass": true,
+    "fp_pass": true,
+    "nft_pass": true,
+    "hd_resolved": true,
+    "blocking_findings": 0
+  },
+  "evidence": {
+    "session_ledger": ".pipeline/sessions/participant-roster/events.jsonl",
+    "verification": [
+      ".pipeline/evidence/participant-roster/evidence-manifest.json",
+      ".pipeline/evidence/participant-roster/evidence-pack.md",
+      ".pipeline/evidence/participant-roster/test-results.md",
+      ".pipeline/evidence/participant-roster/qa-judgment.json"
+    ],
+    "review": [
+      ".pipeline/evidence/participant-roster/codex-review/review-post-summary.json"
+    ]
+  },
+  "notes": [
+    "無発言・途中退出参加者をGoogle MeetのPeopleパネルと参加者タイルから累積し、終了時callbackを通じてmeeting.dataへ保存する。",
+    "手動participantsを優先し、ロスターがない旧botは文字起こし話者へフォールバックする。",
+    "独立QAとSol Ultra初回監査の指摘を修正し、bot 53件（実Chromium DOM 7件を含む）、meeting-api 585件、dashboard 10件を含む必須検証を再実行した。",
+    "最終Sol Ultra監査はSHIP・MUST_FIX 0、PR-ready gateはready。最終差分hashはsha256:3f30547562e6da63e43c7a81b61ecaec2444a6f78051dcf12a05e3bf9cca09fc。",
+    "実Google Meet E2Eは認証と参加者同意が必要なため未実施。初回canaryでPeopleパネル人数とobserved_participantsを照合する。"
+  ]
+}
