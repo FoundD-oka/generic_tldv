@@ -11,7 +11,7 @@ Usage:
 
 Options:
   --provider <id>          Default: claude-fable-cli
-  --mode <review|stuck|deviation|final>
+  --mode <plan|review|stuck|deviation|post|final>
   --step <text>            Plan step or checkpoint under review
   --decision <text>        Decision, plan change, or implementation result
   --source <path>          Extra redacted context file to include
@@ -32,9 +32,11 @@ prepare writes:
 
 run writes:
   .pipeline/plans/<task-id>/consultation-brief.md
-  .pipeline/evidence/<task-id>/external-consultation/fable.md
+  .pipeline/plans/<task-id>/consultation-<mode>-brief.md
+  .pipeline/evidence/<task-id>/external-consultation/fable-<mode>.md
   .pipeline/evidence/<task-id>/external-consultation/fable-*.raw.json
   .pipeline/evidence/<task-id>/external-consultation/consultation-summary.json
+  .pipeline/evidence/<task-id>/external-consultation/consultation-<mode>-summary.json
   .pipeline/evidence/<task-id>/external-consultation/consultation-events.jsonl
 
 record is kept for legacy/manual providers and writes the same summary shape.
@@ -173,7 +175,7 @@ def default_max_calls() -> int:
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument("--provider", default=default_provider())
-    p.add_argument("--mode", choices=["review", "stuck", "deviation", "final"], default="review")
+    p.add_argument("--mode", choices=["plan", "review", "stuck", "deviation", "post", "final"], default="review")
     p.add_argument("--step", default="")
     p.add_argument("--decision", default="")
     p.add_argument("--source", default="")
@@ -215,6 +217,29 @@ def sha256_text(text: str) -> str:
     return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def review_diff_text() -> str:
+    build = load_json(root / ".pipeline" / "evidence" / task_id / "build" / "build-summary.json") or {}
+    base = str(build.get("head_sha") or "HEAD")
+    try:
+        return subprocess.check_output(
+            ["git", "diff", base, "--", ".", ":(exclude).pipeline"],
+            cwd=root, text=True, stderr=subprocess.STDOUT, timeout=30,
+        )
+    except Exception:
+        return run_readonly(["git", "diff", "HEAD", "--", ".", ":(exclude).pipeline"], 200000)
+
+
+def target_material() -> tuple[str, str]:
+    if args.mode == "plan":
+        chunks = []
+        for name in ["request.md", "issue.md", "task-brief.md", "plan.md", "verification-contract.md"]:
+            path = plans / name
+            if path.exists():
+                chunks.append(f"## {name}\n{path.read_text(encoding='utf-8', errors='replace')}")
+        return "plan", "\n\n".join(chunks)
+    return "diff", review_diff_text()
+
+
 def read_optional(path: str, limit: int = 8000) -> str:
     if not path:
         return ""
@@ -245,7 +270,7 @@ def run_readonly(command: list[str], limit: int = 8000) -> str:
 
 def existing_plan_text() -> str:
     chunks = []
-    for name in ["plan.md", "verification-contract.md", "option-matrix.md", "research-brief.md"]:
+    for name in ["request.md", "issue.md", "task-brief.md", "plan.md", "verification-contract.md", "option-matrix.md", "research-brief.md"]:
         path = plans / name
         if path.exists():
             chunks.append(f"## {name}\n\n{read_optional(str(path), 5000)}")
@@ -253,6 +278,12 @@ def existing_plan_text() -> str:
 
 
 def default_questions(mode: str) -> list[str]:
+    if mode == "plan":
+        return [
+            "Does this plan faithfully capture the user's intent and unstated constraints?",
+            "What important alternative or edge case is missing before implementation starts?",
+            "Is the verification contract strong enough to prove the intended outcome?",
+        ]
     if mode == "stuck":
         return [
             "What is the most likely wrong assumption behind the repeated failure?",
@@ -265,7 +296,7 @@ def default_questions(mode: str) -> list[str]:
             "What must be changed in plan or verification before continuing?",
             "What risk appears if we keep the original plan?",
         ]
-    if mode == "final":
+    if mode in {"post", "final"}:
         return [
             "Are there any remaining MUST-FIX issues before completion?",
             "Is the evidence strong enough for the claimed outcome?",
@@ -370,7 +401,9 @@ Return only JSON matching this shape:
 
 def write_brief() -> None:
     plans.mkdir(parents=True, exist_ok=True)
-    brief_path.write_text(make_brief(), encoding="utf-8")
+    text = make_brief()
+    brief_path.write_text(text, encoding="utf-8")
+    (plans / f"consultation-{args.mode}-brief.md").write_text(text, encoding="utf-8")
     print(f"wrote {rel(brief_path)}")
 
 
@@ -480,14 +513,17 @@ def build_summary(provider: str, status: str, prompt_text: str, response_text: s
     if verdict not in {"MUST_FIX", "SHOULD_FIX", "SHIP"}:
         verdict = "SHOULD_FIX" if findings else "SHIP"
     open_must = sum(1 for item in adoption_status if item["severity"] == "MUST_FIX" and item["status"] in {"open", "deferred"})
+    target_kind, material = target_material()
     return {
         "schema_version": "1.1",
         "task_id": task_id,
         "provider": provider,
         "status": status,
         "mode": args.mode,
+        "target_kind": target_kind,
+        "target_hash": sha256_text(material),
         "model": args.model if provider == "claude-fable-cli" else None,
-        "authentication_mode": "not_used" if provider == "claude-fable-cli" else "existing_browser_session_only",
+        "authentication_mode": "not_used",
         "redaction_confirmed": True,
         "prompt_hash": sha256_text(prompt_text),
         "response_hash": sha256_text(response_text),
@@ -516,7 +552,9 @@ def build_summary(provider: str, status: str, prompt_text: str, response_text: s
 
 def write_summary(summary: dict) -> None:
     consult_dir.mkdir(parents=True, exist_ok=True)
-    summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    text = json.dumps(summary, ensure_ascii=False, indent=2) + "\n"
+    summary_path.write_text(text, encoding="utf-8")
+    (consult_dir / f"consultation-{summary.get('mode', args.mode)}-summary.json").write_text(text, encoding="utf-8")
     print(f"wrote {rel(summary_path)}")
 
 
@@ -528,7 +566,7 @@ def run_fable() -> None:
     if call_count >= args.max_calls:
         consult_dir.mkdir(parents=True, exist_ok=True)
         prompt_text = brief_path.read_text(encoding="utf-8") if brief_path.exists() else make_brief()
-        response_path = consult_dir / "fable.md"
+        response_path = consult_dir / f"fable-{args.mode}.md"
         response_text = "Fable consultation skipped because max_calls was reached.\n"
         response_path.write_text(response_text, encoding="utf-8")
         summary = build_summary(
@@ -565,7 +603,7 @@ def run_fable() -> None:
         "--max-budget-usd", str(args.max_budget_usd),
         "--tools", "Read,Bash",
         "--allowedTools", READ_ONLY_BASH,
-        "--disallowedTools", "Edit,Write,NotebookEdit",
+        "--disallowedTools", "Edit,Write,MultiEdit,NotebookEdit",
         "--permission-mode", "dontAsk",
     ]
     if args.bare:
@@ -588,7 +626,7 @@ def run_fable() -> None:
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     raw_path = consult_dir / f"fable-{args.mode}-{stamp}.raw.json"
-    response_path = consult_dir / "fable.md"
+    response_path = consult_dir / f"fable-{args.mode}.md"
     consult_dir.mkdir(parents=True, exist_ok=True)
     raw_text = proc.stdout.strip() or json.dumps({
         "stdout": proc.stdout,
@@ -667,25 +705,16 @@ def record_manual() -> None:
         write_brief()
     consult_dir.mkdir(parents=True, exist_ok=True)
     response_text = response_file.read_text(encoding="utf-8")
-    if args.provider == "chatgpt-pro-web":
-        response_path = consult_dir / "chatgpt-pro.md"
+    response_path = consult_dir / f"fable-{args.mode}.md"
+    try:
+        payload = extract_json_object(response_text)
+    except Exception:
         payload = {
-            "verdict": "SHIP",
-            "summary": "Manual ChatGPT Pro response recorded; classify adopted/rejected points manually.",
+            "verdict": "SHOULD_FIX",
+            "summary": "Manual Fable response recorded without structured JSON.",
             "findings": [],
             "confidence": "low",
         }
-    else:
-        response_path = consult_dir / "fable.md"
-        try:
-            payload = extract_json_object(response_text)
-        except Exception:
-            payload = {
-                "verdict": "SHOULD_FIX",
-                "summary": "Manual Fable response recorded without structured JSON.",
-                "findings": [],
-                "confidence": "low",
-            }
     response_path.write_text(response_text.rstrip() + "\n", encoding="utf-8")
     prompt_text = brief_path.read_text(encoding="utf-8")
     summary = build_summary(

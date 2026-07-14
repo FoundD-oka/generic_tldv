@@ -101,6 +101,16 @@ if [[ ! -d "$worktree/.git" && ! -f "$worktree/.git" ]]; then
   exit 1
 fi
 
+pre_review_gate="$worktree/.claude/hooks/pre-implementation-review-gate.sh"
+if [[ ! -x "$pre_review_gate" ]]; then
+  pre_review_gate="$root/.claude/hooks/pre-implementation-review-gate.sh"
+fi
+if [[ ! -x "$pre_review_gate" ]]; then
+  echo "pre-implementation review gate is missing" >&2
+  exit 1
+fi
+(cd "$worktree" && "$pre_review_gate" "$task_id") >/dev/null
+
 mkdir -p "$root/.pipeline/evidence/$task_id/build"
 mkdir -p "$worktree/.pipeline/evidence/$task_id/build"
 build_log="$worktree/.pipeline/evidence/$task_id/build/build.log"
