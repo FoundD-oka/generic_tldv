@@ -13,12 +13,16 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import io
+import json
 import logging
 import math
 import os
 import re
 import subprocess
+import sys
 import tempfile
+import wave
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -28,8 +32,18 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import attributes
 
 from .models import Meeting, SpeakerProfile, Voiceprint, VoiceprintAuditLog
-from .storage import create_storage_client
 from .voiceprint_crypto import get_voiceprint_crypto
+from .voiceprint_master_download_worker import (
+    STATUS_DOWNLOAD_LENGTH,
+    STATUS_EMPTY,
+    STATUS_INVALID_CHUNK,
+    STATUS_INVALID_REQUEST,
+    STATUS_INVALID_SIZE,
+    STATUS_OK,
+    STATUS_RANGE_LENGTH,
+    STATUS_STORAGE_ERROR,
+    STATUS_TOO_LARGE,
+)
 
 logger = logging.getLogger("meeting_api.voiceprint_matching")
 
@@ -45,6 +59,35 @@ VOICEPRINT_EMBED_TIMEOUT_S = float(os.getenv("VOICEPRINT_EMBED_TIMEOUT_S", "15")
 VOICEPRINT_MIN_CLIP_SECONDS = float(os.getenv("VOICEPRINT_MIN_CLIP_SECONDS", "5"))
 VOICEPRINT_MAX_CLIP_SECONDS = float(os.getenv("VOICEPRINT_MAX_CLIP_SECONDS", "30"))
 VOICEPRINT_FFMPEG_TIMEOUT_SECONDS = float(os.getenv("VOICEPRINT_FFMPEG_TIMEOUT_SECONDS", "60"))
+VOICEPRINT_MAX_DIRECT_AUDIO_BYTES = int(
+    os.getenv("VOICEPRINT_MAX_DIRECT_AUDIO_BYTES", str(20 * 1024 * 1024))
+)
+VOICEPRINT_MAX_MASTER_BYTES = int(
+    os.getenv("VOICEPRINT_MAX_MASTER_BYTES", str(400 * 1024 * 1024))
+)
+VOICEPRINT_MASTER_DOWNLOAD_CHUNK_BYTES = int(
+    os.getenv("VOICEPRINT_MASTER_DOWNLOAD_CHUNK_BYTES", str(4 * 1024 * 1024))
+)
+VOICEPRINT_MASTER_DOWNLOAD_TIMEOUT_S = float(
+    os.getenv("VOICEPRINT_MASTER_DOWNLOAD_TIMEOUT_S", "90")
+)
+VOICEPRINT_MAX_ACTIVE_MASTER_PIPELINES = max(
+    1, int(os.getenv("VOICEPRINT_MAX_ACTIVE_MASTER_PIPELINES", "1"))
+)
+VOICEPRINT_MAX_ACTIVE_DIRECT_PIPELINES = max(
+    1, int(os.getenv("VOICEPRINT_MAX_ACTIVE_DIRECT_PIPELINES", "1"))
+)
+
+# Master files can be hundreds of MiB and ffmpeg is CPU intensive.  Keep a
+# dedicated gate around the complete download -> ffmpeg lifecycle so explicit
+# previews and automatic matching cannot multiply both costs independently.
+_VOICEPRINT_MASTER_PIPELINE_SEMAPHORE = asyncio.Semaphore(
+    VOICEPRINT_MAX_ACTIVE_MASTER_PIPELINES
+)
+_VOICEPRINT_DIRECT_PIPELINE_SEMAPHORE = asyncio.Semaphore(
+    VOICEPRINT_MAX_ACTIVE_DIRECT_PIPELINES
+)
+_VOICEPRINT_MASTER_CONTROL_MAX_BYTES = 64 * 1024
 
 # Same shape as collector/endpoints.py's _LANE_SUB_CLUSTER_RE — kept as an
 # independent copy on purpose (Codex critique FC-4): the matching hook runs
@@ -53,6 +96,17 @@ VOICEPRINT_FFMPEG_TIMEOUT_SECONDS = float(os.getenv("VOICEPRINT_FFMPEG_TIMEOUT_S
 # rather than reaching into collector/endpoints.py (different layer,
 # different data shape) or leaving the condition implicit.
 _LANE_SUB_CLUSTER_RE = re.compile(r"^lane:[^:]+:.+$")
+# Gemini adapterの会議ごと匿名話者ID。providerが返した名前は保存せず、
+# `gemini_adapter.normalize_response` がこの形へ再マップする。
+_GEMINI_CLUSTER_RE = re.compile(r"^g:[0-9a-f]{8}:s[1-9][0-9]*$")
+
+
+def _is_unconfirmed_speaker(speaker: Any) -> bool:
+    """空値とGemini/DOMの既定値`Unknown`を未確定名として扱う。"""
+    if speaker is None:
+        return True
+    normalized = str(speaker).strip()
+    return not normalized or normalized.casefold() == "unknown"
 
 
 class VoiceprintServiceUnavailable(Exception):
@@ -121,21 +175,29 @@ def cluster_local_time_ranges(
 
 
 def _needs_review_clusters(segments: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
-    """Group segments by cluster for clusters in the needs_review-equivalent
-    state: a lane sub-cluster ("lane:{key}:{sub}") with no confirmed speaker
-    name. Mirrors collector/endpoints.py's `_derive_speaker_mapping_status`
-    condition (see module docstring for why this is a deliberate duplicate,
-    not a shared import)."""
+    """Group clusters that still need a human-confirmed speaker name.
+
+    Lane shared-mic sub-clusters and Gemini's meeting-scoped anonymous
+    ``g:<salt>:sN`` clusters are eligible. Boundary-ambiguous ``x:<salt>:sN``
+    clusters are deliberately excluded: their widened overlap envelope may
+    contain both sides of a chunk boundary and is not safe voiceprint input.
+    If even one segment in a cluster already has a confirmed name, the whole
+    cluster is excluded so a partial or concurrent rename can never be
+    overwritten by a new suggestion.
+    """
     grouped: Dict[str, List[Dict[str, Any]]] = {}
     for seg in segments:
         cluster = seg.get("speaker_cluster")
-        if not cluster or not _LANE_SUB_CLUSTER_RE.match(cluster):
-            continue
-        speaker = seg.get("speaker")
-        if speaker and str(speaker).strip():
+        if not cluster or not (
+            _LANE_SUB_CLUSTER_RE.match(cluster) or _GEMINI_CLUSTER_RE.match(cluster)
+        ):
             continue
         grouped.setdefault(cluster, []).append(seg)
-    return grouped
+    return {
+        cluster: cluster_segments
+        for cluster, cluster_segments in grouped.items()
+        if all(_is_unconfirmed_speaker(seg.get("speaker")) for seg in cluster_segments)
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -227,29 +289,395 @@ def _extract_and_concat_clip(src_path: str, ranges: List[Tuple[float, float]]) -
                 pass
 
 
+def _extract_exact_clip(src_path: str, ranges: List[Tuple[float, float]]) -> bytes:
+    """Extract every supplied range without the cluster path's longest-first cap.
+
+    Callers must validate range count, ordering, overlap, and total duration
+    before reaching this helper.  Bit-exact ffmpeg flags keep the WAV bytes
+    deterministic so a human-reviewed preview can be hash-bound to a later
+    enrollment request without retaining a second raw-audio copy.
+    """
+    filter_parts = []
+    concat_inputs = []
+    for i, (start, end) in enumerate(ranges):
+        duration = end - start
+        filter_parts.append(
+            f"[0:a]atrim=start={start:.6f}:duration={duration:.6f},"
+            f"asetpts=PTS-STARTPTS[a{i}]"
+        )
+        concat_inputs.append(f"[a{i}]")
+    filter_complex = (
+        ";".join(filter_parts)
+        + ";"
+        + "".join(concat_inputs)
+        + f"concat=n={len(ranges)}:v=0:a=1[out]"
+    )
+
+    dst_path = None
+    try:
+        fd, dst_path = tempfile.mkstemp(suffix=".wav")
+        os.close(fd)
+        result = subprocess.run(
+            [
+                "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error",
+                "-i", src_path,
+                "-filter_complex", filter_complex,
+                "-map", "[out]",
+                "-map_metadata", "-1",
+                "-fflags", "+bitexact", "-flags:a", "+bitexact",
+                "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le",
+                "-f", "wav", dst_path, "-y",
+            ],
+            capture_output=True,
+            timeout=VOICEPRINT_FFMPEG_TIMEOUT_SECONDS,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"ffmpeg exact clip extraction failed: "
+                f"{result.stderr.decode(errors='ignore')[:500]}"
+            )
+        with open(dst_path, "rb") as f:
+            return f.read()
+    finally:
+        if dst_path:
+            try:
+                os.unlink(dst_path)
+            except FileNotFoundError:
+                pass
+
+
+def _normalize_audio_to_wav(audio_bytes: bytes, media_format: str) -> bytes:
+    """Normalize a user-reviewed recording to deterministic 16kHz mono WAV."""
+    src_path = None
+    dst_path = None
+    try:
+        src_fd, src_path = tempfile.mkstemp(suffix=f".{media_format}")
+        os.close(src_fd)
+        with open(src_path, "wb") as src_file:
+            src_file.write(audio_bytes)
+
+        dst_fd, dst_path = tempfile.mkstemp(suffix=".wav")
+        os.close(dst_fd)
+        result = subprocess.run(
+            [
+                "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error",
+                "-i", src_path,
+                "-vn", "-map_metadata", "-1",
+                "-fflags", "+bitexact", "-flags:a", "+bitexact",
+                "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le",
+                "-t", f"{VOICEPRINT_MAX_CLIP_SECONDS + 0.25:g}",
+                "-f", "wav", dst_path, "-y",
+            ],
+            capture_output=True,
+            timeout=VOICEPRINT_FFMPEG_TIMEOUT_SECONDS,
+        )
+        if result.returncode != 0:
+            raise ValueError(
+                f"audio conversion failed: {result.stderr.decode(errors='ignore')[:500]}"
+            )
+        with open(dst_path, "rb") as dst_file:
+            return dst_file.read()
+    finally:
+        for path in (src_path, dst_path):
+            if path:
+                try:
+                    os.unlink(path)
+                except FileNotFoundError:
+                    pass
+
+
 async def _download_master_to_tempfile(
     storage_backend: Optional[str], storage_path: str, media_format: str,
 ) -> str:
-    storage = create_storage_client(storage_backend)
-    suffix = f".{(media_format or 'webm').lower()}"
+    """Download a finalized master in a killable, deadline-bound process.
+
+    Storage SDK calls are synchronous and a blocked range request cannot be
+    interrupted inside a Python thread.  The stat and all byte-range body I/O
+    therefore run in a dedicated interpreter process.  Timeout/cancellation
+    terminates (then kills if needed) and reaps that process *before* the temp
+    path is unlinked or this coroutine returns, so no storage worker can keep
+    writing after request cleanup.
+    """
+    if (
+        isinstance(VOICEPRINT_MAX_MASTER_BYTES, bool)
+        or not isinstance(VOICEPRINT_MAX_MASTER_BYTES, int)
+        or VOICEPRINT_MAX_MASTER_BYTES <= 0
+    ):
+        raise ValueError("voiceprint master size limit must be positive")
+    if (
+        isinstance(VOICEPRINT_MASTER_DOWNLOAD_CHUNK_BYTES, bool)
+        or not isinstance(VOICEPRINT_MASTER_DOWNLOAD_CHUNK_BYTES, int)
+        or VOICEPRINT_MASTER_DOWNLOAD_CHUNK_BYTES <= 0
+    ):
+        raise ValueError("voiceprint master download chunk size must be positive")
+    if (
+        not math.isfinite(VOICEPRINT_MASTER_DOWNLOAD_TIMEOUT_S)
+        or VOICEPRINT_MASTER_DOWNLOAD_TIMEOUT_S <= 0
+    ):
+        raise ValueError("voiceprint master download timeout must be positive")
+
+    normalized_format = (media_format or "webm").strip().lower()
+    suffix = f".{normalized_format}" if re.fullmatch(r"[a-z0-9]{1,12}", normalized_format) else ".media"
     fd, path = tempfile.mkstemp(suffix=suffix)
-    os.close(fd)
+    process = None
     try:
-        await asyncio.to_thread(storage.download_file_to_path, storage_path, path)
-    except Exception:
-        # BUG-007: mkstemp already created `path` on disk. If the download
-        # itself raises (network/credential/missing-object error — all
-        # realistic against production recordings storage), this function
-        # never returns a path, so embed_clip_from_ranges's own
-        # `finally: os.unlink(src_path)` never runs (it never gets a
-        # src_path value) and the empty temp file leaks for the container's
-        # lifetime. Unlink it here before re-raising.
+        try:
+            process = _start_master_download_process(
+                storage_backend,
+                storage_path,
+                fd,
+                max_bytes=VOICEPRINT_MAX_MASTER_BYTES,
+                chunk_bytes=VOICEPRINT_MASTER_DOWNLOAD_CHUNK_BYTES,
+            )
+        except BaseException:
+            try:
+                os.unlink(path)
+            except FileNotFoundError:
+                pass
+            raise
+    finally:
+        os.close(fd)
+
+    try:
+        await _wait_for_master_download_process(
+            process, timeout=VOICEPRINT_MASTER_DOWNLOAD_TIMEOUT_S,
+        )
+        status = _read_master_download_status(process)
+        _raise_for_master_download_status(status, process.returncode)
+        return path
+    except BaseException:
+        # This branch includes asyncio.CancelledError.  Reaping is synchronous
+        # on purpose: once cancellation is visible to the caller, neither a
+        # child process nor an SDK I/O operation may remain alive.
+        _stop_master_download_process(process)
         try:
             os.unlink(path)
         except FileNotFoundError:
             pass
         raise
-    return path
+    finally:
+        _close_master_download_process_streams(process)
+
+
+def _start_master_download_process(
+    storage_backend: Optional[str],
+    storage_path: str,
+    output_fd: int,
+    *,
+    max_bytes: int,
+    chunk_bytes: int,
+) -> subprocess.Popen:
+    """Start the isolated worker without putting object paths in argv."""
+    try:
+        request = json.dumps(
+            {
+                "storage_backend": storage_backend,
+                "storage_path": storage_path,
+                "output_fd": output_fd,
+                "max_bytes": max_bytes,
+                "chunk_bytes": chunk_bytes,
+            },
+            separators=(",", ":"),
+        ).encode("utf-8")
+    except (TypeError, ValueError, UnicodeError) as exc:
+        raise ValueError("voiceprint master download configuration is invalid") from exc
+    if len(request) > _VOICEPRINT_MASTER_CONTROL_MAX_BYTES:
+        raise ValueError("voiceprint master download configuration is invalid")
+    process = subprocess.Popen(
+        [sys.executable, "-m", "meeting_api.voiceprint_master_download_worker"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        pass_fds=(output_fd,),
+        start_new_session=True,
+    )
+    try:
+        if process.stdin is None:
+            raise RuntimeError("voiceprint master worker control pipe unavailable")
+        process.stdin.write(request)
+        process.stdin.close()
+    except BaseException as exc:
+        _stop_master_download_process(process)
+        _close_master_download_process_streams(process)
+        raise RuntimeError("voiceprint master worker could not be started") from exc
+    return process
+
+
+async def _wait_for_master_download_process(
+    process: subprocess.Popen, *, timeout: float,
+) -> None:
+    """Wait asynchronously for a worker while enforcing a hard deadline."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    while process.poll() is None:
+        remaining = deadline - loop.time()
+        if remaining <= 0:
+            raise asyncio.TimeoutError("voiceprint master download timed out")
+        await asyncio.sleep(min(0.02, remaining))
+
+
+def _stop_master_download_process(process: subprocess.Popen) -> None:
+    """Terminate/kill and reap a worker before returning to its caller."""
+    if process.poll() is not None:
+        process.wait()
+        return
+    try:
+        process.terminate()
+    except ProcessLookupError:
+        process.wait()
+        return
+    try:
+        process.wait(timeout=0.25)
+    except subprocess.TimeoutExpired:
+        try:
+            process.kill()
+        except ProcessLookupError:
+            pass
+        # A storage SDK network read is interruptible by SIGKILL.  Reap the
+        # process so the caller never observes a zombie or live I/O worker.
+        process.wait()
+
+
+def _read_master_download_status(process: subprocess.Popen) -> str:
+    if process.stdout is None:
+        return ""
+    raw = process.stdout.read(64)
+    if not isinstance(raw, bytes):
+        return ""
+    try:
+        return raw.decode("ascii", errors="strict").strip()
+    except UnicodeDecodeError:
+        return ""
+
+
+def _raise_for_master_download_status(status: str, returncode: Optional[int]) -> None:
+    """Map fixed worker codes to sanitized parent-side exceptions."""
+    if status == STATUS_OK and returncode == 0:
+        return
+    if status == STATUS_INVALID_SIZE:
+        raise ValueError("voiceprint master size is invalid")
+    if status == STATUS_EMPTY:
+        raise ValueError("voiceprint master is empty")
+    if status == STATUS_TOO_LARGE:
+        raise ValueError(
+            f"voiceprint master exceeds the {VOICEPRINT_MAX_MASTER_BYTES} byte limit"
+        )
+    if status in {STATUS_INVALID_REQUEST, STATUS_INVALID_CHUNK}:
+        raise ValueError("voiceprint master download configuration is invalid")
+    if status == STATUS_RANGE_LENGTH:
+        raise IOError("voiceprint master range length mismatch")
+    if status == STATUS_DOWNLOAD_LENGTH:
+        raise IOError("voiceprint master download length mismatch")
+    if status == STATUS_STORAGE_ERROR:
+        raise RuntimeError("voiceprint master storage download failed")
+    raise RuntimeError("voiceprint master download worker failed")
+
+
+def _close_master_download_process_streams(process: subprocess.Popen) -> None:
+    for stream in (process.stdin, process.stdout):
+        if stream is not None and not stream.closed:
+            stream.close()
+
+
+async def _run_blocking_audio_operation(operation: Any, *args: Any) -> bytes:
+    """Run bounded ffmpeg work without releasing its gate prematurely."""
+    current = asyncio.current_task()
+    if current is not None and current.cancelling():
+        raise asyncio.CancelledError
+    worker = asyncio.create_task(asyncio.to_thread(operation, *args))
+    try:
+        return await asyncio.shield(worker)
+    except asyncio.CancelledError:
+        # subprocess.run has its own bounded timeout but cannot be interrupted
+        # safely from this thread.  Keep the source path and semaphore alive
+        # until it exits instead of unlinking under an active ffmpeg process.
+        while not worker.done():
+            try:
+                await asyncio.shield(worker)
+            except asyncio.CancelledError:
+                continue
+            except BaseException:
+                break
+        if worker.done():
+            try:
+                worker.result()
+            except BaseException:
+                pass
+        raise
+
+
+async def _run_blocking_clip_extractor(
+    extractor: Any, src_path: str, ranges: List[Tuple[float, float]],
+) -> bytes:
+    return await _run_blocking_audio_operation(extractor, src_path, ranges)
+
+
+async def _extract_clip_from_master(
+    source: Any,
+    ranges: List[Tuple[float, float]],
+    extractor: Any,
+) -> bytes:
+    """Serialize the bounded master download and its ffmpeg lifecycle."""
+    async with _VOICEPRINT_MASTER_PIPELINE_SEMAPHORE:
+        src_path = await _download_master_to_tempfile(
+            getattr(source, "storage_backend", None),
+            source.storage_path,
+            source.media_format,
+        )
+        try:
+            return await _run_blocking_clip_extractor(extractor, src_path, ranges)
+        finally:
+            try:
+                os.unlink(src_path)
+            except FileNotFoundError:
+                pass
+
+
+async def extract_exact_clip_wav(
+    source: Any, ranges: List[Tuple[float, float]],
+) -> bytes:
+    """Download a finalized master and return exactly the requested ranges.
+
+    Unlike :func:`embed_clip_from_ranges`, this helper never chooses, reorders,
+    or truncates ranges.  It is reserved for explicit human-reviewed audio
+    selection; validation belongs at the API boundary before this call.
+    """
+    if not ranges:
+        raise ValueError("at least one audio range is required")
+    return await _extract_clip_from_master(source, ranges, _extract_exact_clip)
+
+
+async def normalize_direct_audio_to_wav(audio_bytes: bytes, media_format: str) -> bytes:
+    """Normalize a bounded direct recording without retaining the raw input."""
+    if not audio_bytes:
+        raise ValueError("audio is empty")
+    if len(audio_bytes) > VOICEPRINT_MAX_DIRECT_AUDIO_BYTES:
+        raise ValueError(
+            f"audio exceeds the {VOICEPRINT_MAX_DIRECT_AUDIO_BYTES} byte limit"
+        )
+    async with _VOICEPRINT_DIRECT_PIPELINE_SEMAPHORE:
+        return await _run_blocking_audio_operation(
+            _normalize_audio_to_wav,
+            audio_bytes,
+            media_format,
+        )
+
+
+def wav_duration_seconds(wav_bytes: bytes) -> float:
+    """Return WAV duration while also checking the normalized wire format."""
+    try:
+        with wave.open(io.BytesIO(wav_bytes), "rb") as wav_file:
+            frame_rate = wav_file.getframerate()
+            channels = wav_file.getnchannels()
+            sample_width = wav_file.getsampwidth()
+            frames = wav_file.getnframes()
+    except (EOFError, wave.Error) as exc:
+        raise ValueError("invalid WAV audio") from exc
+    if frame_rate != 16000 or channels != 1 or sample_width != 2:
+        raise ValueError("voiceprint WAV must be 16kHz mono PCM16")
+    if frames <= 0:
+        raise ValueError("audio is empty")
+    return frames / float(frame_rate)
 
 
 async def _embed_clip(wav_bytes: bytes) -> List[float]:
@@ -271,11 +699,25 @@ async def _embed_clip(wav_bytes: bytes) -> List[float]:
     return [float(x) for x in embedding]
 
 
+async def embed_wav_bytes(wav_bytes: bytes) -> List[float]:
+    """Embed an already-normalized WAV for explicit enrollment."""
+    if not VOICEPRINT_SERVICE_URL:
+        raise VoiceprintServiceUnavailable("VOICEPRINT_SERVICE_URL not configured")
+    try:
+        return await _embed_clip(wav_bytes)
+    except httpx.HTTPError as exc:
+        raise VoiceprintServiceUnavailable(
+            f"voiceprint-service /embed failed: {exc}"
+        ) from exc
+
+
 async def embed_clip_from_ranges(source: Any, ranges: List[Tuple[float, float]]) -> List[float]:
-    """Slice, convert, and embed one cluster's audio. Shared by the
-    post-commit matching follow-up below and the explicit
-    `POST /voiceprints/enroll-from-cluster` endpoint (voiceprints.py) so both
-    paths apply the identical min/max clip policy."""
+    """Slice, convert, and embed one anonymous cluster for suggestion matching.
+
+    Explicit enrollment uses only the separately reviewed selected-audio or
+    pre-recorded paths; Vexa/Gemini cluster membership is never an enrollment
+    source.
+    """
     selected = _select_clip_ranges(
         ranges, min_seconds=VOICEPRINT_MIN_CLIP_SECONDS, max_seconds=VOICEPRINT_MAX_CLIP_SECONDS,
     )
@@ -286,18 +728,9 @@ async def embed_clip_from_ranges(source: Any, ranges: List[Tuple[float, float]])
     if not VOICEPRINT_SERVICE_URL:
         raise VoiceprintServiceUnavailable("VOICEPRINT_SERVICE_URL not configured")
 
-    src_path = await _download_master_to_tempfile(
-        getattr(source, "storage_backend", None),
-        source.storage_path,
-        source.media_format,
+    clip_wav = await _extract_clip_from_master(
+        source, selected, _extract_and_concat_clip,
     )
-    try:
-        clip_wav = await asyncio.to_thread(_extract_and_concat_clip, src_path, selected)
-    finally:
-        try:
-            os.unlink(src_path)
-        except FileNotFoundError:
-            pass
 
     try:
         return await _embed_clip(clip_wav)
@@ -487,7 +920,7 @@ async def _run_matching(
         await db.commit()
 
     # Nothing to match — return WITHOUT any audit noise. This is the common
-    # case (most meetings have no lane shared-mic sub-clusters at all), so
+    # case (most meetings have no unnamed lane/Gemini clusters), so
     # checking crypto/service availability only after confirming there is
     # real work avoids writing a `skip` audit row for every single meeting.
     grouped = _needs_review_clusters(segments)

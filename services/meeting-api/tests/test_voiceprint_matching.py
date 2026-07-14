@@ -5,7 +5,9 @@ unmatched embeddings, stale-clears on replace, respects the total budget).
 """
 from __future__ import annotations
 
+import io
 import os
+import tempfile as stdlib_tempfile
 from dataclasses import dataclass
 from typing import Optional
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -144,13 +146,71 @@ def test_needs_review_clusters_only_groups_unnamed_lane_sub_clusters():
     assert len(grouped["lane:aaaaaaaaaa:spk0"]) == 2
 
 
+def test_needs_review_clusters_includes_only_unconfirmed_gemini_clusters():
+    segments = [
+        {"speaker_cluster": "g:78225710:s1", "speaker": "Unknown", "start": 0.0, "end": 3.0},
+        {"speaker_cluster": "g:78225710:s1", "speaker": " ", "start": 4.0, "end": 7.0},
+        {"speaker_cluster": "g:78225710:s2", "speaker": "田中", "start": 0.0, "end": 3.0},
+        {"speaker_cluster": "g:not-hex:s3", "speaker": "Unknown", "start": 0.0, "end": 3.0},
+    ]
+
+    grouped = vm._needs_review_clusters(segments)
+
+    assert list(grouped) == ["g:78225710:s1"]
+    assert len(grouped["g:78225710:s1"]) == 2
+
+
+def test_needs_review_clusters_excludes_partially_named_gemini_cluster():
+    segments = [
+        {"speaker_cluster": "g:78225710:s1", "speaker": "Unknown", "start": 0.0, "end": 3.0},
+        {"speaker_cluster": "g:78225710:s1", "speaker": "確定済み", "start": 4.0, "end": 7.0},
+    ]
+
+    assert vm._needs_review_clusters(segments) == {}
+
+
+def test_needs_review_clusters_excludes_boundary_ambiguous_gemini_cluster():
+    segments = [
+        {
+            "speaker_cluster": "x:78225710:s1",
+            "speaker": "Unknown",
+            "start": 295.0,
+            "end": 303.0,
+        },
+    ]
+
+    assert vm._needs_review_clusters(segments) == {}
+
+
+def test_gemini_cluster_uses_mixed_master_source():
+    mixed = _FakeMixedSource()
+    assert vm.resolve_cluster_audio_source(
+        "g:78225710:s1", mixed_source=mixed, lane_sources=[]
+    ) is mixed
+
+
+def test_direct_audio_normalization_hard_caps_ffmpeg_output_duration():
+    with patch(
+        "meeting_api.voiceprint_matching.subprocess.run",
+        return_value=MagicMock(returncode=0, stderr=b""),
+    ) as run:
+        assert vm._normalize_audio_to_wav(b"compressed-audio", "webm") == b""
+
+    command = run.call_args.args[0]
+    limit_index = command.index("-t")
+    assert float(command[limit_index + 1]) == pytest.approx(
+        vm.VOICEPRINT_MAX_CLIP_SECONDS + 0.25
+    )
+    assert command.index("-t") < command.index("-f")
+
+
 # ---------------------------------------------------------------------------
 # _download_master_to_tempfile
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_download_master_to_tempfile_unlinks_on_download_failure():
+async def test_download_master_to_tempfile_unlinks_on_download_failure(tmp_path):
     """BUG-007 regression: tempfile.mkstemp creates the file on disk
     immediately, before the download call. If storage.download_file_to_path
     raises (network/credential/missing-object error), the function used to
@@ -158,21 +218,31 @@ async def test_download_master_to_tempfile_unlinks_on_download_failure():
     `finally: os.unlink(src_path)` never ran (it never got a src_path value)
     and the empty temp file leaked on disk for the container's lifetime."""
     created_paths: list[str] = []
+    real_mkstemp = stdlib_tempfile.mkstemp
 
-    class _FailingStorage:
-        def download_file_to_path(self, storage_path, path):
-            assert os.path.exists(path)  # mkstemp already created it
-            created_paths.append(path)
-            raise RuntimeError("simulated storage backend failure")
+    def _tracked_mkstemp(*, suffix):
+        fd, path = real_mkstemp(suffix=suffix, dir=tmp_path)
+        created_paths.append(path)
+        return fd, path
+
+    failed_worker = MagicMock()
+    failed_worker.poll.return_value = 2
+    failed_worker.wait.return_value = 2
+    failed_worker.returncode = 2
+    failed_worker.stdin = None
+    failed_worker.stdout = io.BytesIO(b"storage_error")
 
     with patch(
-        "meeting_api.voiceprint_matching.create_storage_client",
-        return_value=_FailingStorage(),
+        "meeting_api.voiceprint_matching._start_master_download_process",
+        return_value=failed_worker,
+    ), patch(
+        "meeting_api.voiceprint_matching.tempfile.mkstemp",
+        side_effect=_tracked_mkstemp,
     ):
         with pytest.raises(RuntimeError):
             await vm._download_master_to_tempfile("minio", "recordings/x/master.wav", "wav")
 
-    assert created_paths, "download_file_to_path was never called"
+    assert created_paths, "temporary master path was never created"
     assert not os.path.exists(created_paths[0]), "temp file leaked after download failure"
 
 
@@ -338,6 +408,42 @@ async def test_followup_writes_suggestion_when_similarity_above_threshold():
     assert suggestion["profile_id"] == 7
     assert suggestion["status"] == "suggested"
     assert suggestion["similarity"] == pytest.approx(1.0)
+
+
+@pytest.mark.asyncio
+async def test_followup_matches_unconfirmed_gemini_cluster_from_mixed_master():
+    meeting = make_meeting(id=1, user_id=5, data={})
+    db = _mock_db(execute_results=[
+        MockResult([(_FakeVoiceprintRow(profile_id=7), "田中")]),
+        MockResult([meeting]),
+    ])
+    crypto = _enabled_crypto()
+    crypto.decrypt_embedding = MagicMock(return_value=[1.0, 0.0, 0.0])
+    mixed_source = _FakeMixedSource()
+    embed = AsyncMock(return_value=[1.0, 0.0, 0.0])
+
+    with patch("meeting_api.voiceprint_matching.get_voiceprint_crypto", return_value=crypto), \
+         patch("meeting_api.voiceprint_matching.VOICEPRINT_SERVICE_URL", "http://voiceprint-service"), \
+         patch("meeting_api.voiceprint_matching.embed_clip_from_ranges", new=embed), \
+         patch("meeting_api.voiceprint_matching.attributes.flag_modified", new=MagicMock()):
+        await vm.run_voiceprint_matching_followup(
+            meeting,
+            db,
+            segments=[{
+                "speaker_cluster": "g:78225710:s1",
+                "speaker": "Unknown",
+                "start": 5.0,
+                "end": 20.0,
+            }],
+            mixed_source=mixed_source,
+            lane_sources=[],
+            mode="reject_if_exists",
+        )
+
+    suggestion = meeting.data["speaker_suggestions"]["g:78225710:s1"]
+    assert suggestion["candidate_display_name"] == "田中"
+    assert suggestion["status"] == "suggested"
+    embed.assert_awaited_once_with(mixed_source, [(5.0, 20.0)])
 
     events = [call.args[0].event for call in db.add.call_args_list]
     assert "match_attempt" in events

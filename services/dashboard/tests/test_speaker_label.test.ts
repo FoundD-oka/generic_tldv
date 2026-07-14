@@ -20,6 +20,16 @@ describe("getSpeakerIdentityKey", () => {
   it("falls back to empty string when neither is set", () => {
     expect(getSpeakerIdentityKey({ speaker: "" })).toBe("");
   });
+
+  it("uses distinct Gemini cluster identities while the speaker is Unknown", () => {
+    expect(getSpeakerIdentityKey({ speaker: "Unknown", speaker_cluster: "g:78225710:s1" })).toBe("g:78225710:s1");
+    expect(getSpeakerIdentityKey({ speaker: "Unknown", speaker_cluster: "g:78225710:s2" })).toBe("g:78225710:s2");
+  });
+
+  it("keeps ambiguous chunk-boundary Gemini clusters distinct", () => {
+    expect(getSpeakerIdentityKey({ speaker: "Unknown", speaker_cluster: "x:78225710:s1" })).toBe("x:78225710:s1");
+    expect(getSpeakerIdentityKey({ speaker: "Unknown", speaker_cluster: "x:78225710:s2" })).toBe("x:78225710:s2");
+  });
 });
 
 describe("isNeedsReviewSegment", () => {
@@ -45,6 +55,16 @@ describe("isNeedsReviewSegment", () => {
   it("does not flag legacy clusterless/unclustered segments", () => {
     expect(isNeedsReviewSegment({ speaker: "" })).toBe(false);
     expect(isNeedsReviewSegment({ speaker: "", speaker_cluster: "3" })).toBe(false);
+  });
+
+  it("flags an unconfirmed Gemini anonymous cluster but not a named one", () => {
+    expect(isNeedsReviewSegment({ speaker: "Unknown", speaker_cluster: "g:78225710:s1" })).toBe(true);
+    expect(isNeedsReviewSegment({ speaker: "田中", speaker_cluster: "g:78225710:s1" })).toBe(false);
+  });
+
+  it("flags an ambiguous chunk-boundary Gemini cluster for human review", () => {
+    expect(isNeedsReviewSegment({ speaker: "Unknown", speaker_cluster: "x:78225710:s1" })).toBe(true);
+    expect(isNeedsReviewSegment({ speaker: "田中", speaker_cluster: "x:78225710:s1" })).toBe(false);
   });
 });
 
@@ -88,6 +108,30 @@ describe("buildSpeakerDisplayLabels / getSpeakerDisplayLabel", () => {
     const segments = [{ speaker: "" }];
     const labels = buildSpeakerDisplayLabels(segments);
     expect(getSpeakerDisplayLabel(segments[0], labels)).toBe("");
+  });
+
+  it("assigns distinct labels to Gemini clusters and never renders the raw id", () => {
+    const segments = [
+      { speaker: "Unknown", speaker_cluster: "g:78225710:s1" },
+      { speaker: "Unknown", speaker_cluster: "g:78225710:s2" },
+    ];
+    const labels = buildSpeakerDisplayLabels(segments);
+
+    expect(getSpeakerDisplayLabel(segments[0], labels)).toBe("要確認の話者A");
+    expect(getSpeakerDisplayLabel(segments[1], labels)).toBe("要確認の話者B");
+    expect(getSpeakerDisplayLabel(segments[0], labels)).not.toContain("g:");
+  });
+
+  it("renders ambiguous chunk-boundary clusters as review labels without exposing raw ids", () => {
+    const segments = [
+      { speaker: "Unknown", speaker_cluster: "x:78225710:s1" },
+      { speaker: "Unknown", speaker_cluster: "x:78225710:s2" },
+    ];
+    const labels = buildSpeakerDisplayLabels(segments);
+
+    expect(getSpeakerDisplayLabel(segments[0], labels)).toBe("要確認の話者A");
+    expect(getSpeakerDisplayLabel(segments[1], labels)).toBe("要確認の話者B");
+    expect(getSpeakerDisplayLabel(segments[0], labels)).not.toContain("x:");
   });
 });
 
@@ -172,6 +216,11 @@ describe("resolveSpeakerLabelByKey (F2 — filter dropdown/badge display path)",
   it("falls back to the key itself for a genuine (non-lane) named speaker", () => {
     const labels = new Map<string, string>();
     expect(resolveSpeakerLabelByKey("田中", labels)).toBe("田中");
+  });
+
+  it("never exposes a raw Gemini cluster id", () => {
+    expect(resolveSpeakerLabelByKey("g:78225710:s1", new Map())).toBe("未特定の話者");
+    expect(resolveSpeakerLabelByKey("x:78225710:s1", new Map())).toBe("未特定の話者");
   });
 
   it("falls back to 不明 for an empty key", () => {

@@ -5,6 +5,97 @@ import { getAuthCookieName, getUserInfoCookieName } from "@/lib/auth-cookies";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+const VOICEPRINT_MAX_DIRECT_AUDIO_BYTES = Number.parseInt(
+  process.env.VOICEPRINT_MAX_DIRECT_AUDIO_BYTES || String(20 * 1024 * 1024),
+  10
+);
+const VOICEPRINT_PROXY_BODY_MAX_BYTES =
+  Math.ceil(VOICEPRINT_MAX_DIRECT_AUDIO_BYTES / 3) * 4 + (64 * 1024);
+const parsedVoiceprintSegmentsBodyLimit = Number.parseInt(
+  process.env.VOICEPRINT_SEGMENTS_BODY_MAX_BYTES || String(64 * 1024),
+  10
+);
+const VOICEPRINT_SEGMENTS_BODY_MAX_BYTES =
+  Number.isSafeInteger(parsedVoiceprintSegmentsBodyLimit) &&
+  parsedVoiceprintSegmentsBodyLimit > 0
+    ? parsedVoiceprintSegmentsBodyLimit
+    : 64 * 1024;
+const parsedDirectEnrollmentLimit = Number.parseInt(
+  process.env.VOICEPRINT_MAX_ACTIVE_DIRECT_ENROLLMENTS || "1",
+  10
+);
+const VOICEPRINT_MAX_ACTIVE_DIRECT_ENROLLMENTS =
+  Number.isSafeInteger(parsedDirectEnrollmentLimit) && parsedDirectEnrollmentLimit > 0
+    ? parsedDirectEnrollmentLimit
+    : 1;
+
+export class VoiceprintDirectEnrollmentAdmissionGate {
+  private active = 0;
+
+  constructor(private readonly maxActive: number) {}
+
+  tryAcquire(): boolean {
+    if (this.active >= this.maxActive) return false;
+    this.active += 1;
+    return true;
+  }
+
+  release(): void {
+    if (this.active <= 0) {
+      throw new Error("Direct voiceprint admission gate released without acquisition");
+    }
+    this.active -= 1;
+  }
+}
+
+const directEnrollmentAdmissionGate = new VoiceprintDirectEnrollmentAdmissionGate(
+  VOICEPRINT_MAX_ACTIVE_DIRECT_ENROLLMENTS
+);
+
+class VoiceprintProxyBodyTooLargeError extends Error {
+  constructor() {
+    super("Voiceprint audio request is too large");
+    this.name = "VoiceprintProxyBodyTooLargeError";
+  }
+}
+
+export async function readBoundedVoiceprintProxyBody(
+  request: Request,
+  maxBytes = VOICEPRINT_PROXY_BODY_MAX_BYTES
+): Promise<string> {
+  const contentLength = request.headers.get("content-length");
+  if (contentLength) {
+    const parsedLength = Number.parseInt(contentLength, 10);
+    if (!Number.isFinite(parsedLength) || parsedLength < 0) {
+      throw new TypeError("Invalid Content-Length");
+    }
+    if (parsedLength > maxBytes) throw new VoiceprintProxyBodyTooLargeError();
+  }
+  if (!request.body) return "";
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    totalBytes += value.byteLength;
+    if (totalBytes > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw new VoiceprintProxyBodyTooLargeError();
+    }
+    chunks.push(value);
+  }
+
+  const body = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder("utf-8", { fatal: true }).decode(body);
+}
+
 async function proxyRequest(
   request: NextRequest,
   params: Promise<{ path: string[] }>,
@@ -23,7 +114,7 @@ async function proxyRequest(
 
   // VEXA_API_KEY from env is used ONLY for the meetings list endpoint
   // (pre-login browsing). All other endpoints require a user cookie.
-  const VEXA_API_KEY = userToken || process.env.VEXA_API_KEY || "";
+  const meetingsListAPIKey = userToken || process.env.VEXA_API_KEY || "";
 
   const { path } = await params;
   const pathString = path.join("/");
@@ -41,7 +132,7 @@ async function proxyRequest(
       if (searchParams.get("status")) qs.set("status", searchParams.get("status")!);
       if (searchParams.get("platform")) qs.set("platform", searchParams.get("platform")!);
       const botsResp = await fetch(`${VEXA_API_URL}/bots?${qs.toString()}`, {
-        headers: { "X-API-Key": VEXA_API_KEY },
+        headers: { "X-API-Key": meetingsListAPIKey },
         signal: AbortSignal.timeout(5000),
       });
       if (botsResp.ok) {
@@ -56,7 +147,7 @@ async function proxyRequest(
     const meetings: Array<Record<string, unknown>> = [];
     try {
       const statusResp = await fetch(`${VEXA_API_URL}/bots/status`, {
-        headers: { "X-API-Key": VEXA_API_KEY },
+        headers: { "X-API-Key": meetingsListAPIKey },
       });
       if (statusResp.ok) {
         const data = await statusResp.json();
@@ -82,7 +173,7 @@ async function proxyRequest(
   }
 
   // Everything else: proxy through api-gateway (handles /transcripts, /recordings, /bots, etc.)
-  if (!VEXA_API_KEY) {
+  if (!userToken) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
@@ -96,13 +187,27 @@ async function proxyRequest(
     "Content-Type": "application/json",
   };
 
-  if (VEXA_API_KEY) {
-    headers["X-API-Key"] = VEXA_API_KEY;
-  }
+  headers["X-API-Key"] = userToken;
 
   const rangeHeader = request.headers.get("range");
   if (rangeHeader) {
     headers["Range"] = rangeHeader;
+  }
+
+  const isDirectVoiceprintEnrollmentRequest =
+    method === "POST" && pathString === "voiceprints/enroll-from-audio";
+  let directEnrollmentAdmissionAcquired = false;
+  if (isDirectVoiceprintEnrollmentRequest) {
+    if (!directEnrollmentAdmissionGate.tryAcquire()) {
+      return NextResponse.json(
+        { error: "Direct voiceprint enrollment capacity is busy; retry shortly" },
+        {
+          status: 429,
+          headers: { "Cache-Control": "no-store", "Retry-After": "1" },
+        }
+      );
+    }
+    directEnrollmentAdmissionAcquired = true;
   }
 
   try {
@@ -110,7 +215,20 @@ async function proxyRequest(
     const isMp3MediaRequest =
       /^recordings\/\d+\/master\/mp3$/.test(pathString) ||
       /^recordings\/\d+\/media\/\d+\/mp3$/.test(pathString);
-    const timeoutId = setTimeout(() => controller.abort(), isMp3MediaRequest ? 180000 : 30000);
+    // Voiceprint preview/enrollment may need to download and slice a long
+    // recording master before returning the short verified clip. Keep this
+    // bounded, but do not apply the ordinary 30s proxy timeout to that work.
+    const isVoiceprintAudioRequest =
+      /^voiceprints\/(preview-from-segments|enroll-from-segments|enroll-from-audio)$/.test(
+        pathString
+      );
+    const voiceprintBodyMaxBytes = isDirectVoiceprintEnrollmentRequest
+      ? VOICEPRINT_PROXY_BODY_MAX_BYTES
+      : VOICEPRINT_SEGMENTS_BODY_MAX_BYTES;
+    const timeoutId = setTimeout(
+      () => controller.abort(),
+      isMp3MediaRequest || isVoiceprintAudioRequest ? 180000 : 30000
+    );
 
     const fetchOptions: RequestInit = {
       method,
@@ -119,7 +237,24 @@ async function proxyRequest(
     };
 
     if (method !== "GET" && method !== "HEAD") {
-      const body = await request.text();
+      let body: string;
+      try {
+        body = isVoiceprintAudioRequest
+          ? await readBoundedVoiceprintProxyBody(request, voiceprintBodyMaxBytes)
+          : await request.text();
+      } catch (error) {
+        clearTimeout(timeoutId);
+        if (error instanceof VoiceprintProxyBodyTooLargeError) {
+          return NextResponse.json(
+            { error: "Voiceprint audio request is too large" },
+            { status: 413, headers: { "Cache-Control": "no-store" } }
+          );
+        }
+        return NextResponse.json(
+          { error: "Invalid request body" },
+          { status: 400, headers: { "Cache-Control": "no-store" } }
+        );
+      }
       if (body) {
         fetchOptions.body = body;
       }
@@ -171,9 +306,7 @@ async function proxyRequest(
           );
         }
         mediaUrl = new URL(selectedUrl, `${VEXA_API_URL}/`);
-        if (VEXA_API_KEY) {
-          mediaHeaders["X-API-Key"] = VEXA_API_KEY;
-        }
+        mediaHeaders["X-API-Key"] = userToken;
       } else {
         mediaUrl = new URL(selectedUrl);
         const isProxyUnsafeHost =
@@ -181,9 +314,7 @@ async function proxyRequest(
           !mediaUrl.hostname.includes(".");
         if (isProxyUnsafeHost && rawUrl) {
           mediaUrl = new URL(rawUrl, `${VEXA_API_URL}/`);
-          if (VEXA_API_KEY) {
-            mediaHeaders["X-API-Key"] = VEXA_API_KEY;
-          }
+          mediaHeaders["X-API-Key"] = userToken;
         } else if (isProxyUnsafeHost) {
           return NextResponse.json(
             { error: "Internal presigned media URL is not proxy-safe; backend raw_url missing" },
@@ -274,6 +405,10 @@ async function proxyRequest(
       { error: `Failed to connect to API: ${err.message}` },
       { status: 502 }
     );
+  } finally {
+    if (directEnrollmentAdmissionAcquired) {
+      directEnrollmentAdmissionGate.release();
+    }
   }
 }
 

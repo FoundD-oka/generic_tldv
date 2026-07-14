@@ -1,4 +1,5 @@
 hub/
 .git/
+.pipeline/
 **/__pycache__/
 **/*.pyc

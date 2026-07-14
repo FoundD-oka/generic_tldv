@@ -16,6 +16,7 @@ import websockets
 import redis.asyncio as aioredis
 from datetime import datetime, timedelta, timezone
 import secrets
+import threading
 import time
 import re
 import hashlib
@@ -42,6 +43,36 @@ MCP_URL = os.getenv("MCP_URL")
 CALENDAR_SERVICE_URL = os.getenv("CALENDAR_SERVICE_URL")  # Optional — calendar-service
 AGENT_API_URL = os.getenv("AGENT_API_URL")  # Optional — agent-api for chat
 RUNTIME_API_URL = os.getenv("RUNTIME_API_URL", "http://runtime-api:8090")
+VOICEPRINT_MAX_DIRECT_AUDIO_BYTES = int(
+    os.getenv("VOICEPRINT_MAX_DIRECT_AUDIO_BYTES", str(20 * 1024 * 1024))
+)
+VOICEPRINT_DIRECT_AUDIO_BODY_MAX_BYTES = (
+    ((VOICEPRINT_MAX_DIRECT_AUDIO_BYTES + 2) // 3) * 4 + (64 * 1024)
+)
+VOICEPRINT_SEGMENTS_BODY_MAX_BYTES = int(
+    os.getenv("VOICEPRINT_SEGMENTS_BODY_MAX_BYTES", str(64 * 1024))
+)
+VOICEPRINT_MAX_ACTIVE_DIRECT_ENROLLMENTS = max(
+    1, int(os.getenv("VOICEPRINT_MAX_ACTIVE_DIRECT_ENROLLMENTS", "1"))
+)
+
+
+class _ImmediateAdmissionGate:
+    """Thread-safe, non-waiting admission gate for request-sized resources."""
+
+    def __init__(self, max_active: int):
+        self._slots = threading.BoundedSemaphore(value=max_active)
+
+    def try_acquire(self) -> bool:
+        return self._slots.acquire(blocking=False)
+
+    def release(self) -> None:
+        self._slots.release()
+
+
+_DIRECT_ENROLLMENT_ADMISSION_GATE = _ImmediateAdmissionGate(
+    VOICEPRINT_MAX_ACTIVE_DIRECT_ENROLLMENTS
+)
 
 # Public share-link settings (for "ChatGPT read from URL" flows)
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL")  # Optional override, e.g. https://api.vexa.ai
@@ -63,6 +94,9 @@ ROUTE_SCOPES = {
     "/b/": {"browser"},
     "/transcripts": {"tx"},
     "/meetings": {"tx"},
+    "/transcription-dictionary": {"tx"},
+    "/speaker-profiles": {"tx"},
+    "/voiceprints": {"tx"},
 }
 
 # --- Validation at startup ---
@@ -818,6 +852,252 @@ async def transcribe_meeting_proxy(meeting_id: int, request: Request):
     """Forward transcribe request to Bot Manager."""
     url = f"{MEETING_API_URL}/meetings/{meeting_id}/transcribe"
     return await forward_request(app.state.http_client, "POST", url, request)
+
+
+@app.get(
+    "/meetings/{meeting_id}/transcription-status",
+    tags=["Meetings"],
+    summary="Get deferred transcription run status",
+    dependencies=[Depends(api_key_scheme)],
+)
+async def transcription_status_proxy(meeting_id: int, request: Request):
+    url = f"{MEETING_API_URL}/meetings/{meeting_id}/transcription-status"
+    return await forward_request(app.state.http_client, "GET", url, request)
+
+
+@app.patch(
+    "/meetings/{meeting_id}/transcripts/speakers",
+    tags=["Transcriptions"],
+    summary="Update transcript speaker labels",
+    dependencies=[Depends(api_key_scheme)],
+)
+async def update_transcript_speakers_proxy(meeting_id: int, request: Request):
+    return await forward_request(
+        app.state.http_client,
+        "PATCH",
+        f"{MEETING_API_URL}/meetings/{meeting_id}/transcripts/speakers",
+        request,
+    )
+
+
+@app.delete(
+    "/meetings/{meeting_id}/speaker-suggestions/{cluster_id}",
+    tags=["Transcriptions"],
+    summary="Reject a speaker suggestion",
+    dependencies=[Depends(api_key_scheme)],
+)
+async def reject_speaker_suggestion_proxy(
+    meeting_id: int,
+    cluster_id: str,
+    request: Request,
+):
+    return await forward_request(
+        app.state.http_client,
+        "DELETE",
+        f"{MEETING_API_URL}/meetings/{meeting_id}/speaker-suggestions/{cluster_id}",
+        request,
+    )
+
+
+async def _require_voiceprint_tx(request: Request) -> dict:
+    """Authenticate route-local tombstones/body guards without forwarding."""
+    client_key = request.headers.get("x-api-key")
+    if not client_key:
+        raise HTTPException(status_code=401, detail="Missing API key")
+    user_data = await _resolve_token(app.state.http_client, client_key)
+    if not user_data:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    if not set(user_data.get("scopes", [])) & ROUTE_SCOPES["/voiceprints"]:
+        raise HTTPException(status_code=403, detail="Insufficient scope for this endpoint")
+    return user_data
+
+
+async def _cache_bounded_voiceprint_body(request: Request, max_bytes: int) -> None:
+    """Bound a voiceprint body before ``forward_request`` buffers it."""
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > max_bytes:
+                raise HTTPException(status_code=413, detail="Voiceprint audio request is too large")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Invalid Content-Length") from exc
+
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > max_bytes:
+            raise HTTPException(status_code=413, detail="Voiceprint audio request is too large")
+        body.extend(chunk)
+    # Starlette's Request.body() reuses this cache.  We only set it after the
+    # bounded stream completes, so `forward_request` never buffers an
+    # unbounded chunked body itself.
+    request._body = bytes(body)
+
+
+@app.post(
+    "/voiceprints/enroll-from-cluster",
+    tags=["Voiceprints"],
+    summary="Disabled legacy cluster-based voiceprint enrollment",
+    dependencies=[Depends(api_key_scheme)],
+)
+async def enroll_voiceprint_from_cluster_proxy(request: Request):
+    await _require_voiceprint_tx(request)
+    raise HTTPException(
+        status_code=410,
+        detail="Cluster-based enrollment is disabled; review selected audio first",
+    )
+
+
+@app.post(
+    "/voiceprints/preview-from-segments",
+    tags=["Voiceprints"],
+    summary="Preview the exact selected transcript audio for voiceprint enrollment",
+    dependencies=[Depends(api_key_scheme)],
+)
+async def preview_voiceprint_from_segments_proxy(request: Request):
+    await _require_voiceprint_tx(request)
+    await _cache_bounded_voiceprint_body(request, VOICEPRINT_SEGMENTS_BODY_MAX_BYTES)
+    return await forward_request(
+        app.state.http_client,
+        "POST",
+        f"{MEETING_API_URL}/voiceprints/preview-from-segments",
+        request,
+        timeout=180.0,
+    )
+
+
+@app.post(
+    "/voiceprints/enroll-from-segments",
+    tags=["Voiceprints"],
+    summary="Enroll a voiceprint from user-verified transcript segments",
+    dependencies=[Depends(api_key_scheme)],
+)
+async def enroll_voiceprint_from_segments_proxy(request: Request):
+    await _require_voiceprint_tx(request)
+    await _cache_bounded_voiceprint_body(request, VOICEPRINT_SEGMENTS_BODY_MAX_BYTES)
+    return await forward_request(
+        app.state.http_client,
+        "POST",
+        f"{MEETING_API_URL}/voiceprints/enroll-from-segments",
+        request,
+        timeout=180.0,
+    )
+
+
+@app.post(
+    "/voiceprints/enroll-from-audio",
+    tags=["Voiceprints"],
+    summary="Enroll a voiceprint from a user-recorded sample",
+    dependencies=[Depends(api_key_scheme)],
+)
+async def enroll_voiceprint_from_audio_proxy(request: Request):
+    await _require_voiceprint_tx(request)
+    if not _DIRECT_ENROLLMENT_ADMISSION_GATE.try_acquire():
+        raise HTTPException(
+            status_code=429,
+            detail="Direct voiceprint enrollment capacity is busy; retry shortly",
+            headers={"Retry-After": "1", "Cache-Control": "no-store"},
+        )
+    try:
+        await _cache_bounded_voiceprint_body(request, VOICEPRINT_DIRECT_AUDIO_BODY_MAX_BYTES)
+        return await forward_request(
+            app.state.http_client,
+            "POST",
+            f"{MEETING_API_URL}/voiceprints/enroll-from-audio",
+            request,
+            timeout=180.0,
+        )
+    finally:
+        _DIRECT_ENROLLMENT_ADMISSION_GATE.release()
+
+
+@app.get(
+    "/speaker-profiles",
+    tags=["Voiceprints"],
+    summary="List speaker profiles",
+    dependencies=[Depends(api_key_scheme)],
+)
+async def list_speaker_profiles_proxy(request: Request):
+    return await forward_request(
+        app.state.http_client,
+        "GET",
+        f"{MEETING_API_URL}/speaker-profiles",
+        request,
+    )
+
+
+@app.delete(
+    "/speaker-profiles/{profile_id}",
+    tags=["Voiceprints"],
+    summary="Delete a speaker profile",
+    dependencies=[Depends(api_key_scheme)],
+)
+async def delete_speaker_profile_proxy(profile_id: int, request: Request):
+    return await forward_request(
+        app.state.http_client,
+        "DELETE",
+        f"{MEETING_API_URL}/speaker-profiles/{profile_id}",
+        request,
+    )
+
+
+@app.get(
+    "/transcription-dictionary",
+    tags=["Transcriptions"],
+    summary="List transcription dictionary terms",
+    dependencies=[Depends(api_key_scheme)],
+)
+async def list_transcription_dictionary_proxy(request: Request):
+    return await forward_request(
+        app.state.http_client,
+        "GET",
+        f"{MEETING_API_URL}/transcription-dictionary",
+        request,
+    )
+
+
+@app.post(
+    "/transcription-dictionary",
+    tags=["Transcriptions"],
+    summary="Create a transcription dictionary term",
+    dependencies=[Depends(api_key_scheme)],
+)
+async def create_transcription_dictionary_proxy(request: Request):
+    return await forward_request(
+        app.state.http_client,
+        "POST",
+        f"{MEETING_API_URL}/transcription-dictionary",
+        request,
+    )
+
+
+@app.patch(
+    "/transcription-dictionary/{term_id}",
+    tags=["Transcriptions"],
+    summary="Update a transcription dictionary term",
+    dependencies=[Depends(api_key_scheme)],
+)
+async def patch_transcription_dictionary_proxy(term_id: int, request: Request):
+    return await forward_request(
+        app.state.http_client,
+        "PATCH",
+        f"{MEETING_API_URL}/transcription-dictionary/{term_id}",
+        request,
+    )
+
+
+@app.delete(
+    "/transcription-dictionary/{term_id}",
+    tags=["Transcriptions"],
+    summary="Delete a transcription dictionary term",
+    dependencies=[Depends(api_key_scheme)],
+)
+async def delete_transcription_dictionary_proxy(term_id: int, request: Request):
+    return await forward_request(
+        app.state.http_client,
+        "DELETE",
+        f"{MEETING_API_URL}/transcription-dictionary/{term_id}",
+        request,
+    )
 
 # --- Transcription Collector Routes ---
 @app.get("/meetings",

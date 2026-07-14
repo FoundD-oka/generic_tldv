@@ -21,6 +21,7 @@ from faster_whisper import WhisperModel
 # faster-whisper uses CTranslate2 internally (no PyTorch needed)
 
 import soniox_adapter
+import gemini_adapter
 
 # Logging
 logging.basicConfig(
@@ -299,6 +300,26 @@ async def transcribe_audio(
     """
     if not requested_model:
         raise HTTPException(status_code=400, detail="Model parameter is required")
+
+    if gemini_adapter.is_gemini_model(requested_model):
+        logger.info(
+            "Worker %s routing deferred audio to Gemini model=%s filename=%s",
+            WORKER_ID, requested_model, file.filename,
+        )
+        try:
+            return await gemini_adapter.transcribe_upload_via_gemini(
+                file,
+                filename=file.filename or "audio.wav",
+                model=requested_model,
+                language=language,
+                prompt=prompt,
+            )
+        except gemini_adapter.GeminiError as exc:
+            logger.warning("Gemini transcription failed code=%s", exc.code)
+            raise HTTPException(
+                status_code=exc.status_code,
+                detail={"code": exc.code, "message": str(exc)},
+            ) from exc
 
     # Soniox async route (stt-async-* models): external API with speaker
     # diarization — no local GPU/queue involvement, so it bypasses the Whisper
