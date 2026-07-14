@@ -57,6 +57,85 @@ make_plan() {
 fable() { scripts/harness/external-consultation.sh record "$1" --mode "$2" --response-file .pipeline/tmp/ship.json >/dev/null; }
 codex_review() { scripts/harness/codex-review.sh record "$1" --mode "$2" --response-file .pipeline/tmp/ship.json >/dev/null; }
 
+# The live CLI is replaced with a deterministic fixture so the invocation
+# contract and failure diagnostics can be tested without a model call.
+fake_cli_dir=".pipeline/tmp/fake-cli"
+mkdir -p "$fake_cli_dir"
+cat > "$fake_cli_dir/claude" <<'SH'
+#!/usr/bin/env bash
+python3 - "$FAKE_CLAUDE_ARGS_FILE" "$@" <<'PY'
+import json, pathlib, sys
+pathlib.Path(sys.argv[1]).write_text(json.dumps(sys.argv[2:]), encoding="utf-8")
+PY
+if [[ "${FAKE_CLAUDE_MODE:-success}" == "error_max_turns" ]]; then
+  printf '%s\n' '{"type":"result","subtype":"error_max_turns","is_error":true,"num_turns":2,"terminal_reason":"max_turns","total_cost_usd":0.42,"errors":["Reached maximum number of turns (1)"]}'
+  exit 1
+fi
+if [[ "${FAKE_CLAUDE_MODE:-success}" == "invalid_response" ]]; then
+  printf '%s\n' '{"type":"result","subtype":"success","is_error":false,"num_turns":1,"total_cost_usd":0.19,"result":{}}'
+  exit 0
+fi
+printf '%s\n' '{"type":"result","subtype":"success","is_error":false,"num_turns":1,"total_cost_usd":0.21,"session_id":"00000000-0000-4000-8000-000000000001","result":{"verdict":"SHIP","summary":"context-only review completed","confidence":"high","findings":[]}}'
+SH
+chmod +x "$fake_cli_dir/claude"
+
+make_plan review-cli-contract S
+FAKE_CLAUDE_ARGS_FILE="$PWD/.pipeline/tmp/fable-args.json" \
+  PATH="$PWD/$fake_cli_dir:$PATH" \
+  scripts/harness/external-consultation.sh run review-cli-contract --mode plan --no-resume --max-calls 1 >/dev/null
+python3 - <<'PY'
+import json, pathlib
+args = json.loads(pathlib.Path('.pipeline/tmp/fable-args.json').read_text())
+assert '--safe-mode' in args
+assert '--strict-mcp-config' in args
+assert '--no-chrome' in args
+assert args[args.index('--tools') + 1] == ''
+assert '--allowedTools' not in args and '--disallowedTools' not in args
+assert not any('MultiEdit' in value for value in args)
+summary = json.load(open('.pipeline/evidence/review-cli-contract/external-consultation/consultation-plan-summary.json'))
+assert summary['status'] == 'completed'
+assert summary['invocation']['tool_mode'] == 'context_only'
+assert summary['invocation']['safe_mode'] is True
+PY
+
+make_plan review-cli-error S
+if FAKE_CLAUDE_MODE=error_max_turns \
+  FAKE_CLAUDE_ARGS_FILE="$PWD/.pipeline/tmp/fable-error-args.json" \
+  PATH="$PWD/$fake_cli_dir:$PATH" \
+  scripts/harness/external-consultation.sh run review-cli-error --mode plan --no-resume --max-calls 1 >/dev/null 2>&1; then
+  echo "expected structured Fable CLI error to fail" >&2; exit 1
+fi
+python3 - <<'PY'
+import json, pathlib
+event = json.loads(pathlib.Path('.pipeline/evidence/review-cli-error/external-consultation/consultation-events.jsonl').read_text().splitlines()[-1])
+assert event['status'] == 'failed'
+assert event['failure_kind'] == 'error_max_turns'
+assert event['num_turns'] == 2
+assert event['total_cost_usd'] == 0.42
+assert event['max_turns'] == 3
+dual = pathlib.Path('scripts/harness/dual-review.sh').read_text()
+assert '"--tools", ""' in dual
+assert '"--strict-mcp-config"' in dual
+assert '"--max-budget-usd", fable_max_budget_usd' in dual
+assert 'MultiEdit' not in dual
+PY
+
+make_plan review-cli-invalid S
+if FAKE_CLAUDE_MODE=invalid_response \
+  FAKE_CLAUDE_ARGS_FILE="$PWD/.pipeline/tmp/fable-invalid-args.json" \
+  PATH="$PWD/$fake_cli_dir:$PATH" \
+  scripts/harness/external-consultation.sh run review-cli-invalid --mode plan --no-resume --max-calls 1 >/dev/null 2>&1; then
+  echo "expected malformed successful Fable payload to fail" >&2; exit 1
+fi
+python3 - <<'PY'
+import json, pathlib
+event = json.loads(pathlib.Path('.pipeline/evidence/review-cli-invalid/external-consultation/consultation-events.jsonl').read_text().splitlines()[-1])
+assert event['status'] == 'failed'
+assert event['failure_kind'] == 'error_invalid_response'
+assert 'verdict must be MUST_FIX, SHOULD_FIX, or SHIP' in event['errors']
+assert not pathlib.Path('.pipeline/evidence/review-cli-invalid/external-consultation/consultation-plan-summary.json').exists()
+PY
+
 # S: plan review is required, routine post review is not.
 make_plan review-s S
 if .claude/hooks/external-consultation-validate.sh review-s >/dev/null 2>&1; then

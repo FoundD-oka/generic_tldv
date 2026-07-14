@@ -182,6 +182,10 @@ The consultation is a review fortress, not a source of truth. Record it under
 findings, then verify adopted claims with local tests, source checks, or project
 evidence.
 
+Fable receives a self-contained brief in context-only safe mode. Built-in tools,
+MCP, project hooks, and project skills are disabled for the subprocess so the
+bounded review turns are reserved for the structured response.
+
 ## Adapter Contracts
 
 External tools used by the harness should have manifests under

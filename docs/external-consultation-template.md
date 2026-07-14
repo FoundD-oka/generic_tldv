@@ -12,7 +12,8 @@ not a substitute for tests, source checks, or project evidence.
 
 - provider: claude-fable-cli
 - invocation: `claude -p --model fable`
-- no Edit/Write/MultiEdit/NotebookEdit tools
+- safe mode, built-in tools disabled, MCP disabled
+- context-only review of the generated self-contained brief
 - no repository mutation by the advisor
 - no secrets, credentials, customer PII, private tokens, or unredacted proprietary data
 - redaction confirmed: yes/no
