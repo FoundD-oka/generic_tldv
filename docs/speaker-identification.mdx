@@ -5,6 +5,15 @@ description: "How Vexa identifies who said what in meetings"
 
 Vexa attributes transcript segments to individual speakers using platform-specific detection. This page explains how it works and what to expect.
 
+## 「話者」と「参加者」は別データ
+
+- **話者**は、音声と発話インジケーターを対応付けた「誰が話したか」の情報です。
+- **参加者ロスター**は、Google Meetの参加者パネルとタイルから会議中に観測した「誰が参加していたか」の情報です。
+
+無言の参加者は文字起こしの`speaker`には現れませんが、参加者ロスターへは保存され、会議終了後の`meeting.data.participants`へ反映されます。途中退出者も、会議中の累積観測に残ります。
+
+現在の参加者ロスター自動取得はGoogle Meetのみです。Google MeetのDOMに依存するためベストエフォートであり、大人数会議の仮想スクロールや同一表示名の参加者を完全には区別できません。ロスターを取得できない場合は、従来どおり文字起こし話者を参加者候補として使います。
+
 ## How It Works
 
 Vexa uses **DOM-based speaker correlation** — not audio-based diarization. The bot observes the meeting platform's UI to detect who is currently speaking, then correlates that with the audio transcription stream.

@@ -1,0 +1,5 @@
+{"type":"thread.started","thread_id":"codex-app-participant-roster","task_id":"participant-roster","timestamp":"2026-07-14T06:01:03Z","runtime_profile":"codex-app"}
+{"type":"turn.started","task_id":"participant-roster","timestamp":"2026-07-14T06:01:03Z"}
+{"type":"turn.completed","task_id":"participant-roster","timestamp":"2026-07-14T06:42:53Z","status":"succeeded","evidence_manifest":".pipeline/evidence/participant-roster/evidence-manifest.json","diff_hash":"sha256:ae55feb05477f04e752934f0799f663aec9712cf3a9b23779076ce53f1ecdb5b"}
+{"type":"turn.started","task_id":"participant-roster","timestamp":"2026-07-14T07:13:51Z","phase":"final-audit"}
+{"type":"turn.completed","task_id":"participant-roster","timestamp":"2026-07-14T07:32:40Z","status":"succeeded","evidence_manifest":".pipeline/evidence/participant-roster/evidence-manifest.json","diff_hash":"sha256:3f30547562e6da63e43c7a81b61ecaec2444a6f78051dcf12a05e3bf9cca09fc","codex_review":"SHIP","pr_ready":"ready"}

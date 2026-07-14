@@ -339,10 +339,44 @@ export class MeetingChatService {
 
   // ==================== Google Meet ====================
 
+  private async acquireGoogleMeetPanelLock(timeoutMs = 3000): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    while (!this.page.isClosed() && Date.now() < deadline) {
+      const acquired = await this.page.evaluate(() => {
+        const browserState = window as any;
+        if (
+          browserState.__vexaPeoplePanelSnapshotInFlight ||
+          browserState.__vexaChatSendInFlight
+        ) return false;
+        browserState.__vexaChatSendInFlight = true;
+        return true;
+      });
+      if (acquired) return true;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    return false;
+  }
+
+  private async releaseGoogleMeetPanelLock(): Promise<void> {
+    if (this.page.isClosed()) return;
+    try {
+      await this.page.evaluate(() => {
+        (window as any).__vexaChatSendInFlight = false;
+      });
+    } catch {}
+  }
+
   private async sendGoogleMeetChat(text: string): Promise<boolean> {
     if (this.page.isClosed()) return false;
 
-    return await this.page.evaluate(async (messageText: string) => {
+    const lockAcquired = await this.acquireGoogleMeetPanelLock();
+    if (!lockAcquired) {
+      log('[Chat] Timed out waiting for the Google Meet side-panel lock');
+      return false;
+    }
+
+    try {
+      return await this.page.evaluate(async (messageText: string) => {
       // Open chat panel if not already open
       const chatBtnSelectors = [
         'button[aria-label*="Chat with everyone"]',
@@ -377,30 +411,46 @@ export class MeetingChatService {
         '[contenteditable="true"][aria-label*="Message"]'
       ];
 
-      let input: HTMLElement | null = null;
-      for (const sel of inputSelectors) {
-        input = document.querySelector(sel) as HTMLElement | null;
-        if (input) break;
-      }
+      const findConnectedInput = (): HTMLElement | null => {
+        for (const sel of inputSelectors) {
+          const candidate = document.querySelector(sel) as HTMLElement | null;
+          if (candidate?.isConnected) return candidate;
+        }
+        return null;
+      };
+
+      let input = findConnectedInput();
 
       if (!input) {
         (window as any).logBot?.('[Chat] Could not find chat input');
         return false;
       }
 
-      // Focus and type
-      input.focus();
-      if (input.tagName === 'TEXTAREA') {
-        (input as HTMLTextAreaElement).value = messageText;
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-      } else {
-        // ContentEditable
-        input.textContent = messageText;
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-      }
+      const fillInput = (target: HTMLElement) => {
+        target.focus();
+        if (target.tagName === 'TEXTAREA') {
+          (target as HTMLTextAreaElement).value = messageText;
+          target.dispatchEvent(new Event('input', { bubbles: true }));
+        } else {
+          target.textContent = messageText;
+          target.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      };
+      fillInput(input);
 
       // Small delay then press Enter to send
       await new Promise(r => setTimeout(r, 100));
+
+      // A side-panel DOM refresh can replace the input node. Never report a
+      // successful send through a detached element; reacquire and refill it.
+      if (!input.isConnected) {
+        input = findConnectedInput();
+        if (!input) {
+          (window as any).logBot?.('[Chat] Chat input detached before send');
+          return false;
+        }
+        fillInput(input);
+      }
 
       // Try send button first
       const sendBtnSelectors = [
@@ -425,7 +475,10 @@ export class MeetingChatService {
 
       (window as any).logBot?.(`[Chat] Sent message: ${messageText.substring(0, 50)}`);
       return true;
-    }, text);
+      }, text);
+    } finally {
+      await this.releaseGoogleMeetPanelLock();
+    }
   }
 
   private async initGoogleMeetObserver(): Promise<void> {

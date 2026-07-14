@@ -761,6 +761,11 @@ async def update_meeting_data(
     for key, value in update_data.items():
         if key in allowed_fields and value is not None:
             new_data[key] = value
+            if key == "participants":
+                # A user-authenticated PATCH is authoritative. Preserve it when
+                # later bot callbacks or post-meeting retries refresh the
+                # observed roster.
+                new_data["participants_source"] = "manual"
             updated_fields.append(f"{key}={value}")
 
     # Assign the new dict to ensure SQLAlchemy detects the change
