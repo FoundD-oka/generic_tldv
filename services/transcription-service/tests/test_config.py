@@ -4,6 +4,7 @@ Tests config parsing, quality heuristics, and tier logic without a running model
 """
 import os
 import sys
+from types import SimpleNamespace
 import pytest
 
 # Add service root to path
@@ -22,6 +23,33 @@ from main import (
     LOG_PROB_THRESHOLD,
     COMPRESSION_RATIO_THRESHOLD,
 )
+
+
+@pytest.mark.asyncio
+async def test_gemini_route_passes_upload_without_eager_read(monkeypatch):
+    """Gemini owns body loading so its semaphore also bounds request memory."""
+    import main
+
+    upload = SimpleNamespace(filename="meeting.wav")
+    captured = {}
+
+    async def fake_transcribe(received_upload, **kwargs):
+        captured["upload"] = received_upload
+        captured.update(kwargs)
+        return {"text": "ok", "segments": []}
+
+    monkeypatch.setattr(main.gemini_adapter, "transcribe_upload_via_gemini", fake_transcribe)
+
+    result = await main.transcribe_audio(
+        request=SimpleNamespace(headers={}),
+        file=upload,
+        requested_model="gemini-3.5-flash",
+    )
+
+    assert result == {"text": "ok", "segments": []}
+    assert captured["upload"] is upload
+    assert captured["filename"] == "meeting.wav"
+    assert captured["model"] == "gemini-3.5-flash"
 
 
 # --- _env_bool ---

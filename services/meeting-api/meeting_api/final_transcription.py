@@ -13,6 +13,8 @@ import logging
 import os
 import subprocess
 import tempfile
+import hashlib
+import uuid
 import wave
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -35,7 +37,7 @@ logger = logging.getLogger("meeting_api.final_transcription")
 
 FinalTranscriptionMode = Literal["reject_if_exists", "replace"]
 
-FINAL_TRANSCRIPTION_STATUSES = {"queued", "running", "succeeded", "failed", "skipped", "skipped_no_speaker_events"}
+FINAL_TRANSCRIPTION_STATUSES = {"queued", "running", "succeeded", "failed", "unknown_manual_reconcile", "skipped", "skipped_no_speaker_events"}
 FINAL_TRANSCRIPTION_MAX_ATTEMPTS = int(os.getenv("FINAL_TRANSCRIPTION_MAX_ATTEMPTS", "24"))
 FINAL_TRANSCRIPTION_SWEEP_LIMIT = int(os.getenv("FINAL_TRANSCRIPTION_SWEEP_LIMIT", "10"))
 FINAL_TRANSCRIPTION_DEFAULT_LANGUAGE = os.getenv("FINAL_TRANSCRIPTION_DEFAULT_LANGUAGE", "ja")
@@ -59,6 +61,58 @@ LANE_SHARED_MIC_MIN_CLUSTER_DURATION_S = float(
 LANE_SHARED_MIC_MIN_CLUSTER_TOKENS = int(float(
     os.getenv("LANE_SHARED_MIC_MIN_CLUSTER_TOKENS", "5")
 ))
+
+RUN_LEASE_SECONDS = int(os.getenv("FINAL_TRANSCRIPTION_RUN_LEASE_SECONDS", "2100"))
+RUN_HEARTBEAT_SECONDS = int(os.getenv("FINAL_TRANSCRIPTION_HEARTBEAT_SECONDS", "60"))
+
+
+class ProviderTranscriptionError(HTTPException):
+    def __init__(self, status_code: int, detail: str, *, code: str = "provider_error"):
+        super().__init__(status_code=status_code, detail=detail)
+        self.code = code
+
+
+def _requested_model() -> str:
+    return os.getenv("DEFERRED_TRANSCRIPTION_MODEL", "large-v3-turbo")
+
+
+def _is_gemini_requested() -> bool:
+    return _requested_model().lower().startswith("gemini-")
+
+
+def _lease_expires_at() -> str:
+    return (datetime.utcnow() + timedelta(seconds=RUN_LEASE_SECONDS)).isoformat()
+
+
+async def _heartbeat_run_lease(meeting_id: int, run_id: str) -> None:
+    from .database import async_session_local
+
+    while True:
+        await asyncio.sleep(RUN_HEARTBEAT_SECONDS)
+        async with async_session_local() as heartbeat_db:
+            meeting = (await heartbeat_db.execute(
+                select(Meeting).where(Meeting.id == meeting_id).with_for_update()
+            )).scalars().first()
+            if meeting is None:
+                return
+            state = dict(_meeting_data(meeting).get("final_transcription") or {})
+            if state.get("run_id") != run_id or state.get("status") != "running":
+                return
+            _set_final_transcription_state(
+                meeting,
+                lease_expires_at=_lease_expires_at(),
+                heartbeat_at=_utcnow_iso(),
+                updated_at=_utcnow_iso(),
+            )
+            await heartbeat_db.commit()
+
+
+def _bounded_lane_cluster(lane_key: str, cluster: Optional[str] = None) -> str:
+    raw = f"lane:{lane_key}" + (f":{cluster}" if cluster else "")
+    if len(raw) <= 64:
+        return raw
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:40]
+    return f"lane:h:{digest}"
 
 
 @dataclass(frozen=True)
@@ -128,7 +182,12 @@ def queue_final_transcription(meeting: Meeting, *, triggered_by: str = "post_mee
         return True
 
     current = dict(data.get("final_transcription") or {})
-    if current.get("status") in {"queued", "running", "succeeded"}:
+    if current.get("status") in {
+        "queued",
+        "running",
+        "succeeded",
+        "unknown_manual_reconcile",
+    }:
         return False
     if current.get("status") == "failed" and not current.get("retryable"):
         return False
@@ -137,11 +196,18 @@ def queue_final_transcription(meeting: Meeting, *, triggered_by: str = "post_mee
     _set_final_transcription_state(
         meeting,
         status="queued",
-        queued_at=current.get("queued_at") or now,
+        queued_at=now,
         updated_at=now,
         attempts=current.get("attempts") or 0,
         last_error=None,
+        error_code=None,
         retryable=True,
+        run_id=None,
+        lease_expires_at=None,
+        provider_started_at=None,
+        heartbeat_at=None,
+        started_at=None,
+        failed_at=None,
         triggered_by=triggered_by,
     )
     return True
@@ -431,7 +497,7 @@ def _apply_lane_identity(
         for seg in segments:
             cluster = seg.get("speaker_cluster")
             if cluster:
-                seg["speaker_cluster"] = f"lane:{lane.lane_key}:{cluster}"
+                seg["speaker_cluster"] = _bounded_lane_cluster(lane.lane_key, str(cluster))
             else:
                 # BUG-001 — a segment Soniox could not diarize (no cluster
                 # tag) must not collapse into the shared meeting-wide blank
@@ -442,11 +508,11 @@ def _apply_lane_identity(
                 # status in collector/endpoints.py), i.e. it is flagged
                 # needs_review exactly like a named sub-cluster segment
                 # instead of silently disappearing into "".
-                seg["speaker_cluster"] = f"lane:{lane.lane_key}:unclustered"
+                seg["speaker_cluster"] = _bounded_lane_cluster(lane.lane_key, "unclustered")
             seg["speaker"] = None
     else:
         for seg in segments:
-            seg["speaker_cluster"] = f"lane:{lane.lane_key}"
+            seg["speaker_cluster"] = _bounded_lane_cluster(lane.lane_key)
             if lane.lane_label:
                 seg["speaker"] = lane.lane_label
     for seg in segments:
@@ -494,6 +560,7 @@ async def _transcribe_lanes(
     *,
     language: str,
     speaker_events: List[Dict[str, Any]],
+    prompt: Optional[str] = None,
 ) -> tuple[List[Dict[str, Any]], str, List[str]]:
     """All-or-nothing lane STT. Returns (merged segments, detected language,
     shared-mic lane keys — issue #26: the lane_keys whose _apply_lane_identity
@@ -568,7 +635,10 @@ async def _transcribe_lanes(
 
     async def _transcribe(lane: LaneTranscriptionSource, audio: bytes, fmt: str, duration: float):
         async with semaphore:
-            tx = await _call_transcription_service(audio, fmt, language=language)
+            if prompt:
+                tx = await _call_transcription_service(audio, fmt, language=language, prompt=prompt)
+            else:
+                tx = await _call_transcription_service(audio, fmt, language=language)
             shifted_events = _shift_speaker_events(speaker_events, lane.start_offset_seconds)
             segments, detected = _parse_segments(
                 tx,
@@ -630,7 +700,7 @@ async def _transcribe_lanes(
     if errors:
         raise LaneTranscriptionFallback(
             f"lane STT failed for {len(errors)}/{len(lane_sources)} lanes: {errors[0]}"
-        )
+        ) from errors[0]
 
     detected_language = (
         max(language_durations.items(), key=lambda kv: kv[1])[0]
@@ -804,21 +874,24 @@ async def _call_transcription_service(
     media_format: str,
     *,
     language: Optional[str],
+    prompt: Optional[str] = None,
 ) -> Dict[str, Any]:
     tx_url, tx_token = _deferred_transcription_endpoint()
     if not tx_url:
         raise HTTPException(status_code=503, detail="TRANSCRIPTION_SERVICE_URL not configured")
 
-    timeout = float(os.getenv("DEFERRED_TRANSCRIPTION_TIMEOUT_SECONDS", "120"))
+    timeout = float(os.getenv("DEFERRED_TRANSCRIPTION_TIMEOUT_SECONDS", "1680"))
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
             files = {"file": (f"recording.{media_format}", audio_data, f"audio/{media_format}")}
             form_data = {
-                "model": os.getenv("DEFERRED_TRANSCRIPTION_MODEL", "large-v3-turbo"),
+                "model": _requested_model(),
                 "transcription_tier": "deferred",
             }
             if language:
                 form_data["language"] = language
+            if prompt and _is_gemini_requested():
+                form_data["prompt"] = prompt
             headers = {"X-Transcription-Tier": "deferred"}
             if tx_token:
                 headers["Authorization"] = f"Bearer {tx_token}"
@@ -833,15 +906,29 @@ async def _call_transcription_service(
             return response.json()
     except httpx.HTTPStatusError as exc:
         status_code = exc.response.status_code
-        logger.error("Transcription service error: %s %s", status_code, exc.response.text)
-        if status_code == 503 or 500 <= status_code < 600:
-            raise HTTPException(status_code=502, detail=f"Transcription service error: {status_code}") from exc
-        raise HTTPException(status_code=400, detail=f"Transcription service rejected request: {status_code}") from exc
+        code = "provider_error"
+        try:
+            detail = exc.response.json().get("detail")
+            if isinstance(detail, dict):
+                code = str(detail.get("code") or code)
+        except Exception:
+            pass
+        logger.error("Transcription service error status=%s code=%s", status_code, code)
+        mapped = 409 if code == "unknown_manual_reconcile" else (502 if status_code >= 500 else 422)
+        raise ProviderTranscriptionError(
+            mapped,
+            "Transcription provider failed",
+            code=code,
+        ) from exc
     except HTTPException:
         raise
     except Exception as exc:
         logger.error("Transcription service request failed: %s", exc)
-        raise HTTPException(status_code=502, detail=f"Transcription service unavailable: {exc}") from exc
+        raise ProviderTranscriptionError(
+            409,
+            "Transcription provider result is unknown",
+            code="unknown_manual_reconcile",
+        ) from exc
 
 
 def _parse_segments(
@@ -1049,6 +1136,7 @@ async def run_deferred_transcription(
     language: Optional[str] = None,
     force: bool = False,
     triggered_by: str = "manual_api",
+    expected_run_id: Optional[str] = None,
 ) -> DeferredTranscriptionResult:
     """Generate a deferred transcript and optionally replace existing rows."""
     if mode not in ("reject_if_exists", "replace"):
@@ -1067,6 +1155,28 @@ async def run_deferred_transcription(
             status_code=400,
             detail=f"Meeting status is '{meeting.status}', expected 'completed' or 'failed'",
         )
+
+    current_state = dict(_meeting_data(meeting).get("final_transcription") or {})
+    run_id = expected_run_id or uuid.uuid4().hex
+    current_run_id = current_state.get("run_id")
+    if current_state.get("status") in {"queued", "running"} and current_run_id not in {None, run_id}:
+        lease_raw = current_state.get("lease_expires_at")
+        try:
+            lease = datetime.fromisoformat(str(lease_raw).replace("Z", "+00:00")).replace(tzinfo=None)
+        except (TypeError, ValueError):
+            lease = datetime.min
+        if lease > datetime.utcnow():
+            raise HTTPException(status_code=409, detail="Deferred transcription is already running")
+        if current_state.get("provider_started_at") and _is_gemini_requested():
+            _set_final_transcription_state(
+                meeting,
+                status="unknown_manual_reconcile",
+                retryable=False,
+                last_error="stale Gemini run may have reached provider; automatic retry disabled",
+                updated_at=_utcnow_iso(),
+            )
+            await db.commit()
+            raise HTTPException(status_code=409, detail="Previous Gemini result requires manual reconciliation")
 
     existing_count = (await db.execute(
         select(func.count(Transcription.id)).where(Transcription.meeting_id == meeting_id)
@@ -1090,7 +1200,10 @@ async def run_deferred_transcription(
         # no-speaker-events protection is unnecessary when lanes exist AND
         # are actually usable (BUG-011/BUG-012: an unfinalized lane makes
         # the lane path unavailable too — see _lane_masters_available).
-        and not _lane_masters_available(meeting)
+        # Gemini is canonical mixed-only, so lane availability must not affect
+        # either this protection or its preflight I/O. Soniox keeps the
+        # existing exception: usable lane masters preserve speaker identity.
+        and (_is_gemini_requested() or not _lane_masters_available(meeting))
         and await _has_meaningful_existing_speakers(db, meeting_id)
     ):
         return await _skip_no_speaker_events(meeting, db, meeting_id, triggered_by=triggered_by)
@@ -1109,6 +1222,12 @@ async def run_deferred_transcription(
         raise HTTPException(status_code=404, detail="No finalized audio master found for this meeting")
 
     resolved_language = _resolve_final_transcription_language(meeting, language)
+    dictionary_snapshot: list[dict[str, str]] = []
+    dictionary_prompt: Optional[str] = None
+    if _is_gemini_requested():
+        from .transcription_dictionary import build_dictionary_prompt, load_dictionary_snapshot
+        dictionary_snapshot = await load_dictionary_snapshot(db, meeting.user_id)
+        dictionary_prompt = build_dictionary_prompt(dictionary_snapshot)
     data = _meeting_data(meeting)
     current_state = dict(data.get("final_transcription") or {})
     attempts = int(current_state.get("attempts") or 0) + 1
@@ -1119,13 +1238,25 @@ async def run_deferred_transcription(
         updated_at=_utcnow_iso(),
         attempts=attempts,
         last_error=None,
+        error_code=None,
         retryable=True,
         source_recording_path=source.storage_path,
         source_recording_backend=source.storage_backend,
         language=resolved_language,
         triggered_by=triggered_by,
+        run_id=run_id,
+        lease_expires_at=_lease_expires_at(),
+        heartbeat_at=_utcnow_iso(),
+        requested_model=_requested_model(),
+        provider="gemini" if _is_gemini_requested() else ("soniox" if _requested_model().startswith("stt-async-") else "whisper"),
+        dictionary_term_count=len(dictionary_snapshot),
     )
     await db.commit()
+
+    heartbeat_task = asyncio.create_task(
+        _heartbeat_run_lease(meeting_id, run_id),
+        name=f"final-transcription-heartbeat-{meeting_id}-{run_id[:8]}",
+    )
 
     lane_used = False
     lane_fallback_reason: Optional[str] = None
@@ -1144,7 +1275,8 @@ async def run_deferred_transcription(
             # BUG-012/BUG-023 — restrict lanes to the SAME recording/session
             # as the chosen mixed source; lanes from a different bot session
             # (rejoin) must never merge onto this transcript's timeline.
-            lane_sources = _lane_master_sources(meeting, recording_session_uid=source.session_uid)
+            if not _is_gemini_requested():
+                lane_sources = _lane_master_sources(meeting, recording_session_uid=source.session_uid)
         except LaneTranscriptionFallback as exc:
             lane_fallback_reason = str(exc)
 
@@ -1159,6 +1291,7 @@ async def run_deferred_transcription(
                     lane_sources,
                     language=resolved_language,
                     speaker_events=speaker_events,
+                    prompt=dictionary_prompt,
                 )
                 lane_used = True
                 logger.info(
@@ -1194,6 +1327,8 @@ async def run_deferred_transcription(
                 and not speaker_events
                 and await _has_meaningful_existing_speakers(db, meeting_id)
             ):
+                heartbeat_task.cancel()
+                await asyncio.gather(heartbeat_task, return_exceptions=True)
                 return await _skip_no_speaker_events(meeting, db, meeting_id, triggered_by=triggered_by)
 
             audio_data = await _download_recording_audio(source)
@@ -1208,11 +1343,32 @@ async def run_deferred_transcription(
                 meeting_id,
                 resolved_language,
             )
-            tx_result = await _call_transcription_service(
-                audio_data,
-                media_format,
-                language=resolved_language,
-            )
+            if _is_gemini_requested():
+                locked = (await db.execute(
+                    select(Meeting).where(Meeting.id == meeting_id).with_for_update().execution_options(populate_existing=True)
+                )).scalars().first()
+                if locked is None or dict(_meeting_data(locked).get("final_transcription") or {}).get("run_id") != run_id:
+                    raise HTTPException(status_code=409, detail="Deferred transcription run lost its lease")
+                meeting = locked
+                _set_final_transcription_state(
+                    meeting,
+                    provider_started_at=_utcnow_iso(),
+                    updated_at=_utcnow_iso(),
+                )
+                await db.commit()
+            if dictionary_prompt:
+                tx_result = await _call_transcription_service(
+                    audio_data,
+                    media_format,
+                    language=resolved_language,
+                    prompt=dictionary_prompt,
+                )
+            else:
+                tx_result = await _call_transcription_service(
+                    audio_data,
+                    media_format,
+                    language=resolved_language,
+                )
             segments, detected_language = _parse_segments(
                 tx_result,
                 language=resolved_language,
@@ -1220,19 +1376,34 @@ async def run_deferred_transcription(
                 fallback_duration=fallback_duration,
             )
     except HTTPException as exc:
+        unknown = isinstance(exc, ProviderTranscriptionError) and exc.code == "unknown_manual_reconcile"
+        gemini_admission_timeout = (
+            _is_gemini_requested()
+            and isinstance(exc, ProviderTranscriptionError)
+            and exc.code == "admission_timeout"
+        )
         _set_final_transcription_state(
             meeting,
-            status="failed",
+            status="unknown_manual_reconcile" if unknown else "failed",
             failed_at=_utcnow_iso(),
             updated_at=_utcnow_iso(),
             last_error=str(exc.detail),
-            retryable=_is_retryable_http_error(exc),
+            retryable=(
+                True
+                if gemini_admission_timeout
+                else False if (_is_gemini_requested() or unknown) else _is_retryable_http_error(exc)
+            ),
+            error_code=getattr(exc, "code", None),
             source_recording_path=source.storage_path,
             source_recording_backend=source.storage_backend,
             language=resolved_language,
             triggered_by=triggered_by,
         )
+        if gemini_admission_timeout:
+            _set_final_transcription_state(meeting, provider_started_at=None)
         await db.commit()
+        heartbeat_task.cancel()
+        await asyncio.gather(heartbeat_task, return_exceptions=True)
         raise
     except Exception as exc:
         _set_final_transcription_state(
@@ -1241,14 +1412,30 @@ async def run_deferred_transcription(
             failed_at=_utcnow_iso(),
             updated_at=_utcnow_iso(),
             last_error=str(exc),
-            retryable=True,
+            retryable=not _is_gemini_requested(),
+            error_code="schema_invalid" if _is_gemini_requested() else None,
             source_recording_path=source.storage_path,
             source_recording_backend=source.storage_backend,
             language=resolved_language,
             triggered_by=triggered_by,
         )
         await db.commit()
+        heartbeat_task.cancel()
+        await asyncio.gather(heartbeat_task, return_exceptions=True)
         raise HTTPException(status_code=502, detail=f"Deferred transcription failed: {exc}") from exc
+
+    heartbeat_task.cancel()
+    await asyncio.gather(heartbeat_task, return_exceptions=True)
+
+    if _is_gemini_requested():
+        meeting = (await db.execute(
+            select(Meeting)
+            .where(Meeting.id == meeting_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )).scalars().first()
+        if meeting is None or dict(_meeting_data(meeting).get("final_transcription") or {}).get("run_id") != run_id:
+            raise HTTPException(status_code=409, detail="Deferred transcription run lost its lease")
 
     replaced_count = 0
     if mode == "replace":
@@ -1343,8 +1530,11 @@ async def run_deferred_transcription(
         "speakers": speakers,
         "redis_cache_cleared": redis_cache_cleared,
         "last_error": None,
+        "error_code": None,
         "retryable": False,
         "triggered_by": triggered_by,
+        "run_id": run_id,
+        "lease_expires_at": None,
     })
     meeting_data["final_transcription"] = current_state
     meeting_data["final_transcription_status"] = "succeeded"

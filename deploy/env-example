@@ -17,6 +17,19 @@ TRANSCRIPTION_SERVICE_TOKEN=your-token
 # transcription-service the API key. Leave unset to keep Whisper (DOM mapping).
 #DEFERRED_TRANSCRIPTION_MODEL=stt-async-v5
 #SONIOX_API_KEY=your-soniox-key
+# Gemini is opt-in; keep stt-async-v5 until the live canary passes.
+#DEFERRED_TRANSCRIPTION_MODEL=gemini-3.5-flash
+#GEMINI_API_KEY=your-gemini-key
+#GEMINI_HTTP_TIMEOUT_SECONDS=300
+#GEMINI_CHUNK_DURATION_SECONDS=300
+#GEMINI_CHUNK_OVERLAP_SECONDS=5
+#GEMINI_MIN_CHUNK_DURATION_SECONDS=60
+#GEMINI_MAX_CHUNK_SPLIT_DEPTH=3
+#GEMINI_MAX_OUTPUT_TOKENS=65536
+#GEMINI_THINKING_LEVEL=minimal
+DEFERRED_TRANSCRIPTION_TIMEOUT_SECONDS=1680
+FINAL_TRANSCRIPTION_RUN_LEASE_SECONDS=2100
+FINAL_TRANSCRIPTION_HEARTBEAT_SECONDS=60
 # Deferred-only STT endpoint override (realtime keeps TRANSCRIPTION_SERVICE_URL).
 # Use when realtime runs on a different backend (e.g. host whisper-server)
 # than the Soniox-capable transcription-service.
@@ -206,6 +219,13 @@ VOICEPRINT_SERVICE_URL=http://voiceprint-service:8000
 # VOICEPRINT_SERVICE_TOKENと同じ値を設定する。未設定のまま
 # VOICEPRINT_ALLOW_UNAUTHENTICATED=trueにしない限りvoiceprint-serviceは503を返す。
 VOICEPRINT_SERVICE_TOKEN=
+# 事前録音APIとGatewayの共通raw音声上限（bytes）。
+VOICEPRINT_MAX_DIRECT_AUDIO_BYTES=20971520
+# 事前録音route全体の即時admission上限。body読込前に判定し、満杯なら429を返す。
+# ffmpegだけを制限するVOICEPRINT_MAX_ACTIVE_DIRECT_PIPELINESとは別の防御。
+VOICEPRINT_MAX_ACTIVE_DIRECT_ENROLLMENTS=1
+# 選択区間preview／登録APIのGateway JSON body上限（bytes）。
+VOICEPRINT_SEGMENTS_BODY_MAX_BYTES=65536
 # voiceprint-service自身のトークン設定（上のVOICEPRINT_SERVICE_TOKENと揃えること）
 #VOICEPRINT_ALLOW_UNAUTHENTICATED=false
 # 声紋ベクトルの暗号化鍵（Fernet、meeting-api側でのみ使用）。未設定の場合、
@@ -229,6 +249,17 @@ VOICEPRINT_MIN_CLIP_SECONDS=5
 VOICEPRINT_MAX_CLIP_SECONDS=30
 # クリップ切り出し用ffmpeg呼び出し1件あたりのタイムアウト（秒）
 VOICEPRINT_FFMPEG_TIMEOUT_SECONDS=60
+# 声紋処理で取得するfinalized masterの上限（bytes）。body取得前に検査する。
+VOICEPRINT_MAX_MASTER_BYTES=419430400
+# finalized masterはこの固定上限のrange単位で取得し、メモリ使用量を抑える。
+VOICEPRINT_MASTER_DOWNLOAD_CHUNK_BYTES=4194304
+# finalized master取得のhard timeout（秒）。stat／range取得は専用processで行い、
+# timeout／cancel時はprocessを停止・回収してから一時ファイルを削除する。
+VOICEPRINT_MASTER_DOWNLOAD_TIMEOUT_S=90
+# master取得からffmpeg終了までを通した専用同時実行上限。
+VOICEPRINT_MAX_ACTIVE_MASTER_PIPELINES=1
+# 事前録音のnormalize/ffmpeg専用同時実行上限。cancel時もworker終了までslotを保持する。
+VOICEPRINT_MAX_ACTIVE_DIRECT_PIPELINES=1
 # voiceprint-service自体のリソース設定（`--profile voiceprint`で起動する場合）
 #VOICEPRINT_MAX_AUDIO_BYTES=20971520
 #VOICEPRINT_MAX_ACTIVE_REQUESTS=2

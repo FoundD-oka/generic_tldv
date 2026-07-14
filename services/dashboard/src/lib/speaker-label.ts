@@ -18,6 +18,15 @@ type SpeakerLabelInput = Pick<
 
 /** サブクラスタ形式 `lane:{key}:{sub}` にマッチ（サーバ側の namespace 規則と同じ）。 */
 const LANE_SUBCLUSTER_RE = /^lane:[^:]+:.+$/;
+// `g:` は通常のGemini匿名話者、`x:` はチャンク境界の位相を一意に
+// 証明できず、安全側に重複保持した話者。どちらも画面上では匿名identity
+// として扱うが、`x:` はサーバ側の声紋自動照合対象には入れない。
+const GEMINI_CLUSTER_RE = /^(?:g|x):[0-9a-f]{8}:s[1-9][0-9]*$/;
+
+function isUnconfirmedSpeakerName(speaker: string | null | undefined): boolean {
+  const normalized = (speaker || "").trim();
+  return !normalized || normalized.toLowerCase() === "unknown";
+}
 
 /**
  * ソロレーン形式`lane:{key}`（コロン1つだけ、サブクラスタではない）に
@@ -33,6 +42,13 @@ const LANE_SOLO_RE = /^lane:[^:]+$/;
  * 箇所すべてで使うフォールバックキー。表示には使わない。
  */
 export function getSpeakerIdentityKey(segment: SpeakerLabelInput): string {
+  if (
+    segment.speaker_cluster
+    && GEMINI_CLUSTER_RE.test(segment.speaker_cluster)
+    && isUnconfirmedSpeakerName(segment.speaker)
+  ) {
+    return segment.speaker_cluster;
+  }
   return segment.speaker || segment.speaker_cluster || "";
 }
 
@@ -44,6 +60,13 @@ export function getSpeakerIdentityKey(segment: SpeakerLabelInput): string {
  */
 export function isNeedsReviewSegment(segment: SpeakerLabelInput): boolean {
   if (segment.speaker_mapping_status === "needs_review") return true;
+  if (
+    segment.speaker_cluster
+    && GEMINI_CLUSTER_RE.test(segment.speaker_cluster)
+    && isUnconfirmedSpeakerName(segment.speaker)
+  ) {
+    return true;
+  }
   return !segment.speaker && !!segment.speaker_cluster && LANE_SUBCLUSTER_RE.test(segment.speaker_cluster);
 }
 
@@ -89,11 +112,11 @@ export function buildSpeakerDisplayLabels(segments: SpeakerLabelInput[]): Map<st
   for (const seg of segments) {
     const key = getSpeakerIdentityKey(seg);
     if (!key || labels.has(key)) continue;
-    if (seg.speaker) {
-      labels.set(key, seg.speaker);
-    } else if (isNeedsReviewSegment(seg)) {
+    if (isNeedsReviewSegment(seg)) {
       labels.set(key, `要確認の話者${indexToLetters(nextReviewIndex)}`);
       nextReviewIndex += 1;
+    } else if (seg.speaker) {
+      labels.set(key, seg.speaker);
     } else if (isUnlabeledSoloLaneSegment(seg)) {
       labels.set(key, `未特定の話者${indexToLetters(nextUnlabeledIndex)}`);
       nextUnlabeledIndex += 1;
@@ -124,6 +147,6 @@ export function getSpeakerDisplayLabel(
  */
 export function resolveSpeakerLabelByKey(key: string, labels: Map<string, string>): string {
   if (key && labels.has(key)) return labels.get(key)!;
-  if (key.startsWith("lane:")) return "未特定の話者";
+  if (key.startsWith("lane:") || GEMINI_CLUSTER_RE.test(key)) return "未特定の話者";
   return key || "不明";
 }

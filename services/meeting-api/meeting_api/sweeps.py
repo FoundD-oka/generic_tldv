@@ -712,8 +712,11 @@ async def _sweep_final_transcription_jobs(
                   data #>> '{final_transcription,status}' = 'failed'
                   AND COALESCE(data #>> '{final_transcription,retryable}', 'false') = 'true'
                 )
+                OR data #>> '{final_transcription,status}' = 'running'
               )
-            ORDER BY id DESC
+            ORDER BY
+              CASE WHEN data #>> '{final_transcription,status}' = 'running' THEN 1 ELSE 0 END,
+              id DESC
             LIMIT :limit
         """), {
             "completed": MeetingStatus.COMPLETED.value,
@@ -735,8 +738,39 @@ async def _sweep_final_transcription_jobs(
             data = dict(meeting.data or {}) if isinstance(meeting.data, dict) else {}
             job = dict(data.get("final_transcription") or {})
             status = job.get("status")
-            if status == "succeeded" or status == "running":
+            if status in {"succeeded", "unknown_manual_reconcile"}:
                 continue
+            if status == "running":
+                lease_raw = job.get("lease_expires_at")
+                try:
+                    lease = datetime.fromisoformat(str(lease_raw).replace("Z", "+00:00")).replace(tzinfo=None)
+                except (TypeError, ValueError):
+                    lease = datetime.min
+                if lease > datetime.utcnow():
+                    continue
+                if job.get("provider") == "gemini" and job.get("provider_started_at"):
+                    _set_final_transcription_state(
+                        meeting,
+                        status="unknown_manual_reconcile",
+                        retryable=False,
+                        error_code="unknown_manual_reconcile",
+                        last_error="stale Gemini run may have reached provider; automatic retry disabled",
+                        updated_at=datetime.utcnow().isoformat(),
+                    )
+                    await db.commit()
+                    continue
+                _set_final_transcription_state(
+                    meeting,
+                    status="queued",
+                    run_id=None,
+                    lease_expires_at=None,
+                    provider_started_at=None,
+                    heartbeat_at=None,
+                    started_at=None,
+                    retryable=True,
+                    updated_at=datetime.utcnow().isoformat(),
+                )
+                await db.commit()
             if status == "failed" and not job.get("retryable"):
                 continue
             if not final_transcription_retry_eligible(job):

@@ -198,6 +198,45 @@ def test_overlay_adds_minimal_payload_without_profile_id():
     assert "profile_id" not in seg.speaker_suggestion
 
 
+def test_overlay_adds_suggestion_to_unconfirmed_gemini_cluster():
+    from meeting_api.schemas import TranscriptionSegment
+
+    seg = TranscriptionSegment(
+        start=0.0, end=1.0, text="hi", language="ja",
+        speaker="Unknown", speaker_cluster="g:78225710:s1",
+    )
+    _overlay_speaker_suggestions([seg], {"g:78225710:s1": _suggestion_payload()})
+
+    assert seg.speaker_suggestion == {
+        "candidate_display_name": "田中",
+        "similarity": 0.83,
+        "status": "suggested",
+    }
+
+
+def test_overlay_skips_named_or_malformed_gemini_cluster():
+    from meeting_api.schemas import TranscriptionSegment
+
+    named = TranscriptionSegment(
+        start=0.0, end=1.0, text="hi", language="ja",
+        speaker="田中", speaker_cluster="g:78225710:s1",
+    )
+    malformed = TranscriptionSegment(
+        start=1.0, end=2.0, text="hi", language="ja",
+        speaker="Unknown", speaker_cluster="g:not-hex:s2",
+    )
+    _overlay_speaker_suggestions(
+        [named, malformed],
+        {
+            "g:78225710:s1": _suggestion_payload(),
+            "g:not-hex:s2": _suggestion_payload(),
+        },
+    )
+
+    assert named.speaker_suggestion is None
+    assert malformed.speaker_suggestion is None
+
+
 def test_overlay_skips_segment_not_needing_review():
     from meeting_api.schemas import TranscriptionSegment
 
@@ -243,6 +282,25 @@ async def test_overlay_applies_through_pg_only_path():
     segments = await _get_full_transcript_segments(1, db, redis_c, meeting=meeting)
     by_id = {s.segment_id: s for s in segments}
     assert by_id["seg-1"].speaker_suggestion["candidate_display_name"] == "田中"
+
+
+@pytest.mark.asyncio
+async def test_overlay_applies_to_gemini_cluster_through_pg_path():
+    db_segments = [
+        _pg_segment(speaker_cluster="g:78225710:s1", speaker="Unknown", segment_id="seg-g1"),
+    ]
+    db = AsyncMock()
+    db.execute = AsyncMock(side_effect=[_Result([]), _Result(db_segments)])
+    redis_c = AsyncMock()
+    redis_c.hgetall = AsyncMock(return_value={})
+    meeting = SimpleNamespace(data={
+        "speaker_suggestions": {"g:78225710:s1": _suggestion_payload()},
+    })
+
+    segments = await _get_full_transcript_segments(1, db, redis_c, meeting=meeting)
+
+    assert segments[0].speaker_mapping_status is None
+    assert segments[0].speaker_suggestion["candidate_display_name"] == "田中"
 
 
 @pytest.mark.asyncio
