@@ -1,0 +1,35 @@
+{
+  "timestamp": "2026-07-14T07:33:17.839897+00:00",
+  "status": "warn",
+  "diff_hash": "sha256:3f30547562e6da63e43c7a81b61ecaec2444a6f78051dcf12a05e3bf9cca09fc",
+  "changed_files": [
+    "docs/api/meetings.mdx",
+    "docs/speaker-identification.mdx",
+    "services/meeting-api/meeting_api/callbacks.py",
+    "services/meeting-api/meeting_api/collector/endpoints.py",
+    "services/meeting-api/meeting_api/participant_roster.py",
+    "services/meeting-api/meeting_api/post_meeting.py",
+    "services/meeting-api/tests/test_callbacks.py",
+    "services/meeting-api/tests/test_meetings.py",
+    "services/meeting-api/tests/test_participant_roster.py",
+    "services/vexa-bot/core/package.json",
+    "services/vexa-bot/core/src/index.ts",
+    "services/vexa-bot/core/src/platforms/googlemeet/recording.ts",
+    "services/vexa-bot/core/src/platforms/googlemeet/selectors.ts",
+    "services/vexa-bot/core/src/services/chat-roster-lock.test.ts",
+    "services/vexa-bot/core/src/services/chat.ts",
+    "services/vexa-bot/core/src/services/googlemeet-roster-dom.test.ts",
+    "services/vexa-bot/core/src/services/participant-roster.test.ts",
+    "services/vexa-bot/core/src/services/participant-roster.ts",
+    "services/vexa-bot/core/src/services/unified-callback.test.ts",
+    "services/vexa-bot/core/src/services/unified-callback.ts",
+    "services/vexa-bot/docs/speaker-name-resolution.md"
+  ],
+  "flags": [
+    {
+      "path": "services/vexa-bot/core/package.json",
+      "reason": "dependency manifest changed"
+    }
+  ],
+  "blocks": []
+}

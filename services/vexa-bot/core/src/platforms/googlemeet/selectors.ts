@@ -365,14 +365,29 @@ export const googlePeopleButtonSelectors: string[] = [
   'button[aria-label*="view people"]',
   'button[aria-label*="Meeting participants"]',
   'button[aria-label*="meeting participants"]',
-  'button:has(span:contains("People"))',
-  'button:has(span:contains("people"))',
-  'button:has(span:contains("Participants"))',
-  'button:has(span:contains("participants"))',
-  'button[data-mdc-dialog-action]',
+  'button[aria-label*="ユーザー"]',
+  'button[aria-label*="参加者"]',
   'button[data-tooltip*="people"]',
   'button[data-tooltip*="People"]',
   'button[data-tooltip*="participants"]',
-  'button[data-tooltip*="Participants"]'
+  'button[data-tooltip*="Participants"]',
+  'button[data-tooltip*="ユーザー"]',
+  'button[data-tooltip*="参加者"]'
 ];
 
+// Fallback roots for the People side panel when the People button does not
+// expose aria-controls. Deliberately exclude role="region": Google Meet also
+// uses participant-labelled regions for video tiles, so accepting those here
+// can falsely report that the People panel is already open and prevent the bot
+// from ever opening it. A region is accepted only through the People button's
+// explicit aria-controls target in recording.ts.
+export const googlePeoplePanelRootSelectors: string[] = [
+  '[role="dialog"][aria-label*="people" i]',
+  '[role="complementary"][aria-label*="people" i]',
+  '[role="dialog"][aria-label*="participant" i]',
+  '[role="complementary"][aria-label*="participant" i]',
+  '[role="dialog"][aria-label*="ユーザー"]',
+  '[role="complementary"][aria-label*="ユーザー"]',
+  '[role="dialog"][aria-label*="参加者"]',
+  '[role="complementary"][aria-label*="参加者"]',
+];

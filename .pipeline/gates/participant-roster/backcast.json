@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-07-14T07:33:18.075332+00:00",
+  "task_id": "participant-roster",
+  "status": "pass",
+  "mode": "active",
+  "details": {
+    "checkpoint_contract": ".pipeline/plans/participant-roster/checkpoint-contract.json",
+    "evidence_manifest": ".pipeline/evidence/participant-roster/evidence-manifest.json",
+    "approval_decision": ".pipeline/approvals/participant-roster/approval-decision.json",
+    "state_machine": ".pipeline/rules/backcast-state-machine.json",
+    "mode": "optional"
+  },
+  "errors": [],
+  "warnings": []
+}

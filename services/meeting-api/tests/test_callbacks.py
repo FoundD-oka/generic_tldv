@@ -478,6 +478,133 @@ class TestAwaitingAdmissionCallback:
 class TestStatusChangeCallback:
 
     @pytest.mark.asyncio
+    async def test_completed_status_persists_observed_participant_roster(
+        self, client, mock_db, mock_redis,
+    ):
+        """Silent participants are stored independently from speaker events."""
+        meeting = make_meeting(status=MeetingStatus.ACTIVE.value, data={})
+        roster = [
+            {
+                "participant_id": "participant:1111111111111111",
+                "participant_name": "Alice",
+                "first_seen_at_ms": 1000,
+                "last_seen_at_ms": 5000,
+                "source": "people_panel",
+            },
+            {
+                "participant_id": "participant:2222222222222222",
+                "participant_name": "Silent Bob",
+                "first_seen_at_ms": 1200,
+                "last_seen_at_ms": 4000,
+                "source": "people_panel",
+            },
+        ]
+
+        with _patch_find_meeting(meeting), _patch_flag_modified(), \
+             patch("meeting_api.callbacks.update_meeting_status", new_callable=AsyncMock, return_value=True), \
+             patch("meeting_api.callbacks.publish_meeting_status_change", new_callable=AsyncMock), \
+             patch("meeting_api.callbacks.schedule_status_webhook_task", new_callable=AsyncMock), \
+             patch("meeting_api.callbacks.run_all_tasks", new_callable=AsyncMock):
+            resp = await client.post("/bots/internal/callback/status_change", json={
+                "connection_id": TEST_SESSION_UID,
+                "status": "completed",
+                "participant_roster": roster,
+            })
+
+        assert resp.status_code == 200
+        assert meeting.data["participants"] == ["Alice", "Silent Bob"]
+        assert meeting.data["observed_participants"] == ["Alice", "Silent Bob"]
+        assert meeting.data["participants_source"] == "participant_roster"
+
+    @pytest.mark.asyncio
+    async def test_roster_does_not_overwrite_manual_participants(
+        self, client, mock_db, mock_redis,
+    ):
+        meeting = make_meeting(
+            status=MeetingStatus.ACTIVE.value,
+            data={"participants": ["手動参加者"]},
+        )
+
+        with _patch_find_meeting(meeting), _patch_flag_modified(), \
+             patch("meeting_api.callbacks.update_meeting_status", new_callable=AsyncMock, return_value=True), \
+             patch("meeting_api.callbacks.publish_meeting_status_change", new_callable=AsyncMock), \
+             patch("meeting_api.callbacks.schedule_status_webhook_task", new_callable=AsyncMock), \
+             patch("meeting_api.callbacks.run_all_tasks", new_callable=AsyncMock):
+            resp = await client.post("/bots/internal/callback/status_change", json={
+                "connection_id": TEST_SESSION_UID,
+                "status": "completed",
+                "participant_roster": [{
+                    "participant_id": "participant:3333333333333333",
+                    "participant_name": "Observed Alice",
+                    "first_seen_at_ms": 1000,
+                    "last_seen_at_ms": 2000,
+                    "source": "people_panel",
+                }],
+            })
+
+        assert resp.status_code == 200
+        assert meeting.data["participants"] == ["手動参加者"]
+        assert meeting.data["observed_participants"] == ["Observed Alice"]
+
+    @pytest.mark.asyncio
+    async def test_failed_status_still_persists_participant_roster(
+        self, client, mock_db, mock_redis,
+    ):
+        meeting = make_meeting(status=MeetingStatus.ACTIVE.value, data={})
+
+        with _patch_find_meeting(meeting), _patch_flag_modified(), \
+             patch("meeting_api.callbacks.update_meeting_status", new_callable=AsyncMock, return_value=True), \
+             patch("meeting_api.callbacks.publish_meeting_status_change", new_callable=AsyncMock), \
+             patch("meeting_api.callbacks.schedule_status_webhook_task", new_callable=AsyncMock), \
+             patch("meeting_api.callbacks.run_all_tasks", new_callable=AsyncMock):
+            resp = await client.post("/bots/internal/callback/status_change", json={
+                "connection_id": TEST_SESSION_UID,
+                "status": "failed",
+                "participant_roster": [{
+                    "participant_id": "participant:4444444444444444",
+                    "participant_name": "Alice",
+                    "first_seen_at_ms": 1000,
+                    "last_seen_at_ms": 2000,
+                    "source": "participant_tile",
+                }],
+            })
+
+        assert resp.status_code == 200
+        assert meeting.data["participants"] == ["Alice"]
+
+    @pytest.mark.asyncio
+    async def test_stopping_deferred_status_persists_participant_roster(
+        self, client, mock_db, mock_redis,
+    ):
+        """The normal STOPPING path keeps the roster before exit callback."""
+        meeting = make_meeting(status=MeetingStatus.STOPPING.value, data={})
+
+        with _patch_find_meeting(meeting), _patch_flag_modified(), \
+             patch(
+                 "meeting_api.callbacks._classify_stopped_exit",
+                 new_callable=AsyncMock,
+                 return_value=(MeetingStatus.COMPLETED, MeetingCompletionReason.STOPPED),
+             ):
+            resp = await client.post("/bots/internal/callback/status_change", json={
+                "connection_id": TEST_SESSION_UID,
+                "status": "completed",
+                "completion_reason": "stopped",
+                "participant_roster": [{
+                    "participant_id": "participant:5555555555555555",
+                    "participant_name": "Silent Carol",
+                    "first_seen_at_ms": 1000,
+                    "last_seen_at_ms": 2000,
+                    "source": "people_panel",
+                }],
+            })
+
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "deferred"
+        assert meeting.data["participants"] == ["Silent Carol"]
+        assert meeting.data["bot_exit_classification"]["target_status"] == "completed"
+        mock_db.commit.assert_awaited()
+
+    @pytest.mark.asyncio
     async def test_completed_status_sets_end_time(self, client, mock_db, mock_redis):
         """COMPLETED status → sets end_time, triggers post-meeting."""
         meeting = make_meeting(status=MeetingStatus.ACTIVE.value)

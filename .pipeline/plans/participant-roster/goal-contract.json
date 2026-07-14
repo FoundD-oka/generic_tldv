@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0",
+  "task_id": "participant-roster",
+  "goal_id": "participant-roster-goal",
+  "source": {
+    "type": "manual",
+    "created_at": "2026-07-14T06:01:03.274703+00:00"
+  },
+  "raw_request": [
+    "Google Meetで発言しなかった参加者と途中退出者も実参加者として保存し、既存ダッシュボードへ反映する"
+  ],
+  "interpreted_goal": {
+    "description": "Google Meetで発言しなかった参加者と途中退出者も実参加者として保存し、既存ダッシュボードへ反映する",
+    "business_outcome": []
+  },
+  "success_metrics": [
+    {
+      "id": "sm-001",
+      "text": "ロスター収集・終了保存・手動値保護・旧経路互換が自動テストと変更影響証跡で確認できる"
+    }
+  ],
+  "non_goals": [],
+  "approval": {
+    "state": "pending",
+    "required_before_checkpoint_split": false,
+    "approver_role": "client_owner"
+  }
+}

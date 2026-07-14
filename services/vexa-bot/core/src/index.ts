@@ -2,6 +2,11 @@ import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import { log } from "./utils";
 import { logJSON, setLogContext } from "./utils/log";
 import { callStatusChangeCallback, mapExitReasonToStatus } from "./services/unified-callback";
+import {
+  getParticipantRoster,
+  observeParticipantRoster,
+  type ParticipantRosterEntry,
+} from "./services/participant-roster";
 import { chromium } from "playwright-extra";
 import { handleGoogleMeet, leaveGoogleMeet } from "./platforms/googlemeet";
 import { handleMicrosoftTeams, leaveMicrosoftTeams } from "./platforms/msteams";
@@ -713,6 +718,30 @@ async function performGracefulLeave(
     error_details: errorDetails ?? null,
   });
 
+  // Capture the accumulated Google Meet roster before clicking Leave. Meet can
+  // tear down or navigate away from the participant DOM immediately after the
+  // UI action, while the browser-side roster intentionally survives people
+  // leaving earlier in the call.
+  let participantRoster: ParticipantRosterEntry[] = getParticipantRoster();
+  if (currentPlatform === "google_meet" && page && !page.isClosed()) {
+    try {
+      const rawRoster = await page.evaluate(() => {
+        const roster = (window as any).__vexaParticipantRoster;
+        return roster && typeof roster === 'object' ? Object.values(roster) : [];
+      });
+      observeParticipantRoster(
+        rawRoster,
+        currentBotConfig?.botName,
+        Date.now(),
+        currentConnectionId || 'participant-roster',
+      );
+      participantRoster = getParticipantRoster();
+      log(`[Participant Roster] Captured ${participantRoster.length} observed participant(s) before leave`);
+    } catch (rosterError: any) {
+      log(`[Participant Roster] Failed to capture before leave: ${rosterError?.message}`);
+    }
+  }
+
   let platformLeaveSuccess = false;
 
   // Handle Zoom separately — SDK mode uses null page, web mode uses browser page
@@ -937,7 +966,8 @@ async function performGracefulLeave(
         statusMapping.failureStage,
         speakerEvents.length > 0 ? speakerEvents : undefined,
         finalBotLogs.length > 0 ? finalBotLogs : undefined,
-        finalBotResources
+        finalBotResources,
+        participantRoster.length > 0 ? participantRoster : undefined,
       );
       logJSON({
         level: "info",
@@ -948,6 +978,7 @@ async function performGracefulLeave(
         final_callback_reason: finalCallbackReason,
         final_callback_exit_code: finalCallbackExitCode,
         speaker_event_count: speakerEvents.length,
+        participant_roster_count: participantRoster.length,
       });
     } catch (callbackError: any) {
       logJSON({

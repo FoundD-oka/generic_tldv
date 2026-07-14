@@ -158,8 +158,10 @@ Google Meet may reuse DOM elements for different participants as the grid shifts
 ### People panel vs video grid
 The bot clicks "People" button at init to stabilize DOM. The People panel roster and the video grid are separate DOM trees. Names in the roster may not have speaking indicators attached.
 
+2026-07-14以降、People panelは「話者判定」ではなく「実参加者ロスター」の取得元として定期走査されます。表示タイルはフォールバックとして使い、途中退出者をブラウザ内で累積します。話者と参加者は別データなので、People panelに名前があっても発話インジケーターがなければ話者判定には使いません。
+
 ### Mitigation ideas (not implemented)
-- **Use People panel roster** as the name source instead of video tiles — it always lists all participants regardless of pagination
+- **Use People panel roster for speaker correlation** instead of video tiles — participant roster collection is implemented, but speaker correlation still uses speaking indicators
 - **Check if People panel has speaking indicators** — if it does, it's a more reliable source than video tiles for large meetings
 - **WebRTC `RTCPeerConnection.getStats()`** — exposes `trackIdentifier` per inbound stream, may link directly to participant without DOM. Not investigated.
 - **Periodic "People" panel scroll** — programmatically scroll the People list to force all participant tiles into DOM, ensuring MutationObservers cover everyone
