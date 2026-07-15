@@ -1,0 +1,14 @@
+{
+  "bootstrap": {
+    "schema_version": "1.0",
+    "sha256": "4c9eba41908e8fc4225cdee6287be8a40719b9c14fa7fdb95af42837d81e854e",
+    "source_runtime_version": "2.0.0-shadow.2"
+  },
+  "mode": "shadow",
+  "policy": {
+    "overrides": {},
+    "source": "runtime-default"
+  },
+  "project_id": "generic_tldv",
+  "schema_version": "1.0"
+}
