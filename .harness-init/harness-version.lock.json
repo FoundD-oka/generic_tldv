@@ -1,0 +1,19 @@
+{
+  "channel": "shadow",
+  "policy_version": "0.2.0-shadow.1",
+  "runtime_manifest_sha256": "952ae7ab9b280fb6dbf9c914e664ceef2aceabc6cf61eda5b64b292acb72d441",
+  "runtime_version": "2.0.0-shadow.2",
+  "schema_version": "1.0",
+  "schema_versions": {
+    "assurance-declaration.schema.json": "1.0",
+    "assurance-manifest.schema.json": "1.0",
+    "assurance-plan.schema.json": "1.0",
+    "candidate-snapshot.schema.json": "1.0",
+    "executor-decision.schema.json": "1.0",
+    "harness-version-lock.schema.json": "1.0",
+    "project.schema.json": "1.0",
+    "task-baseline.schema.json": "1.0",
+    "verifier-registry.schema.json": "1.0",
+    "verifier-result.schema.json": "1.0"
+  }
+}

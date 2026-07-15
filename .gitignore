@@ -199,3 +199,7 @@ tests3/.state-*
 .claude/rules
 .claude/skills
 .pipeline/worktrees/
+.pipeline/candidates/
+.harness-init/runtime
+.harness-init/state/
+.harness-init/tmp/
