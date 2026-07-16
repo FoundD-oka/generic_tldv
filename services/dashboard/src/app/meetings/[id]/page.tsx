@@ -93,8 +93,7 @@ import { MeetingAgentPanel } from "@/components/agent/meeting-agent-panel";
 import { WebhookDeliverySection } from "@/components/webhooks/webhook-delivery-section";
 import { BrowserSessionView } from "@/components/meetings/browser-session-view";
 import { useRuntimeConfig } from "@/hooks/use-runtime-config";
-import { isRetranscriptionInProgress, normalizeRetranscriptionStatus } from "@/lib/retranscription-status";
-import { startSingleFlightPolling } from "@/lib/single-flight-polling";
+import { isRetranscriptionInProgress, normalizeRetranscriptionStatus, startRetranscriptionStatusPolling } from "@/lib/retranscription-status";
 
 export default function MeetingDetailPage() {
   const params = useParams();
@@ -882,7 +881,7 @@ export default function MeetingDetailPage() {
 
   useEffect(() => {
     if (!meetingId || !shouldPollRetranscription) return;
-    return startSingleFlightPolling(() => refreshMeeting(meetingId), 2500);
+    return startRetranscriptionStatusPolling(() => refreshMeeting(meetingId), 2500);
   }, [meetingId, refreshMeeting, shouldPollRetranscription]);
 
   useEffect(() => {
