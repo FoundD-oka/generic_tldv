@@ -26,6 +26,7 @@ export function voiceprintMediaFormatFromMimeType(mimeType: string): string {
 export function canEnrollRecordedVoiceprint(input: {
   displayName: string;
   hasRecording: boolean;
+  previewReady: boolean;
   durationSeconds: number;
   audioReviewConfirmed: boolean;
   consentConfirmed: boolean;
@@ -34,6 +35,7 @@ export function canEnrollRecordedVoiceprint(input: {
   return (
     input.displayName.trim().length > 0 &&
     input.hasRecording &&
+    input.previewReady &&
     input.durationSeconds >= VOICEPRINT_MIN_RECORDING_SECONDS &&
     input.durationSeconds <= VOICEPRINT_MAX_RECORDING_SECONDS &&
     input.audioReviewConfirmed &&

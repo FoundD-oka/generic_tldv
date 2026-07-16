@@ -93,6 +93,8 @@ import { MeetingAgentPanel } from "@/components/agent/meeting-agent-panel";
 import { WebhookDeliverySection } from "@/components/webhooks/webhook-delivery-section";
 import { BrowserSessionView } from "@/components/meetings/browser-session-view";
 import { useRuntimeConfig } from "@/hooks/use-runtime-config";
+import { isRetranscriptionInProgress, normalizeRetranscriptionStatus } from "@/lib/retranscription-status";
+import { startSingleFlightPolling } from "@/lib/single-flight-polling";
 
 export default function MeetingDetailPage() {
   const params = useParams();
@@ -117,6 +119,7 @@ export default function MeetingDetailPage() {
     updateMeetingStatus,
     updateMeetingData,
     deleteMeeting,
+    setCurrentMeeting,
     clearCurrentMeeting,
   } = useMeetingsStore();
   const authToken = useAuthStore((s) => s.token);
@@ -858,6 +861,7 @@ export default function MeetingDetailPage() {
     currentMeeting?.data?.recording_enabled !== false &&
     !hasRecordingAudio &&
     !playbackConnectionError;
+  const shouldPollRetranscription = isRetranscriptionInProgress(currentMeeting?.data);
 
   useEffect(() => {
     if (!meetingId || !shouldPollMeetingStatus) return;
@@ -875,6 +879,11 @@ export default function MeetingDetailPage() {
       window.clearInterval(interval);
     };
   }, [meetingId, shouldPollMeetingStatus, refreshMeeting]);
+
+  useEffect(() => {
+    if (!meetingId || !shouldPollRetranscription) return;
+    return startSingleFlightPolling(() => refreshMeeting(meetingId), 2500);
+  }, [meetingId, refreshMeeting, shouldPollRetranscription]);
 
   useEffect(() => {
     // Active browser sessions use VNC — no transcript fetch needed.
@@ -2003,6 +2012,23 @@ export default function MeetingDetailPage() {
               playbackAbsoluteTime={playbackAbsoluteTime}
               isPlaybackActive={isPlaybackActive}
               onSegmentClick={canUseSegmentPlayback ? handleSegmentClick : undefined}
+              onTranscribeStatusChange={(status) => {
+                const normalizedStatus = normalizeRetranscriptionStatus(status);
+                if (normalizedStatus === "idle") return;
+                const latestMeeting = useMeetingsStore.getState().currentMeeting;
+                if (!latestMeeting || latestMeeting.id !== currentMeeting.id) return;
+                const finalTranscription = latestMeeting.data?.final_transcription || {};
+                setCurrentMeeting({
+                  ...latestMeeting,
+                  data: {
+                    ...latestMeeting.data,
+                    final_transcription: {
+                      ...finalTranscription,
+                      status: normalizedStatus,
+                    },
+                  },
+                });
+              }}
               onTranscribeComplete={() => {
                 fetchMeeting(meetingId);
                 if (currentMeeting?.platform && currentMeeting?.platform_specific_id) {

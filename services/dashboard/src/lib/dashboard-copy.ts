@@ -178,7 +178,7 @@ const EN_DASHBOARD_COPY = {
 
 const JA_DASHBOARD_COPY: typeof EN_DASHBOARD_COPY = {
   nav: {
-    meetings: "会議",
+    meetings: "会議一覧",
     tracker: "トラッカー",
     dictionary: "文字起こし辞書",
     joinMeeting: "会議に参加",

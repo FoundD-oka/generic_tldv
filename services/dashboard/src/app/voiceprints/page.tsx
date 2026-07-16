@@ -40,6 +40,8 @@ export default function VoiceprintsPage() {
   const [isStarting, setIsStarting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isPreparingPreview, setIsPreparingPreview] = useState(false);
+  const [isPreviewReady, setIsPreviewReady] = useState(false);
   const [audioReviewConfirmed, setAudioReviewConfirmed] = useState(false);
   const [consentConfirmed, setConsentConfirmed] = useState(false);
 
@@ -48,6 +50,8 @@ export default function VoiceprintsPage() {
   const chunksRef = useRef<BlobPart[]>([]);
   const startedAtRef = useRef(0);
   const previewUrlRef = useRef<string | null>(null);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const loadingOverlayRef = useRef<HTMLDivElement | null>(null);
   const tickerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(false);
@@ -111,8 +115,48 @@ export default function VoiceprintsPage() {
 
   const stopRecording = useCallback(() => {
     const recorder = recorderRef.current;
-    if (recorder && recorder.state !== "inactive") recorder.stop();
+    if (recorder && recorder.state !== "inactive") {
+      setIsPreviewReady(false);
+      setIsPreparingPreview(true);
+      recorder.stop();
+    }
   }, []);
+
+  const finishPreparingPreview = useCallback(() => {
+    setIsPreviewReady(true);
+    setIsPreparingPreview(false);
+  }, []);
+
+  const failPreparingPreview = useCallback(() => {
+    setIsPreviewReady(false);
+    setIsPreparingPreview(false);
+    setRecordedSample(null);
+    replacePreviewUrl(null);
+    toast.error("確認再生を準備できませんでした。録り直してください");
+  }, [replacePreviewUrl]);
+
+  useEffect(() => {
+    if (isPreparingPreview) loadingOverlayRef.current?.focus();
+  }, [isPreparingPreview]);
+
+  useEffect(() => {
+    if (!isPreparingPreview) return;
+    if (previewUrl) {
+      const audio = previewAudioRef.current;
+      if (audio && audio.readyState >= HTMLMediaElement.HAVE_METADATA) {
+        finishPreparingPreview();
+        return;
+      }
+    }
+    const timeout = window.setTimeout(() => {
+      setIsPreviewReady(false);
+      setIsPreparingPreview(false);
+      setRecordedSample(null);
+      replacePreviewUrl(null);
+      toast.error("確認再生の準備に時間がかかっています。もう一度お試しください");
+    }, 10_000);
+    return () => window.clearTimeout(timeout);
+  }, [finishPreparingPreview, isPreparingPreview, previewUrl, replacePreviewUrl]);
 
   const startRecording = async () => {
     if (recordingStartPendingRef.current || recorderRef.current?.state === "recording") {
@@ -130,6 +174,8 @@ export default function VoiceprintsPage() {
 
     clearTimers();
     stopTracks();
+    setIsPreparingPreview(false);
+    setIsPreviewReady(false);
     replacePreviewUrl(null);
     setRecordedSample(null);
     setAudioReviewConfirmed(false);
@@ -159,6 +205,8 @@ export default function VoiceprintsPage() {
         if (event.data.size > 0) chunksRef.current.push(event.data);
       };
       recorder.onerror = () => {
+        setIsPreviewReady(false);
+        setIsPreparingPreview(false);
         toast.error("録音に失敗しました。マイク設定を確認してください");
       };
       recorder.onstop = () => {
@@ -173,6 +221,8 @@ export default function VoiceprintsPage() {
           type: recorder.mimeType || mimeType || "audio/webm",
         });
         if (blob.size === 0) {
+          setIsPreviewReady(false);
+          setIsPreparingPreview(false);
           toast.error("音声を録音できませんでした。もう一度お試しください");
           return;
         }
@@ -203,6 +253,8 @@ export default function VoiceprintsPage() {
       );
     } catch (error) {
       stopTracks();
+      setIsPreviewReady(false);
+      setIsPreparingPreview(false);
       if (mountedRef.current && recordingStartRunRef.current === startRun) {
         toast.error("マイクを開始できませんでした", {
           description: (error as Error).message,
@@ -219,6 +271,7 @@ export default function VoiceprintsPage() {
   const canSubmit = canEnrollRecordedVoiceprint({
     displayName,
     hasRecording: recordedSample !== null,
+    previewReady: isPreviewReady,
     durationSeconds: recordedSample?.durationSeconds || 0,
     audioReviewConfirmed,
     consentConfirmed,
@@ -240,6 +293,7 @@ export default function VoiceprintsPage() {
       });
       setDisplayName("");
       setRecordedSample(null);
+      setIsPreviewReady(false);
       setElapsedSeconds(0);
       setAudioReviewConfirmed(false);
       setConsentConfirmed(false);
@@ -256,6 +310,27 @@ export default function VoiceprintsPage() {
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6 p-6">
+      {isPreparingPreview && (
+        <div
+          ref={loadingOverlayRef}
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-live="polite"
+          aria-label="確認再生を準備中"
+          tabIndex={-1}
+        >
+          <div className="flex items-center gap-3 rounded-lg border bg-card px-5 py-4 shadow-lg">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            <span className="font-medium">確認再生を準備しています...</span>
+          </div>
+        </div>
+      )}
+      <div
+        className="space-y-6"
+        inert={isPreparingPreview ? true : undefined}
+        aria-hidden={isPreparingPreview ? true : undefined}
+      >
       <div>
         <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight">
           <AudioLines className="h-7 w-7" />声紋管理
@@ -283,7 +358,7 @@ export default function VoiceprintsPage() {
               onChange={(event) => setDisplayName(event.target.value)}
               placeholder="例: 田中"
               maxLength={255}
-              disabled={isSubmitting || isRecording || isStarting}
+              disabled={isSubmitting || isRecording || isStarting || isPreparingPreview}
             />
           </div>
 
@@ -297,7 +372,7 @@ export default function VoiceprintsPage() {
                   <Square className="h-4 w-4" />録音を停止
                 </Button>
               ) : (
-                <Button type="button" onClick={() => void startRecording()} disabled={isSubmitting || isStarting}>
+                <Button type="button" onClick={() => void startRecording()} disabled={isSubmitting || isStarting || isPreparingPreview}>
                   {isStarting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className="h-4 w-4" />}
                   {isStarting ? "マイクを準備中" : recordedSample ? "録り直す" : "録音を開始"}
                 </Button>
@@ -321,7 +396,16 @@ export default function VoiceprintsPage() {
                   この{recordedSample.durationSeconds.toFixed(1)}秒の音声からだけ声の特徴を作ります。
                 </p>
               </div>
-              <audio className="w-full" controls preload="metadata" src={previewUrl} aria-label="登録する声の確認再生" />
+              <audio
+                ref={previewAudioRef}
+                className="w-full"
+                controls
+                preload="metadata"
+                src={previewUrl}
+                aria-label="登録する声の確認再生"
+                onLoadedMetadata={finishPreparingPreview}
+                onError={failPreparingPreview}
+              />
             </div>
           )}
 
@@ -330,7 +414,7 @@ export default function VoiceprintsPage() {
               type="checkbox"
               checked={audioReviewConfirmed}
               onChange={(event) => setAudioReviewConfirmed(event.target.checked)}
-              disabled={!recordedSample || isSubmitting}
+              disabled={!recordedSample || !isPreviewReady || isSubmitting || isPreparingPreview}
               className="mt-0.5 h-4 w-4 accent-primary"
             />
             <span>録音を再生し、登録する本人の声だけで、他の人の声が混ざっていないことを確認しました。</span>
@@ -341,7 +425,7 @@ export default function VoiceprintsPage() {
               type="checkbox"
               checked={consentConfirmed}
               onChange={(event) => setConsentConfirmed(event.target.checked)}
-              disabled={!recordedSample || isSubmitting}
+              disabled={!recordedSample || !isPreviewReady || isSubmitting || isPreparingPreview}
               className="mt-0.5 h-4 w-4 accent-primary"
             />
             <span>
@@ -404,6 +488,7 @@ export default function VoiceprintsPage() {
           )}
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }

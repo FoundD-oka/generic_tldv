@@ -16,6 +16,7 @@ describe("voiceprint pre-enrollment recording", () => {
     const valid = {
       displayName: "田中",
       hasRecording: true,
+      previewReady: true,
       durationSeconds: 8,
       audioReviewConfirmed: true,
       consentConfirmed: true,
@@ -27,6 +28,7 @@ describe("voiceprint pre-enrollment recording", () => {
     expect(canEnrollRecordedVoiceprint({ ...valid, audioReviewConfirmed: false })).toBe(false);
     expect(canEnrollRecordedVoiceprint({ ...valid, consentConfirmed: false })).toBe(false);
     expect(canEnrollRecordedVoiceprint({ ...valid, displayName: " " })).toBe(false);
+    expect(canEnrollRecordedVoiceprint({ ...valid, previewReady: false })).toBe(false);
   });
 
   it("chooses a supported recorder format and maps it for the API", () => {
@@ -51,7 +53,21 @@ describe("voiceprint pre-enrollment recording", () => {
     expect(source).toContain("recordingStartPendingRef.current");
     expect(source).toContain("recordingStartRunRef.current !== startRun");
     expect(source).toContain("stream.getTracks().forEach((track) => track.stop())");
-    expect(source).toContain("disabled={isSubmitting || isStarting}");
+    expect(source).toContain("disabled={isSubmitting || isStarting || isPreparingPreview}");
+  });
+
+  it("blocks interaction while confirmation playback is prepared and always releases the overlay", () => {
+    const source = fs.readFileSync(path.resolve("src/app/voiceprints/page.tsx"), "utf8");
+    expect(source).toContain("isPreparingPreview");
+    expect(source).toContain("確認再生を準備しています");
+    expect(source).toContain("fixed inset-0 z-[100]");
+    expect(source).toContain("HTMLMediaElement.HAVE_METADATA");
+    expect(source).toContain("10_000");
+    expect(source).toContain("onLoadedMetadata={finishPreparingPreview}");
+    expect(source).toContain("onError={failPreparingPreview}");
+    expect(source).toContain("inert={isPreparingPreview ? true : undefined}");
+    expect(source).toContain('aria-modal="true"');
+    expect(source).toContain("!isPreviewReady");
   });
 
   it("sends only the reviewed recording fields and both confirmations", async () => {

@@ -70,10 +70,12 @@ def test_meeting_list_summary_keeps_manual_and_calendar_titles_separate():
     summary = _meeting_list_data_summary({
         "name": "手動で変更した名前",
         "calendar_event": {"title": "週次定例"},
+        "final_transcription": {"status": "running", "run_id": "secret-run-id"},
     })
 
     assert summary["name"] == "手動で変更した名前"
     assert summary["calendar_title"] == "週次定例"
+    assert summary["final_transcription"] == {"status": "running"}
 
 
 @pytest.mark.asyncio
