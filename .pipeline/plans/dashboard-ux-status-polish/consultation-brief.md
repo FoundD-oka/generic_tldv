@@ -202,12 +202,12 @@ index b956b1e..102f0ca 100644
 @@ -119,7 +119,7 @@ Use:
  <!-- gitnexus:start -->
  # GitNexus — Code Intelligence
- 
+
 -This project is indexed by GitNexus as **generic_tldv** (16878 symbols, 30951 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 +This project is indexed by GitNexus as **generic_tldv** (16868 symbols, 30948 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
- 
+
  > Index stale? Run `node .gitnexus/run.cjs analyze` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? `npx gitnexus analyze` (npm 11 crash → `npm i -g gitnexus`; #1939).
- 
+
 diff --git a/CLAUDE.md b/CLAUDE.md
 index 2489528..c17b1a5 100644
 --- a/CLAUDE.md
@@ -215,12 +215,12 @@ index 2489528..c17b1a5 100644
 @@ -88,7 +88,7 @@ See `.ai/BUILD.md`.
  <!-- gitnexus:start -->
  # GitNexus — Code Intelligence
- 
+
 -This project is indexed by GitNexus as **generic_tldv** (16878 symbols, 30951 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 +This project is indexed by GitNexus as **generic_tldv** (16868 symbols, 30948 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
- 
+
  > Index stale? Run `node .gitnexus/run.cjs analyze` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? `npx gitnexus analyze` (npm 11 crash → `npm i -g gitnexus`; #1939).
- 
+
 
 ```
 
