@@ -15,6 +15,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { vexaAPI, type SpeakerProfileSummary } from "@/lib/api";
+import { VoiceprintPreparationGate } from "@/components/voiceprints/voiceprint-preparation-gate";
+import {
+  nextVoiceprintPreviewPhase,
+  type VoiceprintPreviewPhase,
+} from "@/lib/voiceprint-preview-state";
 import {
   VOICEPRINT_MAX_RECORDING_SECONDS,
   VOICEPRINT_MIN_RECORDING_SECONDS,
@@ -40,8 +45,9 @@ export default function VoiceprintsPage() {
   const [isStarting, setIsStarting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isPreparingPreview, setIsPreparingPreview] = useState(false);
-  const [isPreviewReady, setIsPreviewReady] = useState(false);
+  const [previewPhase, setPreviewPhase] = useState<VoiceprintPreviewPhase>("idle");
+  const isPreparingPreview = previewPhase === "preparing";
+  const isPreviewReady = previewPhase === "ready";
   const [audioReviewConfirmed, setAudioReviewConfirmed] = useState(false);
   const [consentConfirmed, setConsentConfirmed] = useState(false);
 
@@ -116,20 +122,17 @@ export default function VoiceprintsPage() {
   const stopRecording = useCallback(() => {
     const recorder = recorderRef.current;
     if (recorder && recorder.state !== "inactive") {
-      setIsPreviewReady(false);
-      setIsPreparingPreview(true);
+      setPreviewPhase((current) => nextVoiceprintPreviewPhase(current, "recording_stopped"));
       recorder.stop();
     }
   }, []);
 
   const finishPreparingPreview = useCallback(() => {
-    setIsPreviewReady(true);
-    setIsPreparingPreview(false);
+    setPreviewPhase((current) => nextVoiceprintPreviewPhase(current, "loaded"));
   }, []);
 
   const failPreparingPreview = useCallback(() => {
-    setIsPreviewReady(false);
-    setIsPreparingPreview(false);
+    setPreviewPhase((current) => nextVoiceprintPreviewPhase(current, "error"));
     setRecordedSample(null);
     replacePreviewUrl(null);
     toast.error("確認再生を準備できませんでした。録り直してください");
@@ -149,8 +152,7 @@ export default function VoiceprintsPage() {
       }
     }
     const timeout = window.setTimeout(() => {
-      setIsPreviewReady(false);
-      setIsPreparingPreview(false);
+      setPreviewPhase((current) => nextVoiceprintPreviewPhase(current, "timeout"));
       setRecordedSample(null);
       replacePreviewUrl(null);
       toast.error("確認再生の準備に時間がかかっています。もう一度お試しください");
@@ -174,8 +176,7 @@ export default function VoiceprintsPage() {
 
     clearTimers();
     stopTracks();
-    setIsPreparingPreview(false);
-    setIsPreviewReady(false);
+    setPreviewPhase((current) => nextVoiceprintPreviewPhase(current, "reset"));
     replacePreviewUrl(null);
     setRecordedSample(null);
     setAudioReviewConfirmed(false);
@@ -205,8 +206,7 @@ export default function VoiceprintsPage() {
         if (event.data.size > 0) chunksRef.current.push(event.data);
       };
       recorder.onerror = () => {
-        setIsPreviewReady(false);
-        setIsPreparingPreview(false);
+        setPreviewPhase((current) => nextVoiceprintPreviewPhase(current, "error"));
         toast.error("録音に失敗しました。マイク設定を確認してください");
       };
       recorder.onstop = () => {
@@ -221,8 +221,7 @@ export default function VoiceprintsPage() {
           type: recorder.mimeType || mimeType || "audio/webm",
         });
         if (blob.size === 0) {
-          setIsPreviewReady(false);
-          setIsPreparingPreview(false);
+          setPreviewPhase((current) => nextVoiceprintPreviewPhase(current, "error"));
           toast.error("音声を録音できませんでした。もう一度お試しください");
           return;
         }
@@ -253,8 +252,7 @@ export default function VoiceprintsPage() {
       );
     } catch (error) {
       stopTracks();
-      setIsPreviewReady(false);
-      setIsPreparingPreview(false);
+      setPreviewPhase((current) => nextVoiceprintPreviewPhase(current, "error"));
       if (mountedRef.current && recordingStartRunRef.current === startRun) {
         toast.error("マイクを開始できませんでした", {
           description: (error as Error).message,
@@ -293,7 +291,7 @@ export default function VoiceprintsPage() {
       });
       setDisplayName("");
       setRecordedSample(null);
-      setIsPreviewReady(false);
+      setPreviewPhase((current) => nextVoiceprintPreviewPhase(current, "reset"));
       setElapsedSeconds(0);
       setAudioReviewConfirmed(false);
       setConsentConfirmed(false);
@@ -310,27 +308,7 @@ export default function VoiceprintsPage() {
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6 p-6">
-      {isPreparingPreview && (
-        <div
-          ref={loadingOverlayRef}
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 backdrop-blur-sm"
-          role="dialog"
-          aria-modal="true"
-          aria-live="polite"
-          aria-label="確認再生を準備中"
-          tabIndex={-1}
-        >
-          <div className="flex items-center gap-3 rounded-lg border bg-card px-5 py-4 shadow-lg">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            <span className="font-medium">確認再生を準備しています...</span>
-          </div>
-        </div>
-      )}
-      <div
-        className="space-y-6"
-        inert={isPreparingPreview ? true : undefined}
-        aria-hidden={isPreparingPreview ? true : undefined}
-      >
+      <VoiceprintPreparationGate active={isPreparingPreview} overlayRef={loadingOverlayRef}>
       <div>
         <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight">
           <AudioLines className="h-7 w-7" />声紋管理
@@ -488,7 +466,7 @@ export default function VoiceprintsPage() {
           )}
         </CardContent>
       </Card>
-      </div>
+      </VoiceprintPreparationGate>
     </div>
   );
 }

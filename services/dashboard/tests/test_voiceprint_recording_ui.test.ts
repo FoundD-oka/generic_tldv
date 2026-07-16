@@ -1,5 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { vexaAPI } from "@/lib/api";
@@ -8,6 +10,8 @@ import {
   selectVoiceprintRecorderMimeType,
   voiceprintMediaFormatFromMimeType,
 } from "@/lib/voiceprint-recording";
+import { VoiceprintPreparationGate } from "@/components/voiceprints/voiceprint-preparation-gate";
+import { nextVoiceprintPreviewPhase } from "@/lib/voiceprint-preview-state";
 
 describe("voiceprint pre-enrollment recording", () => {
   afterEach(() => vi.restoreAllMocks());
@@ -59,15 +63,32 @@ describe("voiceprint pre-enrollment recording", () => {
   it("blocks interaction while confirmation playback is prepared and always releases the overlay", () => {
     const source = fs.readFileSync(path.resolve("src/app/voiceprints/page.tsx"), "utf8");
     expect(source).toContain("isPreparingPreview");
-    expect(source).toContain("確認再生を準備しています");
-    expect(source).toContain("fixed inset-0 z-[100]");
     expect(source).toContain("HTMLMediaElement.HAVE_METADATA");
     expect(source).toContain("10_000");
     expect(source).toContain("onLoadedMetadata={finishPreparingPreview}");
     expect(source).toContain("onError={failPreparingPreview}");
-    expect(source).toContain("inert={isPreparingPreview ? true : undefined}");
-    expect(source).toContain('aria-modal="true"');
     expect(source).toContain("!isPreviewReady");
+  });
+
+  it("models loaded, error, and timeout as executable preview state transitions", () => {
+    expect(nextVoiceprintPreviewPhase("idle", "recording_stopped")).toBe("preparing");
+    expect(nextVoiceprintPreviewPhase("preparing", "loaded")).toBe("ready");
+    expect(nextVoiceprintPreviewPhase("preparing", "error")).toBe("failed");
+    expect(nextVoiceprintPreviewPhase("preparing", "timeout")).toBe("failed");
+    expect(nextVoiceprintPreviewPhase("failed", "reset")).toBe("idle");
+  });
+
+  it("renders a modal gate whose background is inert to pointer and keyboard focus", () => {
+    const markup = renderToStaticMarkup(createElement(
+      VoiceprintPreparationGate,
+      { active: true, overlayRef: { current: null } },
+      createElement("button", { type: "button" }, "背景操作")
+    ));
+    expect(markup).toContain('role="dialog"');
+    expect(markup).toContain('aria-modal="true"');
+    expect(markup).toContain('tabindex="-1"');
+    expect(markup).toContain('inert=""');
+    expect(markup).toContain('aria-hidden="true"');
   });
 
   it("sends only the reviewed recording fields and both confirmations", async () => {
