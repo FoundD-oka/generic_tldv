@@ -1,0 +1,16 @@
+{
+  "timestamp": "2026-07-16T15:27:34.704265+00:00",
+  "task_id": "dashboard-ux-status-polish",
+  "size": "M",
+  "status": "pass",
+  "plan_hash": "sha256:c09fcdb96f3e8495f6a78790ef14e9f25651215ace373b2e34c6b6880933ed11",
+  "plan_material_version": "plan-v1",
+  "checks": [
+    {
+      "check": "fable-plan-review",
+      "ok": true,
+      "errors": []
+    }
+  ],
+  "errors": []
+}

@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "task_id": "dashboard-ux-status-polish",
+  "checkpoint_id": "",
+  "size": "M",
+  "decided_at": "2026-07-16T14:04:00.172542+00:00",
+  "basis": {
+    "residual_uncertainty": "manual decision",
+    "not_based_on": "issue title or diff size alone"
+  },
+  "quality_gates": {
+    "required": [
+      "residency",
+      "preflight",
+      "hd-gate",
+      "doc-staleness",
+      "adapter-contract",
+      "backcast-contracts",
+      "evidence-manifest",
+      "evidence-pack",
+      "qa-judgment",
+      "outcome-judgment"
+    ],
+    "external_consultation": "required_for_l"
+  }
+}

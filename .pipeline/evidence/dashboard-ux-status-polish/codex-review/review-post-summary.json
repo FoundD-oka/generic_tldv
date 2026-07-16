@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0",
+  "task_id": "dashboard-ux-status-polish",
+  "status": "completed",
+  "mode": "post",
+  "model": "gpt-5.6-sol",
+  "reasoning_effort": "ultra",
+  "sandbox": "read-only",
+  "target_kind": "diff",
+  "target_hash": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "prompt_hash": "sha256:a531d04168e770b09c78d829a742ea74698c8a0ab347a18707c464e382d7bda3",
+  "response_hash": "sha256:76def579a7664ad3264bd2ef08b3db5b3f5657eac3bdde4843c6b938575a43ec",
+  "response_path": ".pipeline/evidence/dashboard-ux-status-polish/codex-review/codex-post.md",
+  "raw_response_path": null,
+  "verdict": "SHIP",
+  "confidence": "high",
+  "summary": "F005は解消済みです。HEAD 4e13649でfinal_transcriptionの状態差分がストア更新条件に含まれ、ポーリングはqueued→running→succeededを実useMeetingsStoreで追従して終端時に自動停止します。evidence-manifestも同一HEADに紐付き、対象35件・Dashboard全195件・buildが成功しています。",
+  "findings": [],
+  "adoption_status": [],
+  "open_must_fix_count": 0,
+  "not_source_of_truth": true,
+  "created_at": "2026-07-16T15:30:33.113192+00:00"
+}

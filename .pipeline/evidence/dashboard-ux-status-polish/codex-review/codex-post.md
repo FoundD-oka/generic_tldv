@@ -1,0 +1,1 @@
+{"verdict":"SHIP","summary":"F005は解消済みです。HEAD 4e13649でfinal_transcriptionの状態差分がストア更新条件に含まれ、ポーリングはqueued→running→succeededを実useMeetingsStoreで追従して終端時に自動停止します。evidence-manifestも同一HEADに紐付き、対象35件・Dashboard全195件・buildが成功しています。","confidence":"high","findings":[]}

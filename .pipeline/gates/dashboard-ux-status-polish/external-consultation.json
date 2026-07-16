@@ -1,0 +1,27 @@
+{
+  "timestamp": "2026-07-16T15:31:18.175332+00:00",
+  "task_id": "dashboard-ux-status-polish",
+  "size": "M",
+  "status": "pass",
+  "policy": "plan_required_all_sizes_post_required_for_l",
+  "plan_material_version": "plan-v1",
+  "provider": "claude-fable-cli",
+  "checks": [
+    {
+      "stage": "plan",
+      "required": true,
+      "status": "pass",
+      "path": ".pipeline/evidence/dashboard-ux-status-polish/external-consultation/consultation-plan-summary.json",
+      "errors": []
+    },
+    {
+      "stage": "post",
+      "required": false,
+      "status": "pass",
+      "path": ".pipeline/evidence/dashboard-ux-status-polish/external-consultation/consultation-post-summary.json",
+      "errors": []
+    }
+  ],
+  "errors": [],
+  "warnings": []
+}

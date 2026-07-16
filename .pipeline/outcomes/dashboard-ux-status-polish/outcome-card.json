@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "task_id": "dashboard-ux-status-polish",
+  "runtime_profile": "codex-app",
+  "size": "M",
+  "result": {
+    "at_pass": true,
+    "fp_pass": true,
+    "nft_pass": true,
+    "hd_resolved": true,
+    "blocking_findings": 0
+  },
+  "evidence": {
+    "session_ledger": ".pipeline/sessions/dashboard-ux-status-polish/events.jsonl",
+    "verification": [
+      ".pipeline/evidence/dashboard-ux-status-polish/evidence-manifest.json",
+      ".pipeline/evidence/dashboard-ux-status-polish/evidence-pack.md",
+      ".pipeline/evidence/dashboard-ux-status-polish/qa-judgment.json"
+    ],
+    "review": [
+      ".pipeline/evidence/dashboard-ux-status-polish/codex-review/review-post-summary.json"
+    ]
+  },
+  "notes": [
+    "無効辞書行を背景・文字ともグレー化し、日本語ナビゲーションを会議一覧へ変更した。",
+    "声紋確認再生の準備中はモーダルとinertで全操作を遮断し、loadedmetadata・error・10秒timeoutで状態を確定する。",
+    "再文字起こしはqueued/runningを処理中、failedとunknown_manual_reconcileを再処理失敗、succeededを完了として一覧・詳細で統一した。",
+    "Dashboard対象35件・全195件、production build、Meeting API 32件、GitNexus検査が成功した。",
+    "Sol Ultra最終レビューはSHIP、MUST_FIX 0。最終実装HEADは4e136492b51ba0f507fbdbd8ad10e2f2a856a178。"
+  ]
+}

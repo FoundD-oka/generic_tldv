@@ -1,0 +1,42 @@
+{
+  "timestamp": "2026-07-16T15:31:18.457153+00:00",
+  "status": "pass",
+  "required": false,
+  "ledger": "/Users/bonginkan-3-gouki/project/generic_tldv/.pipeline/worktrees/dashboard-ux-status-polish/checkout/.pipeline/feedback/ledger.jsonl",
+  "rule_count": 2,
+  "decision_counts": {
+    "keep": 2
+  },
+  "conflict_count": 0,
+  "conflicts": [],
+  "decisions": [
+    {
+      "id": "issues-4-19-harness-init-feedback",
+      "decision": "keep",
+      "scope": "generic_tldv/harness-init",
+      "failure_class": "multi_issue_delivery_control",
+      "fingerprint": "14e707c1d675b572",
+      "reasons": [
+        "status:approved"
+      ],
+      "rule": "Use Managed Agent Harness gates, evidence packs, sidechain synthesis, and hash-bound approval for bundled L-size implementation work that changes runtime behavior, data preservation, and user-visible contracts."
+    },
+    {
+      "id": "fable-context-only-cli-contract-v1",
+      "decision": "keep",
+      "scope": "generic_tldv/harness-init",
+      "failure_class": "fable_cli_turn_budget_exhaustion",
+      "fingerprint": "b1e7963f22df0003",
+      "reasons": [
+        "status:approved"
+      ],
+      "rule": "Run Fable from a self-contained brief in safe context-only mode, reject malformed structured output, and preserve typed failure telemetry for every Fable entrypoint."
+    }
+  ],
+  "kept_rules": [
+    "issues-4-19-harness-init-feedback",
+    "fable-context-only-cli-contract-v1"
+  ],
+  "review_rules": [],
+  "pruned_rules": []
+}

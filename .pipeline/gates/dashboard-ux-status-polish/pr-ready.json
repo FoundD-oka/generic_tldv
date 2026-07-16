@@ -1,0 +1,88 @@
+{
+  "timestamp": "2026-07-16T15:31:18.490436+00:00",
+  "task_id": "dashboard-ux-status-polish",
+  "size": "M",
+  "status": "ready",
+  "checks": [
+    {
+      "check": "harness-residency",
+      "ok": true,
+      "detail": "status=pass"
+    },
+    {
+      "check": "preflight",
+      "ok": true,
+      "detail": "status=pass"
+    },
+    {
+      "check": "hd-gate",
+      "ok": true,
+      "detail": "unresolved=[]"
+    },
+    {
+      "check": "doc-staleness",
+      "ok": true,
+      "detail": "status=pass"
+    },
+    {
+      "check": "adapter-contract",
+      "ok": true,
+      "detail": "status=pass count=5"
+    },
+    {
+      "check": "backcast-contracts",
+      "ok": true,
+      "detail": "status=pass mode=active"
+    },
+    {
+      "check": "external-consultation",
+      "ok": true,
+      "detail": "status=pass policy=plan_required_all_sizes_post_required_for_l"
+    },
+    {
+      "check": "codex-review",
+      "ok": true,
+      "detail": "status=pass model=gpt-5.6-sol effort=ultra"
+    },
+    {
+      "check": "dual-review-consensus",
+      "ok": true,
+      "detail": "status=pass size=M"
+    },
+    {
+      "check": "feedback-prune",
+      "ok": true,
+      "detail": "status=pass required=False"
+    },
+    {
+      "check": "sml-decision",
+      "ok": true,
+      "detail": "size=M"
+    },
+    {
+      "check": "verification-contract",
+      "ok": true,
+      "detail": "/Users/bonginkan-3-gouki/project/generic_tldv/.pipeline/worktrees/dashboard-ux-status-polish/checkout/.pipeline/plans/dashboard-ux-status-polish/verification-contract.md"
+    },
+    {
+      "check": "evidence-manifest",
+      "ok": true,
+      "detail": "/Users/bonginkan-3-gouki/project/generic_tldv/.pipeline/worktrees/dashboard-ux-status-polish/checkout/.pipeline/evidence/dashboard-ux-status-polish/evidence-manifest.json"
+    },
+    {
+      "check": "evidence-pack",
+      "ok": true,
+      "detail": "/Users/bonginkan-3-gouki/project/generic_tldv/.pipeline/worktrees/dashboard-ux-status-polish/checkout/.pipeline/evidence/dashboard-ux-status-polish/evidence-pack.md"
+    },
+    {
+      "check": "qa-judgment",
+      "ok": true,
+      "detail": "verdict=pass task_id=dashboard-ux-status-polish blocking=[]"
+    },
+    {
+      "check": "outcome-judgment",
+      "ok": true,
+      "detail": "script=True status=pass task_id=dashboard-ux-status-polish size=M failures=[]"
+    }
+  ]
+}

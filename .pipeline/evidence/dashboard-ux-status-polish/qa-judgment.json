@@ -1,0 +1,35 @@
+{
+  "schema_version": "1.0",
+  "task_id": "dashboard-ux-status-polish",
+  "verdict": "pass",
+  "reviewer": "codex-app-independent-qa",
+  "summary": "要求4件、実装差分、最新HEADに結び付いたevidence manifest、Dashboard対象35件・全195件、production build、Meeting API 32件、GitNexus影響、GPT-5.6 Sol Ultra最終レビューを照合した。初回監査で見つかった詳細再訪時の状態追従、音紋のキーボード操作遮断、一覧更新競合、手動照合状態の表示不整合、実行テスト不足を修正し、最終判定はSHIP、blocking findingは0件。",
+  "blocking_findings": [],
+  "resolved_findings": [
+    {
+      "id": "F001",
+      "title": "詳細再訪時に再文字起こしの終端へ追従しない",
+      "resolution": "queued/running時だけ詳細を2.5秒で単一実行更新し、同一updated_atでもfinal_transcription.status差分を反映。実ストアのqueued→running→succeededと自動停止をFake Timerで検証した。"
+    },
+    {
+      "id": "F002",
+      "title": "音紋確認再生の準備中に背景へキーボード操作できる",
+      "resolution": "aria-modalダイアログ、背景inert・aria-hidden、previewReady登録条件、loaded/error/timeout状態機械を追加し、HTML出力と状態遷移を実行検証した。"
+    },
+    {
+      "id": "F003",
+      "title": "一覧の非同期更新競合で状態やローディングが巻き戻る",
+      "resolution": "前景・pagination中のsilent遮断、single-flight、要求世代管理を追加し、応答逆転・古いエラー・pagination競合を遅延Promiseで検証した。"
+    },
+    {
+      "id": "F004",
+      "title": "unknown_manual_reconcileが再読込後に完了表示へ戻る",
+      "resolution": "再文字起こし状態を共通正規化し、unknown_manual_reconcileを再処理失敗として一覧・詳細で統一した。"
+    }
+  ],
+  "residual_risks": [
+    "GitNexusは共有ストアを含む22ファイル・29シンボルへの影響をHIGHと判定した。後方互換な任意引数、世代管理、対象・全体テスト、production buildで緩和済み。",
+    "実ブラウザでのマイク録音E2Eは未実施。MediaRecorder固有差はreadyState確認、error処理、10秒タイムアウトで防御している。",
+    "今回の作業には本番デプロイを含めていない。"
+  ]
+}

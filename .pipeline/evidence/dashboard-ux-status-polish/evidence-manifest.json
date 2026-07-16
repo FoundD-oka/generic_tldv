@@ -1,0 +1,216 @@
+{
+  "manifest_version": "1.0",
+  "task_id": "dashboard-ux-status-polish",
+  "goal_id": "dashboard-ux-status-polish-goal",
+  "checkpoint_id": "dashboard-ux-status-polish-cp-001",
+  "repo": {
+    "base_branch": "",
+    "base_sha": "2d3591ce2c086f75aee23e1b5defa4f7362f4f14",
+    "head_sha": "4e136492b51ba0f507fbdbd8ad10e2f2a856a178",
+    "branch_name": "harness/dashboard-ux-status-polish",
+    "worktree_path": "/Users/bonginkan-3-gouki/project/generic_tldv/.pipeline/worktrees/dashboard-ux-status-polish/checkout",
+    "generated_at": "2026-07-16T15:28:03.745699+00:00"
+  },
+  "commands": [
+    {
+      "id": "dashboard-target",
+      "command": "cd services/dashboard && npm test -- tests/test_transcription_dictionary_ui.test.ts tests/test_dashboard_brand.test.ts tests/test_voiceprint_recording_ui.test.ts tests/test_meeting_status_display.test.ts tests/test_transcript_reprocess_ui.test.ts tests/test_single_flight_polling.test.ts tests/test_meetings_store_refresh_race.test.ts",
+      "required": true,
+      "exit_code": 0,
+      "started_at": "2026-07-16T15:27:35.244093+00:00",
+      "finished_at": "2026-07-16T15:27:35.895018+00:00",
+      "log_path": ".pipeline/evidence/dashboard-ux-status-polish/logs/dashboard-target.log"
+    },
+    {
+      "id": "dashboard-all",
+      "command": "cd services/dashboard && npm test && VEXA_API_URL=http://localhost:8056 npm run build",
+      "required": true,
+      "exit_code": 0,
+      "started_at": "2026-07-16T15:27:35.895136+00:00",
+      "finished_at": "2026-07-16T15:27:50.663024+00:00",
+      "log_path": ".pipeline/evidence/dashboard-ux-status-polish/logs/dashboard-all.log"
+    },
+    {
+      "id": "api-test",
+      "command": "PYTHONPATH=services/meeting-api:libs/admin-models /Users/bonginkan-3-gouki/project/generic_tldv/.pipeline/worktrees/recording-range-streaming/checkout/.venv/bin/python -m pytest services/meeting-api/tests/test_meetings.py -q",
+      "required": true,
+      "exit_code": 0,
+      "started_at": "2026-07-16T15:27:50.663308+00:00",
+      "finished_at": "2026-07-16T15:28:02.033089+00:00",
+      "log_path": ".pipeline/evidence/dashboard-ux-status-polish/logs/api-test.log"
+    },
+    {
+      "id": "gitnexus",
+      "command": "node /Users/bonginkan-3-gouki/project/generic_tldv/.gitnexus/run.cjs detect-changes --repo /Users/bonginkan-3-gouki/project/generic_tldv/.pipeline/worktrees/dashboard-ux-status-polish/checkout --scope compare --base-ref main",
+      "required": true,
+      "exit_code": 0,
+      "started_at": "2026-07-16T15:28:02.033208+00:00",
+      "finished_at": "2026-07-16T15:28:03.745558+00:00",
+      "log_path": ".pipeline/evidence/dashboard-ux-status-polish/logs/gitnexus.log"
+    }
+  ],
+  "artifacts": [],
+  "scope": {
+    "changed_files": [
+      "AGENTS.md",
+      "CLAUDE.md",
+      "services/dashboard/src/app/dictionary/page.tsx",
+      "services/dashboard/src/app/meetings/[id]/page.tsx",
+      "services/dashboard/src/app/meetings/page.tsx",
+      "services/dashboard/src/app/voiceprints/page.tsx",
+      "services/dashboard/src/components/meetings/meeting-card.tsx",
+      "services/dashboard/src/components/transcript/transcript-viewer.tsx",
+      "services/dashboard/src/components/voiceprints/voiceprint-preparation-gate.tsx",
+      "services/dashboard/src/lib/dashboard-copy.ts",
+      "services/dashboard/src/lib/retranscription-status.ts",
+      "services/dashboard/src/lib/single-flight-polling.ts",
+      "services/dashboard/src/lib/voiceprint-preview-state.ts",
+      "services/dashboard/src/lib/voiceprint-recording.ts",
+      "services/dashboard/src/stores/meetings-store.ts",
+      "services/dashboard/src/types/vexa.ts",
+      "services/dashboard/tests/test_dashboard_brand.test.ts",
+      "services/dashboard/tests/test_meeting_cards_ui.test.ts",
+      "services/dashboard/tests/test_meeting_status_display.test.ts",
+      "services/dashboard/tests/test_meetings_store_refresh_race.test.ts",
+      "services/dashboard/tests/test_single_flight_polling.test.ts",
+      "services/dashboard/tests/test_transcript_reprocess_ui.test.ts",
+      "services/dashboard/tests/test_transcription_dictionary_ui.test.ts",
+      "services/dashboard/tests/test_voiceprint_recording_ui.test.ts",
+      "services/meeting-api/meeting_api/meetings.py",
+      "services/meeting-api/tests/test_meetings.py",
+      "services/transcription-service/README.md",
+      "メモ.md"
+    ],
+    "forbidden_paths_changed": [],
+    "allowed_paths_outside_with_justification": [],
+    "changed_file_count": 28
+  },
+  "quality_conditions": [
+    {
+      "id": "qc-dictionary",
+      "condition": "無効辞書行の背景と文字をグレー化する",
+      "ok_line": "辞書UIテストが通る",
+      "target_state": "辞書UIテストが通る",
+      "status": "passed",
+      "evidence": [
+        "command:dashboard-target"
+      ]
+    },
+    {
+      "id": "qc-nav",
+      "condition": "日本語サイドパネルを会議一覧へ変更する",
+      "ok_line": "コピー単体テストが通る",
+      "target_state": "コピー単体テストが通る",
+      "status": "passed",
+      "evidence": [
+        "command:dashboard-target"
+      ]
+    },
+    {
+      "id": "qc-voiceprint",
+      "condition": "確認再生準備中は全操作を遮断し完了または失敗で解除する",
+      "ok_line": "声紋UIテストが通る",
+      "target_state": "声紋UIテストが通る",
+      "status": "passed",
+      "evidence": [
+        "command:dashboard-target"
+      ]
+    },
+    {
+      "id": "qc-status",
+      "condition": "再文字起こしqueued/runningを一覧・詳細で処理中と表示する",
+      "ok_line": "状態・再処理UIテストが通る",
+      "target_state": "状態・再処理UIテストが通る",
+      "status": "passed",
+      "evidence": [
+        "command:dashboard-target"
+      ]
+    },
+    {
+      "id": "qc-dashboard-regression",
+      "condition": "既存Dashboardを壊さない",
+      "ok_line": "Dashboard全テストとbuildが通る",
+      "target_state": "Dashboard全テストとbuildが通る",
+      "status": "passed",
+      "evidence": [
+        "command:dashboard-all"
+      ]
+    },
+    {
+      "id": "qc-api",
+      "condition": "一覧APIが最終文字起こし状態を軽量応答に含める",
+      "ok_line": "Meeting API対象テストが通る",
+      "target_state": "Meeting API対象テストが通る",
+      "status": "passed",
+      "evidence": [
+        "command:api-test"
+      ]
+    },
+    {
+      "id": "qc-scope",
+      "condition": "変更影響が想定範囲内である",
+      "ok_line": "GitNexus変更検査が通る",
+      "target_state": "GitNexus変更検査が通る",
+      "status": "passed",
+      "evidence": [
+        "command:gitnexus"
+      ]
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "qc-dictionary",
+      "status": "passed",
+      "evidence": [
+        "command:dashboard-target"
+      ]
+    },
+    {
+      "id": "qc-nav",
+      "status": "passed",
+      "evidence": [
+        "command:dashboard-target"
+      ]
+    },
+    {
+      "id": "qc-voiceprint",
+      "status": "passed",
+      "evidence": [
+        "command:dashboard-target"
+      ]
+    },
+    {
+      "id": "qc-status",
+      "status": "passed",
+      "evidence": [
+        "command:dashboard-target"
+      ]
+    },
+    {
+      "id": "qc-dashboard-regression",
+      "status": "passed",
+      "evidence": [
+        "command:dashboard-all"
+      ]
+    },
+    {
+      "id": "qc-api",
+      "status": "passed",
+      "evidence": [
+        "command:api-test"
+      ]
+    },
+    {
+      "id": "qc-scope",
+      "status": "passed",
+      "evidence": [
+        "command:gitnexus"
+      ]
+    }
+  ],
+  "missing_evidence": [],
+  "approval": {
+    "state": "pending",
+    "decision_path": ".pipeline/approvals/dashboard-ux-status-polish/approval-decision.json"
+  }
+}
