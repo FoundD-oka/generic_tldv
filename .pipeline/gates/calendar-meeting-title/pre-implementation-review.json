@@ -1,0 +1,16 @@
+{
+  "timestamp": "2026-07-16T13:55:59.094233+00:00",
+  "task_id": "calendar-meeting-title",
+  "size": "S",
+  "status": "pass",
+  "plan_hash": "sha256:ee9c4e938292b5cbdc96a5c59e93e823b0846d7e4382232996131d60b6bdabd4",
+  "plan_material_version": "plan-v1",
+  "checks": [
+    {
+      "check": "fable-plan-review",
+      "ok": true,
+      "errors": []
+    }
+  ],
+  "errors": []
+}

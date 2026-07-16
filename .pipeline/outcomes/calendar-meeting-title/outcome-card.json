@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0",
+  "task_id": "calendar-meeting-title",
+  "runtime_profile": "codex-app",
+  "size": "S",
+  "result": {
+    "at_pass": true,
+    "fp_pass": true,
+    "nft_pass": true,
+    "hd_resolved": true,
+    "blocking_findings": 0
+  },
+  "evidence": {
+    "verification": [
+      "Meeting API対象テスト -> 32件成功",
+      "Dashboard会議カード対象テスト -> 4件成功",
+      "Dashboard TypeScript型検査 -> 成功",
+      "GitNexus detect-changes -> 6ファイル・9シンボル・5フロー、リスクmedium",
+      "pr-ready-gate.sh calendar-meeting-title -> ready"
+    ]
+  },
+  "notes": [
+    "一覧表示の優先順位を手動編集名、カレンダータイトル、会議コードの順へ変更した。",
+    "軽量一覧レスポンスはcalendar_titleを返し、完全データレスポンスではcalendar_event.titleを直接参照する。",
+    "カレンダータイトルを一覧検索の対象へ追加した。",
+    "Fable事前レビューの完全データ経路に関する指摘を採用し、その後はmax-calls到達時の検証済みCodex-onlyフォールバックを記録した。"
+  ]
+}

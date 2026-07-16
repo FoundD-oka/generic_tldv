@@ -1,0 +1,31 @@
+{
+  "timestamp": "2026-07-16T13:56:35.691899+00:00",
+  "task_id": "calendar-meeting-title",
+  "size": "S",
+  "status": "pass",
+  "model": "gpt-5.6-sol",
+  "plan_material_version": "plan-v1",
+  "reasoning_effort": "ultra",
+  "repeated_failure_triggered": false,
+  "checks": [
+    {
+      "stage": "plan",
+      "required": false,
+      "status": "pass",
+      "errors": []
+    },
+    {
+      "stage": "stuck",
+      "required": false,
+      "status": "pass",
+      "errors": []
+    },
+    {
+      "stage": "post",
+      "required": false,
+      "status": "pass",
+      "errors": []
+    }
+  ],
+  "errors": []
+}

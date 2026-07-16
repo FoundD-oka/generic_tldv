@@ -1,0 +1,8 @@
+{
+  "timestamp": "2026-07-16T13:57:06.010302+00:00",
+  "task_id": "calendar-meeting-title",
+  "size": "S",
+  "status": "pass",
+  "card_path": ".pipeline/outcomes/calendar-meeting-title/outcome-card.json",
+  "failures": []
+}

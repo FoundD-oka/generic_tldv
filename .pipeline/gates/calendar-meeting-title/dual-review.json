@@ -1,0 +1,22 @@
+{
+  "timestamp": "2026-07-16T13:56:35.751028+00:00",
+  "task_id": "calendar-meeting-title",
+  "size": "S",
+  "status": "pass",
+  "plan_material_version": "plan-v1",
+  "checks": [
+    {
+      "stage": "plan",
+      "required": false,
+      "status": "pass",
+      "errors": []
+    },
+    {
+      "stage": "post",
+      "required": false,
+      "status": "pass",
+      "errors": []
+    }
+  ],
+  "errors": []
+}

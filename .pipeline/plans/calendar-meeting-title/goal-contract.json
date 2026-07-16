@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0",
+  "task_id": "calendar-meeting-title",
+  "goal_id": "calendar-meeting-title-goal",
+  "source": {
+    "type": "manual",
+    "created_at": "2026-07-16T13:53:11.764168+00:00"
+  },
+  "raw_request": [
+    "カレンダー起動会議を一覧でカレンダータイトルにより識別できるようにする"
+  ],
+  "interpreted_goal": {
+    "description": "カレンダー起動会議を一覧でカレンダータイトルにより識別できるようにする",
+    "business_outcome": []
+  },
+  "success_metrics": [
+    {
+      "id": "sm-001",
+      "text": "手動編集名、カレンダータイトル、会議コードの優先順位がAPIと画面で検証できる"
+    }
+  ],
+  "non_goals": [],
+  "approval": {
+    "state": "pending",
+    "required_before_checkpoint_split": false,
+    "approver_role": "client_owner"
+  }
+}
