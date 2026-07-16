@@ -45,4 +45,58 @@ describe("meetings refresh ordering", () => {
 
     expect(useMeetingsStore.getState().meetings[0].data.final_transcription?.status).toBe("succeeded");
   });
+
+  it("skips a silent refresh while a foreground request owns the loading state", async () => {
+    const foregroundResponse = deferred<{ meetings: Meeting[]; has_more: boolean }>();
+    const getMeetings = vi.spyOn(vexaAPI, "getMeetings").mockImplementationOnce(() => foregroundResponse.promise);
+
+    useMeetingsStore.setState({ meetings: [], isLoadingMeetings: false, _offset: 0, _filters: {} });
+    const foregroundRequest = useMeetingsStore.getState().fetchMeetings();
+    await useMeetingsStore.getState().fetchMeetings(undefined, { silent: true });
+    expect(getMeetings).toHaveBeenCalledTimes(1);
+
+    foregroundResponse.resolve({ meetings: [meeting("succeeded")], has_more: false });
+    await foregroundRequest;
+    expect(useMeetingsStore.getState().isLoadingMeetings).toBe(false);
+  });
+
+  it("ignores an older foreground error after a newer request succeeds", async () => {
+    const oldResponse = deferred<{ meetings: Meeting[]; has_more: boolean }>();
+    const newResponse = deferred<{ meetings: Meeting[]; has_more: boolean }>();
+    vi.spyOn(vexaAPI, "getMeetings")
+      .mockImplementationOnce(() => oldResponse.promise)
+      .mockImplementationOnce(() => newResponse.promise);
+
+    useMeetingsStore.setState({ meetings: [], error: null, isLoadingMeetings: false, _offset: 0, _filters: {} });
+    const oldRequest = useMeetingsStore.getState().fetchMeetings();
+    const newRequest = useMeetingsStore.getState().fetchMeetings();
+    newResponse.resolve({ meetings: [meeting("succeeded")], has_more: false });
+    await newRequest;
+    oldResponse.resolve(Promise.reject(new Error("stale failure")) as never);
+    await oldRequest;
+
+    expect(useMeetingsStore.getState().error).toBeNull();
+    expect(useMeetingsStore.getState().meetings[0].data.final_transcription?.status).toBe("succeeded");
+  });
+
+  it("does not start a silent refresh while pagination is in flight", async () => {
+    const moreResponse = deferred<{ meetings: Meeting[]; has_more: boolean }>();
+    const getMeetings = vi.spyOn(vexaAPI, "getMeetings").mockImplementationOnce(() => moreResponse.promise);
+    useMeetingsStore.setState({
+      meetings: [meeting("running")],
+      hasMore: true,
+      isLoadingMore: false,
+      isLoadingMeetings: false,
+      _offset: 50,
+      _filters: {},
+    });
+
+    const moreRequest = useMeetingsStore.getState().fetchMoreMeetings();
+    await useMeetingsStore.getState().fetchMeetings(undefined, { silent: true });
+    expect(getMeetings).toHaveBeenCalledTimes(1);
+
+    moreResponse.resolve({ meetings: [], has_more: false });
+    await moreRequest;
+    expect(useMeetingsStore.getState().isLoadingMore).toBe(false);
+  });
 });

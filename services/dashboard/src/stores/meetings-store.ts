@@ -137,6 +137,7 @@ let isChatRouteUnavailable = false;
 let hasLoggedChatRouteUnavailable = false;
 let meetingsRequestGeneration = 0;
 let isSilentMeetingRefreshInFlight = false;
+let isForegroundMeetingRefreshInFlight = false;
 let meetingDetailRequestGeneration = 0;
 
 export const useMeetingsStore = create<MeetingsState>((set, get) => ({
@@ -165,8 +166,9 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
   ) => {
     const activeFilters = filters ?? get()._filters;
     const silent = options?.silent === true;
-    if (silent && isSilentMeetingRefreshInFlight) return;
+    if (silent && (isSilentMeetingRefreshInFlight || isForegroundMeetingRefreshInFlight || get().isLoadingMore)) return;
     if (silent) isSilentMeetingRefreshInFlight = true;
+    if (!silent) isForegroundMeetingRefreshInFlight = true;
     const requestGeneration = ++meetingsRequestGeneration;
     if (silent) {
       set({ _filters: activeFilters });
@@ -194,8 +196,8 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
         ...(silent ? {} : { isLoadingMeetings: false }),
       });
     } catch (error) {
+      if (requestGeneration !== meetingsRequestGeneration) return;
       if (error instanceof VexaAPIError && error.status === 402) {
-        if (requestGeneration !== meetingsRequestGeneration) return;
         set({
           subscriptionRequired: true,
           error: null,
@@ -213,13 +215,16 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
       });
     } finally {
       if (silent) isSilentMeetingRefreshInFlight = false;
+      if (!silent && requestGeneration === meetingsRequestGeneration) {
+        isForegroundMeetingRefreshInFlight = false;
+      }
     }
   },
 
   // Fetch next page and append
   fetchMoreMeetings: async () => {
-    const { meetings, hasMore, isLoadingMore, _filters, _offset } = get();
-    if (!hasMore || isLoadingMore) return;
+    const { meetings, hasMore, isLoadingMore, isLoadingMeetings, _filters, _offset } = get();
+    if (!hasMore || isLoadingMore || isLoadingMeetings || isSilentMeetingRefreshInFlight) return;
     const requestGeneration = ++meetingsRequestGeneration;
     set({ isLoadingMore: true });
     try {
