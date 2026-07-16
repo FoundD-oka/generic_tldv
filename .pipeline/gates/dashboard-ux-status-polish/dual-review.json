@@ -1,0 +1,22 @@
+{
+  "timestamp": "2026-07-16T15:31:18.307056+00:00",
+  "task_id": "dashboard-ux-status-polish",
+  "size": "M",
+  "status": "pass",
+  "plan_material_version": "plan-v1",
+  "checks": [
+    {
+      "stage": "plan",
+      "required": false,
+      "status": "pass",
+      "errors": []
+    },
+    {
+      "stage": "post",
+      "required": false,
+      "status": "pass",
+      "errors": []
+    }
+  ],
+  "errors": []
+}
