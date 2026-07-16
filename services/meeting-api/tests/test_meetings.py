@@ -11,8 +11,10 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from sqlalchemy.dialects import postgresql
 
 from meeting_api.schemas import MeetingStatus, MeetingResponse, BotStatusResponse, Platform, MeetingCreate
+from meeting_api.meetings import _meeting_list_data_summary, list_user_bots
 
 from .conftest import (
     TEST_USER_ID,
@@ -62,6 +64,36 @@ def test_meeting_create_defaults_voice_agent_enabled_true():
     req = MeetingCreate(platform="google_meet", native_meeting_id="abc-defg-hij")
 
     assert req.voice_agent_enabled is True
+
+
+def test_meeting_list_summary_keeps_manual_and_calendar_titles_separate():
+    summary = _meeting_list_data_summary({
+        "name": "手動で変更した名前",
+        "calendar_event": {"title": "週次定例"},
+    })
+
+    assert summary["name"] == "手動で変更した名前"
+    assert summary["calendar_title"] == "週次定例"
+
+
+@pytest.mark.asyncio
+async def test_meeting_list_search_includes_calendar_title():
+    db = AsyncMock()
+    db.execute.return_value = MockResult([])
+
+    await list_user_bots(
+        auth_data=(None, SimpleNamespace(id=TEST_USER_ID)),
+        db=db,
+        search="週次定例",
+    )
+
+    statement = db.execute.call_args.args[0]
+    sql = str(statement.compile(
+        dialect=postgresql.dialect(),
+        compile_kwargs={"literal_binds": True},
+    ))
+    assert "calendar_event" in sql
+    assert "title" in sql
 
 
 class TestCreateMeeting:

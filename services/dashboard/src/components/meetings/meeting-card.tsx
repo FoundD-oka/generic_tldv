@@ -20,7 +20,6 @@ import { withBasePath } from "@/lib/base-path";
 
 interface MeetingCardProps {
   meeting: Meeting;
-  participantsTitleTemplate?: string;
 }
 
 // Platform icons using actual icon files from public folder
@@ -76,18 +75,12 @@ function PlatformIcon({ platform, className }: { platform: string; className?: s
   return <ZoomIcon className={className} />;
 }
 
-export function MeetingCard({
-  meeting,
-  participantsTitleTemplate = "{names}との会議",
-}: MeetingCardProps) {
+export function MeetingCard({ meeting }: MeetingCardProps) {
   const statusConfig = getDetailedStatus(meeting.status, meeting.data);
   const updateMeetingData = useMeetingsStore((state) => state.updateMeetingData);
-  const participants = meeting.data?.participants || [];
   const rawTitle = meeting.data?.name || meeting.data?.title;
-  const participantsTitle = participants.length > 0
-    ? participantsTitleTemplate.replace("{names}", participants.join(", "))
-    : null;
-  const displayTitle = rawTitle || participantsTitle || meeting.platform_specific_id || "無題の会議";
+  const calendarTitle = meeting.data?.calendar_title || meeting.data?.calendar_event?.title;
+  const displayTitle = rawTitle || calendarTitle || meeting.platform_specific_id || "無題の会議";
   const timeSource = meeting.start_time || meeting.created_at;
   const isActive = meeting.status === "active";
   
@@ -189,7 +182,7 @@ export function MeetingCard({
   const handleStartEdit = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setEditedTitle(rawTitle || participantsTitle || "");
+    setEditedTitle(rawTitle || calendarTitle || "");
     setIsEditingTitle(true);
   };
 
