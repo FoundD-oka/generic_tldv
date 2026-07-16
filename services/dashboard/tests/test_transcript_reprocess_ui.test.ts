@@ -20,7 +20,7 @@ describe("transcript reprocess UI contract", () => {
     expect(source).toContain("setCurrentMeeting({");
     expect(source).toContain("final_transcription:");
     expect(source).toContain("shouldPollRetranscription");
-    expect(source).toContain("startSingleFlightPolling(() => refreshMeeting(meetingId), 2500)");
+    expect(source).toContain("startRetranscriptionStatusPolling(() => refreshMeeting(meetingId), 2500)");
     expect(source).toContain("normalizeRetranscriptionStatus(status)");
   });
 

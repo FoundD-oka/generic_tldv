@@ -5,6 +5,7 @@ import {
   type TranscriptManager,
   createTranscriptManager,
 } from "@vexaai/transcript-rendering";
+import { getRetranscriptionStatus } from "@/lib/retranscription-status";
 
 interface MeetingDataUpdate {
   name?: string;
@@ -111,7 +112,7 @@ interface MeetingsState {
   ) => Promise<void>;
   fetchMoreMeetings: () => Promise<void>;
   fetchMeeting: (id: string, options?: { silent?: boolean }) => Promise<void>;
-  refreshMeeting: (id: string) => Promise<void>;
+  refreshMeeting: (id: string) => Promise<Meeting | null>;
   fetchTranscripts: (platform: Platform, nativeId: string, meetingId?: string, options?: { silent?: boolean }) => Promise<void>;
   updateMeetingData: (platform: Platform, nativeId: string, data: MeetingDataUpdate) => Promise<void>;
   deleteMeeting: (platform: Platform, nativeId: string, meetingId?: string) => Promise<void>;
@@ -311,13 +312,16 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
     const requestGeneration = ++meetingDetailRequestGeneration;
     try {
       const meeting = await vexaAPI.getMeeting(id);
-      if (requestGeneration !== meetingDetailRequestGeneration) return;
+      if (requestGeneration !== meetingDetailRequestGeneration) return null;
       if (meeting) {
         const { currentMeeting, meetings } = get();
         const currentRecordingSignature = recordingsStateSignature(currentMeeting);
         const nextRecordingSignature = recordingsStateSignature(meeting);
+        const currentRetranscriptionStatus = getRetranscriptionStatus(currentMeeting?.data);
+        const nextRetranscriptionStatus = getRetranscriptionStatus(meeting.data);
         if (currentMeeting?.status !== meeting.status ||
             currentMeeting?.updated_at !== meeting.updated_at ||
+            currentRetranscriptionStatus !== nextRetranscriptionStatus ||
             currentRecordingSignature !== nextRecordingSignature) {
           // Update in meetings list if present
           const updatedMeetings = meetings.map((m) =>
@@ -330,11 +334,13 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
           });
         }
       }
+      return meeting;
     } catch (error) {
       // Silent refresh - don't show errors for polling failures
       if (!isTransientRefreshError(error)) {
         console.debug("Failed to refresh meeting:", error);
       }
+      return null;
     }
   },
 

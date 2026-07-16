@@ -1,4 +1,5 @@
-import type { MeetingData } from "@/types/vexa";
+import type { Meeting, MeetingData } from "@/types/vexa";
+import { startSingleFlightPolling } from "@/lib/single-flight-polling";
 
 export type RetranscriptionStatus = "idle" | "queued" | "running" | "succeeded" | "failed";
 
@@ -18,4 +19,18 @@ export function getRetranscriptionStatus(data?: MeetingData): RetranscriptionSta
 export function isRetranscriptionInProgress(data?: MeetingData): boolean {
   const status = getRetranscriptionStatus(data);
   return status === "queued" || status === "running";
+}
+
+export function startRetranscriptionStatusPolling(
+  refresh: () => Promise<Meeting | null>,
+  intervalMs = 2500
+): () => void {
+  return startSingleFlightPolling(
+    async () => {
+      const meeting = await refresh();
+      return meeting === null ? null : isRetranscriptionInProgress(meeting.data);
+    },
+    intervalMs,
+    (inProgress) => inProgress !== false
+  );
 }

@@ -1,24 +1,29 @@
-export function startSingleFlightPolling(
-  task: () => Promise<unknown>,
-  intervalMs = 2500
+export function startSingleFlightPolling<T>(
+  task: () => Promise<T>,
+  intervalMs = 2500,
+  shouldContinue: (result: T) => boolean = () => true
 ): () => void {
   let stopped = false;
   let inFlight = false;
+  let interval: ReturnType<typeof globalThis.setInterval> | null = null;
+
+  const stop = () => {
+    stopped = true;
+    if (interval !== null) globalThis.clearInterval(interval);
+  };
 
   const run = async () => {
     if (stopped || inFlight) return;
     inFlight = true;
     try {
-      await task();
+      const result = await task();
+      if (!shouldContinue(result)) stop();
     } finally {
       inFlight = false;
     }
   };
 
   void run();
-  const interval = globalThis.setInterval(() => void run(), intervalMs);
-  return () => {
-    stopped = true;
-    globalThis.clearInterval(interval);
-  };
+  interval = globalThis.setInterval(() => void run(), intervalMs);
+  return stop;
 }
