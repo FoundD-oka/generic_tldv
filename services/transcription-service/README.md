@@ -41,6 +41,59 @@ docker compose logs -f
 
 The service listens on the port mapped in `docker-compose.yml` (default 8083:80).
 
+### GeminiをGCP CLI認証で起動する（deferred transcription）
+
+`DEFERRED_TRANSCRIPTION_MODEL=gemini-*`を使う場合、workerは
+`GEMINI_API_KEY`を必要とする。`gcloud auth login`やADCだけではworkerへ認証情報が
+渡らないため、GCP CLIで既存のGenerative Language API限定キーを取得し、
+Compose実行時だけ環境変数として注入する。キー文字列をREADME、shell履歴、`.env`へ
+直接記載しないこと。
+
+```bash
+# 1. CLIのログイン先を確認する
+gcloud auth list --filter=status:ACTIVE --format='value(account)'
+gcloud config get-value project
+gcloud auth print-access-token >/dev/null
+
+# 2. Generative Language API限定キーのresource IDを確認する
+export GCP_PROJECT='<GCP project ID>'
+gcloud services api-keys list \
+  --project="$GCP_PROJECT" \
+  --format='table(name.basename(),displayName,restrictions.apiTargets.service)'
+
+# 3. 対象キーを秘密値のまま取得し、workerだけ再作成する
+export GEMINI_API_KEY_RESOURCE='<api-key resource ID>'
+cd services/transcription-service
+GEMINI_API_KEY="$(gcloud services api-keys get-key-string \
+  "$GEMINI_API_KEY_RESOURCE" \
+  --project="$GCP_PROJECT" \
+  --format='value(keyString)')" \
+docker compose \
+  --env-file ../../.env \
+  -f docker-compose.cpu.yml \
+  -f docker-compose.override.yml \
+  up -d --force-recreate transcription-worker-1
+```
+
+認証確認:
+
+```bash
+docker inspect -f '{{.State.Health.Status}}' transcription-worker-1-cpu
+docker exec transcription-worker-1-cpu sh -lc \
+  'test -n "${GEMINI_API_KEY:-}" && echo "Gemini credential: loaded"'
+docker logs transcription-worker-1-cpu --since 5m 2>&1 | \
+  grep -E 'Gemini|generateContent|auth_missing|POST /v1/audio/transcriptions'
+```
+
+`/health`はworker processの生存確認であり、Gemini認証のreadinessまでは保証しない。
+`auth_missing`またはHTTP 503が出た場合は、コンテナ内の`GEMINI_API_KEY`が空になって
+いないか確認する。通常の`docker restart`では環境変数は保持されるが、
+`docker compose up --force-recreate`時は上記のCLI注入を再実行する必要がある。
+
+ADCを使うGCS処理と、このGemini API key方式は別の認証経路である。
+`gcloud auth application-default print-access-token`が失敗していても、上記の
+`gcloud auth print-access-token`とAPI key取得が成功すればGemini workerは利用できる。
+
 ### Test
 
 ```bash

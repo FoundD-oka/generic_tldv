@@ -42,3 +42,4 @@ date	task_id	category	source	severity	note
 2026-07-10	issue-27-voiceprint	merge-suggestion-orphan	tribunal	low	BUG-012 merge does not clear pending suggestions for merged-away clusters
 2026-07-15	fable-consultation-reliability	fable-cli-contract-failure	human	high	1回目: tool_useのままerror_max_turns
 2026-07-15	fable-consultation-reliability	fable-cli-contract-failure	human	high	2回目: tool_useのままerror_max_budget_usd
+2026-07-10	issue-27-voiceprint	voiceprint-model-cache-perms	deploy	medium	PoC deploy: named volume mounted over /models lost image content and ownership - runtime fallback + appuser chown required

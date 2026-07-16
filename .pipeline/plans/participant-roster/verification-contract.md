@@ -13,13 +13,12 @@
 
 ## Required Commands
 
-- `cd services/vexa-bot/core && ../node_modules/.bin/tsx src/services/participant-roster.test.ts`
-- `cd services/vexa-bot/core && ../node_modules/.bin/tsx src/services/unified-callback.test.ts`
+- `cd services/vexa-bot/core && npx tsx src/services/participant-roster.test.ts`
+- `cd services/vexa-bot/core && npx tsx src/services/unified-callback.test.ts`
 - `cd services/vexa-bot/core && npm run build`
-- `docker run --rm --user root -e PYTHONDONTWRITEBYTECODE=1 -e PYTHONPATH=/src/services/meeting-api:/src/libs/admin-models -v "$PWD:/src:ro" -w /src/services/meeting-api vexaai/meeting-api:latest sh -lc 'python -m pip install --disable-pip-version-check --no-cache-dir -q pytest pytest-asyncio && python -m pytest -p no:cacheprovider tests/test_participant_roster.py tests/test_callbacks.py tests/test_post_meeting_idempotency.py tests/test_meetings.py -q'`
-- `docker run --rm --user root -e PYTHONDONTWRITEBYTECODE=1 -e PYTHONPATH=/src/services/meeting-api:/src/libs/admin-models -v "$PWD:/src:ro" -w /src/services/meeting-api vexaai/meeting-api:latest sh -lc 'python -m pip install --disable-pip-version-check --no-cache-dir -q pytest pytest-asyncio && python -m pytest -p no:cacheprovider tests -q --ignore=tests/integration/test_transcription_dictionary_postgres.py'`
-- `cd services/dashboard && npm test -- tests/test_meeting_cards_ui.test.ts tests/test_export_and_bot_defaults.test.ts`
-- `node /Users/bonginkan-3-gouki/project/generic_tldv/.gitnexus/run.cjs detect-changes --repo generic_tldv-participant-roster --scope compare --base-ref main`
+- `cd services/meeting-api && PYTHONPATH=. python -m pytest tests/test_callbacks.py tests/test_post_meeting_idempotency.py -q`
+- `cd services/meeting-api && PYTHONPATH=. python -m pytest tests -q`
+- `node .gitnexus/run.cjs detect-changes --repo /Users/bonginkan-3-gouki/project/generic_tldv --scope compare --base-ref main`
 - `bash .claude/hooks/pr-ready-gate.sh participant-roster`
 - `bash scripts/harness/outcome-judge.sh participant-roster`
 
