@@ -22,4 +22,38 @@ describe("getDetailedStatus", () => {
       label: "停止中",
     });
   });
+
+  it.each(["queued", "running"])("shows completed meetings as 処理中 during reprocessing: %s", (finalStatus) => {
+    expect(getDetailedStatus("completed", {
+      final_transcription: { status: finalStatus },
+    })).toMatchObject({
+      label: "処理中",
+      description: "辞書を反映して再文字起こし中です",
+    });
+  });
+
+  it("shows a reprocessing-specific failure while keeping the existing transcript usable", () => {
+    expect(getDetailedStatus("completed", {
+      final_transcription: { status: "failed" },
+    })).toMatchObject({
+      label: "再処理失敗",
+      description: "再文字起こしに失敗しました。既存の文字起こしは引き続き確認できます",
+    });
+  });
+
+  it("treats manual reconciliation as a reprocessing failure after reload", () => {
+    expect(getDetailedStatus("completed", {
+      final_transcription: { status: "unknown_manual_reconcile" },
+    })).toMatchObject({
+      label: "再処理失敗",
+    });
+  });
+
+  it("returns to 完了 after reprocessing succeeds", () => {
+    expect(getDetailedStatus("completed", {
+      final_transcription: { status: "succeeded" },
+    })).toMatchObject({
+      label: "完了",
+    });
+  });
 });

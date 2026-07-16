@@ -25,6 +25,8 @@ import { withBasePath } from "@/lib/base-path";
 import { DEFAULT_DASHBOARD_BRAND } from "@/lib/dashboard-brand";
 import { getDashboardCopy } from "@/lib/dashboard-copy";
 import { useRuntimeConfig } from "@/hooks/use-runtime-config";
+import { isRetranscriptionInProgress } from "@/lib/retranscription-status";
+import { startSingleFlightPolling } from "@/lib/single-flight-polling";
 
 export default function MeetingsPage() {
   usePendingMeeting();
@@ -105,6 +107,17 @@ export default function MeetingsPage() {
   }, [applyFilters, statusFilter, platformFilter]);
 
   const filteredMeetings = meetings;
+  const hasRetranscriptionInProgress = meetings.some((meeting) =>
+    isRetranscriptionInProgress(meeting.data)
+  );
+
+  useEffect(() => {
+    if (!hasRetranscriptionInProgress) return;
+    return startSingleFlightPolling(
+      () => fetchMeetings(undefined, { silent: true }),
+      2500
+    );
+  }, [fetchMeetings, hasRetranscriptionInProgress]);
 
   // Infinite scroll
   const sentinelRef = useRef<HTMLDivElement>(null);

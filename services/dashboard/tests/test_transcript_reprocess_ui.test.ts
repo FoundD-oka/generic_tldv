@@ -9,5 +9,30 @@ describe("transcript reprocess UI contract", () => {
     expect(source).toContain("window.confirm");
     expect(source).toContain('"replace"');
     expect(source).toContain("getTranscriptionStatus");
+    expect(source).toContain("onTranscribeStatusChange?.(started.status)");
+    expect(source).toContain("onTranscribeStatusChange?.(status.status)");
+  });
+
+  it("updates the detail badge immediately from the committed POST status", () => {
+    const source = fs.readFileSync(path.resolve("src/app/meetings/[id]/page.tsx"), "utf8");
+    expect(source).toContain("onTranscribeStatusChange={(status)");
+    expect(source).toContain("useMeetingsStore.getState().currentMeeting");
+    expect(source).toContain("setCurrentMeeting({");
+    expect(source).toContain("final_transcription:");
+    expect(source).toContain("shouldPollRetranscription");
+    expect(source).toContain("startSingleFlightPolling(() => refreshMeeting(meetingId), 2500)");
+    expect(source).toContain("normalizeRetranscriptionStatus(status)");
+  });
+
+  it("silently refreshes the list only while reprocessing is queued or running", () => {
+    const pageSource = fs.readFileSync(path.resolve("src/app/meetings/page.tsx"), "utf8");
+    const storeSource = fs.readFileSync(path.resolve("src/stores/meetings-store.ts"), "utf8");
+    expect(pageSource).toContain("hasRetranscriptionInProgress");
+    expect(pageSource).toContain("isRetranscriptionInProgress(meeting.data)");
+    expect(pageSource).toContain("startSingleFlightPolling");
+    expect(pageSource).toContain("fetchMeetings(undefined, { silent: true })");
+    expect(storeSource).toContain("options?: { silent?: boolean }");
+    expect(storeSource).toContain("Failed to silently refresh meetings");
+    expect(storeSource).toContain("requestGeneration !== meetingsRequestGeneration");
   });
 });

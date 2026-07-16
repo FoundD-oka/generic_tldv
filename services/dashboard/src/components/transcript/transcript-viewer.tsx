@@ -47,6 +47,7 @@ import { type SegmentGroup, deduplicateByIdentity, sortByStartTime } from "@vexa
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 import { normalizeVoiceprintSelectionTiming } from "@/lib/voiceprint-selection";
+import { isRetranscriptionInProgress } from "@/lib/retranscription-status";
 
 // Linkify URLs in chat message text — splits text into plain strings and clickable <a> elements
 const URL_REGEX = /(https?:\/\/[^\s<>"')\]]+)/gi;
@@ -112,6 +113,7 @@ interface TranscriptViewerProps {
   playbackAbsoluteTime?: string | null;
   isPlaybackActive?: boolean;
   onSegmentClick?: (startTimeSeconds: number, absoluteStartTime?: string) => void;
+  onTranscribeStatusChange?: (status: string) => void;
   onTranscribeComplete?: () => void;
 }
 
@@ -131,12 +133,14 @@ export function TranscriptViewer({
   playbackAbsoluteTime,
   isPlaybackActive,
   onSegmentClick,
+  onTranscribeStatusChange,
   onTranscribeComplete,
 }: TranscriptViewerProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSpeakers, setSelectedSpeakers] = useState<string[]>([]);
   const [transcribeLanguage, setTranscribeLanguage] = useState("auto");
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const isTranscriptionBusy = isTranscribing || isRetranscriptionInProgress(meeting.data);
   // 話者編集（issue #24）: 会議後の文字起こしのみ編集可能
   const [selectedSegmentIds, setSelectedSegmentIds] = useState<Set<string>>(new Set());
   const [isMergeInputOpen, setIsMergeInputOpen] = useState(false);
@@ -403,16 +407,18 @@ export function TranscriptViewer({
     if (filteredSegments.length > 0 && !window.confirm("現在の文字起こしを、最新の辞書を使った結果で置き換えますか？")) return;
     setIsTranscribing(true);
     try {
-      await vexaAPI.transcribeMeeting(
+      const started = await vexaAPI.transcribeMeeting(
         meeting.id,
         transcribeLanguage === "auto" ? undefined : transcribeLanguage,
         "replace"
       );
+      onTranscribeStatusChange?.(started.status);
       toast.info("再文字起こしを開始しました", { description: "画面を閉じても処理は継続します" });
       let completed = false;
       for (let attempt = 0; attempt < 1050; attempt += 1) {
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        await new Promise((resolve) => setTimeout(resolve, 2500));
         const status = await vexaAPI.getTranscriptionStatus(meeting.id);
+        onTranscribeStatusChange?.(status.status);
         if (status.status === "completed") {
           toast.success("文字起こしが完了しました", {
             description: `${status.segment_count ?? 0}件のセグメントを保存しました`,
@@ -433,7 +439,7 @@ export function TranscriptViewer({
     } finally {
       setIsTranscribing(false);
     }
-  }, [meeting?.id, transcribeLanguage, onTranscribeComplete, filteredSegments.length]);
+  }, [meeting?.id, transcribeLanguage, onTranscribeComplete, onTranscribeStatusChange, filteredSegments.length]);
 
   const hasActiveFilters = searchQuery.trim() || selectedSpeakers.length > 0;
 
@@ -1017,11 +1023,11 @@ export function TranscriptViewer({
               variant="outline"
               size="sm"
               className="h-7 lg:h-8 gap-1.5"
-              disabled={isTranscribing}
+              disabled={isTranscriptionBusy}
               onClick={handleTranscribe}
             >
-              {isTranscribing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              <span className="hidden lg:inline">{isTranscribing ? "再文字起こし中" : "辞書を反映して再文字起こし"}</span>
+              {isTranscriptionBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              <span className="hidden lg:inline">{isTranscriptionBusy ? "再文字起こし中" : "辞書を反映して再文字起こし"}</span>
             </Button>
           )}
 
@@ -1211,7 +1217,7 @@ export function TranscriptViewer({
                   <p className="text-sm text-muted-foreground mb-6">
                     この会議はリアルタイム文字起こしなしで録音されています。
                   </p>
-                  {isTranscribing ? (
+                  {isTranscriptionBusy ? (
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <Loader2 className="h-4 w-4 animate-spin" />
                       <span className="text-sm">録音を文字起こし中...</span>

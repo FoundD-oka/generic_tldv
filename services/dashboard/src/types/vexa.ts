@@ -1,5 +1,7 @@
 // Vexa API Types
 
+import { getRetranscriptionStatus } from "@/lib/retranscription-status";
+
 export type Platform = "google_meet" | "teams" | "zoom" | "browser_session";
 
 export type MeetingStatus =
@@ -55,6 +57,11 @@ export interface MeetingData {
   failure_reason?: string;
   // Completion details
   completion_reason?: string;
+  final_transcription?: {
+    status?: string;
+    [key: string]: unknown;
+  };
+  final_transcription_status?: string;
   // Status history
   status_transition?: StatusTransition[];
   [key: string]: unknown;
@@ -361,6 +368,7 @@ export interface DetailedStatusInfo {
 
 export function getDetailedStatus(status: MeetingStatus, data?: MeetingData): DetailedStatusInfo {
   const baseConfig = MEETING_STATUS_CONFIG[status];
+  const finalTranscriptionStatus = getRetranscriptionStatus(data);
 
   // Fallback config in case status is invalid or config is missing
   const fallbackConfig: DetailedStatusInfo = {
@@ -369,6 +377,24 @@ export function getDetailedStatus(status: MeetingStatus, data?: MeetingData): De
     bgColor: "bg-gray-100 dark:bg-gray-800/50",
     description: "状態を確認できません"
   };
+
+  if (status === "completed" && ["queued", "running"].includes(finalTranscriptionStatus)) {
+    return {
+      label: "処理中",
+      color: "text-blue-600 dark:text-blue-400",
+      bgColor: "bg-blue-100 dark:bg-blue-950/50",
+      description: "辞書を反映して再文字起こし中です",
+    };
+  }
+
+  if (status === "completed" && finalTranscriptionStatus === "failed") {
+    return {
+      label: "再処理失敗",
+      color: "text-red-600 dark:text-red-400",
+      bgColor: "bg-red-100 dark:bg-red-950/50",
+      description: "再文字起こしに失敗しました。既存の文字起こしは引き続き確認できます",
+    };
+  }
 
   // The status communicates processing state, not how the meeting ended.
   // Keep completion_reason in the data for audit/history, but render every

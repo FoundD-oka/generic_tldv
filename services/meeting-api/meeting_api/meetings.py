@@ -1386,9 +1386,17 @@ def _meeting_list_data_summary(d: Optional[dict]) -> dict:
         if isinstance(calendar_event, dict)
         else None
     )
+    final_transcription = d.get("final_transcription")
+    final_transcription_summary = (
+        {"status": final_transcription.get("status")}
+        if isinstance(final_transcription, dict) and final_transcription.get("status")
+        else None
+    )
     return {
         "name": d.get("name") or d.get("title"),
         "calendar_title": calendar_title,
+        "final_transcription": final_transcription_summary,
+        "final_transcription_status": d.get("final_transcription_status"),
         "completion_reason": d.get("completion_reason"),
         "participants": participants[:3],
         "participants_count": len(participants),

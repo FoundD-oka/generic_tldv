@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { normalizeDashboardLocale, resolveDashboardBrand } from "@/lib/dashboard-brand";
+import { getDashboardCopy } from "@/lib/dashboard-copy";
 
 describe("resolveDashboardBrand", () => {
   it("uses Japanese Kabosu defaults when no brand env is set", () => {
@@ -53,5 +54,11 @@ describe("normalizeDashboardLocale", () => {
     expect(normalizeDashboardLocale("ja-JP")).toBe("ja");
     expect(normalizeDashboardLocale("en-US")).toBe("en");
     expect(normalizeDashboardLocale(undefined)).toBe("en");
+  });
+});
+
+describe("Japanese dashboard navigation", () => {
+  it("labels the meetings destination as 会議一覧", () => {
+    expect(getDashboardCopy("ja").nav.meetings).toBe("会議一覧");
   });
 });

@@ -105,7 +105,10 @@ interface MeetingsState {
   _offset: number;
 
   // Actions
-  fetchMeetings: (filters?: { search?: string; status?: string; platform?: string }) => Promise<void>;
+  fetchMeetings: (
+    filters?: { search?: string; status?: string; platform?: string },
+    options?: { silent?: boolean }
+  ) => Promise<void>;
   fetchMoreMeetings: () => Promise<void>;
   fetchMeeting: (id: string, options?: { silent?: boolean }) => Promise<void>;
   refreshMeeting: (id: string) => Promise<void>;
@@ -132,6 +135,9 @@ interface MeetingsState {
 
 let isChatRouteUnavailable = false;
 let hasLoggedChatRouteUnavailable = false;
+let meetingsRequestGeneration = 0;
+let isSilentMeetingRefreshInFlight = false;
+let meetingDetailRequestGeneration = 0;
 
 export const useMeetingsStore = create<MeetingsState>((set, get) => ({
   // Initial state
@@ -153,12 +159,25 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
   subscriptionRequired: false,
 
   // Fetch first page of meetings (with optional server-side filters)
-  fetchMeetings: async (filters?: { search?: string; status?: string; platform?: string }) => {
+  fetchMeetings: async (
+    filters?: { search?: string; status?: string; platform?: string },
+    options?: { silent?: boolean }
+  ) => {
     const activeFilters = filters ?? get()._filters;
-    set({ isLoadingMeetings: true, error: null, _filters: activeFilters, _offset: 0 });
+    const silent = options?.silent === true;
+    if (silent && isSilentMeetingRefreshInFlight) return;
+    if (silent) isSilentMeetingRefreshInFlight = true;
+    const requestGeneration = ++meetingsRequestGeneration;
+    if (silent) {
+      set({ _filters: activeFilters });
+    } else {
+      set({ isLoadingMeetings: true, error: null, _filters: activeFilters, _offset: 0 });
+    }
     try {
       const PAGE = 50;
-      const result = await vexaAPI.getMeetings({ limit: PAGE, offset: 0, ...activeFilters });
+      const pageLimit = silent ? Math.max(PAGE, get()._offset) : PAGE;
+      const result = await vexaAPI.getMeetings({ limit: pageLimit, offset: 0, ...activeFilters });
+      if (requestGeneration !== meetingsRequestGeneration) return;
       const meetings = result.meetings.filter((m) => !isHiddenDeletedMeeting(m));
       meetings.sort((a, b) =>
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
@@ -170,23 +189,30 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
       set({
         meetings,
         hasMore: result.has_more,
-        isLoadingMeetings: false,
         subscriptionRequired: false,
-        _offset: PAGE,
+        _offset: pageLimit,
+        ...(silent ? {} : { isLoadingMeetings: false }),
       });
     } catch (error) {
       if (error instanceof VexaAPIError && error.status === 402) {
+        if (requestGeneration !== meetingsRequestGeneration) return;
         set({
           subscriptionRequired: true,
-          isLoadingMeetings: false,
           error: null,
+          ...(silent ? {} : { isLoadingMeetings: false }),
         });
+        return;
+      }
+      if (silent) {
+        console.error("Failed to silently refresh meetings:", error);
         return;
       }
       set({
         error: (error as Error).message,
         isLoadingMeetings: false
       });
+    } finally {
+      if (silent) isSilentMeetingRefreshInFlight = false;
     }
   },
 
@@ -194,11 +220,16 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
   fetchMoreMeetings: async () => {
     const { meetings, hasMore, isLoadingMore, _filters, _offset } = get();
     if (!hasMore || isLoadingMore) return;
+    const requestGeneration = ++meetingsRequestGeneration;
     set({ isLoadingMore: true });
     try {
       const PAGE = 50;
       // #304: use the explicit _offset cursor, NOT meetings.length.
       const result = await vexaAPI.getMeetings({ limit: PAGE, offset: _offset, ..._filters });
+      if (requestGeneration !== meetingsRequestGeneration) {
+        set({ isLoadingMore: false });
+        return;
+      }
       const newMeetings = result.meetings.filter((m) => !isHiddenDeletedMeeting(m));
       // #304 belt-and-suspenders: dedupe by meeting.id. Defends against
       // any future filter / WebSocket-update race where the same meeting
@@ -226,6 +257,7 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
   // Use silent: true to avoid showing loading state (for polling/refresh)
   fetchMeeting: async (id: string, options?: { silent?: boolean }) => {
     const { silent = false } = options || {};
+    const requestGeneration = ++meetingDetailRequestGeneration;
 
     if (!silent) {
       set({ isLoadingMeeting: true, error: null });
@@ -235,6 +267,10 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
       let meeting: Meeting;
       try {
         meeting = await vexaAPI.getMeeting(id);
+        if (requestGeneration !== meetingDetailRequestGeneration) {
+          if (!silent) set({ isLoadingMeeting: false });
+          return;
+        }
       } catch (e) {
         if (e instanceof VexaAPIError && e.status === 404) {
           set({ error: `Meeting with ID ${id} not found`, isLoadingMeeting: false });
@@ -267,8 +303,10 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
 
   // Silently refresh meeting data (for polling without UI flicker)
   refreshMeeting: async (id: string) => {
+    const requestGeneration = ++meetingDetailRequestGeneration;
     try {
       const meeting = await vexaAPI.getMeeting(id);
+      if (requestGeneration !== meetingDetailRequestGeneration) return;
       if (meeting) {
         const { currentMeeting, meetings } = get();
         const currentRecordingSignature = recordingsStateSignature(currentMeeting);

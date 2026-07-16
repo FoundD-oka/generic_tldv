@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { vexaAPI, type TranscriptionDictionaryTerm } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 export default function DictionaryPage() {
   const [terms, setTerms] = useState<TranscriptionDictionaryTerm[]>([]);
@@ -99,7 +100,13 @@ export default function DictionaryPage() {
         <CardHeader><CardTitle>登録済み {terms.length} / {limit}</CardTitle><CardDescription>無効にした語句は削除せず保存されますが、Geminiへは渡されません。</CardDescription></CardHeader>
         <CardContent className="space-y-3">
           {isLoading ? <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />読み込み中...</div> : terms.length === 0 ? <p className="text-sm text-muted-foreground">まだ語句はありません。</p> : terms.map((item) => (
-            <div key={item.id} className="flex items-center gap-3 rounded-lg border p-3">
+            <div
+              key={item.id}
+              className={cn(
+                "flex items-center gap-3 rounded-lg border p-3 transition-colors",
+                !item.enabled && "border-muted bg-muted/50 text-muted-foreground"
+              )}
+            >
               <Switch checked={item.enabled} onCheckedChange={async (enabled) => { await vexaAPI.updateTranscriptionDictionaryTerm(item.id, { enabled }); await load(); }} aria-label={`${item.term}の有効状態`} />
               <div className="min-w-0 flex-1"><p className="font-medium">{item.term}</p>{item.reading && <p className="text-sm text-muted-foreground">{item.reading}</p>}</div>
               <Button variant="ghost" size="icon" aria-label={`${item.term}を編集`} onClick={() => startEdit(item)}><Pencil className="h-4 w-4" /></Button>
