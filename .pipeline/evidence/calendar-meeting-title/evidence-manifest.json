@@ -1,0 +1,147 @@
+{
+  "manifest_version": "1.0",
+  "task_id": "calendar-meeting-title",
+  "goal_id": "calendar-meeting-title-goal",
+  "checkpoint_id": "calendar-meeting-title-cp-001",
+  "repo": {
+    "base_branch": "",
+    "base_sha": "2d3591ce2c086f75aee23e1b5defa4f7362f4f14",
+    "head_sha": "ebe159dcd9f74496c0d171dde7656943b3fe5b16",
+    "branch_name": "harness/calendar-meeting-title",
+    "worktree_path": "/Users/bonginkan-3-gouki/project/generic_tldv/.pipeline/worktrees/calendar-meeting-title/checkout",
+    "generated_at": "2026-07-16T13:56:14.273829+00:00"
+  },
+  "commands": [
+    {
+      "id": "api-test",
+      "command": "PYTHONPATH=services/meeting-api:libs/admin-models /Users/bonginkan-3-gouki/project/generic_tldv/.pipeline/worktrees/recording-range-streaming/checkout/.venv/bin/python -m pytest services/meeting-api/tests/test_meetings.py -q",
+      "required": true,
+      "exit_code": 0,
+      "started_at": "2026-07-16T13:55:59.572504+00:00",
+      "finished_at": "2026-07-16T13:56:10.815621+00:00",
+      "log_path": ".pipeline/evidence/calendar-meeting-title/logs/api-test.log"
+    },
+    {
+      "id": "dashboard-test",
+      "command": "cd services/dashboard && node_modules/.bin/vitest run tests/test_meeting_cards_ui.test.ts",
+      "required": true,
+      "exit_code": 0,
+      "started_at": "2026-07-16T13:56:10.815739+00:00",
+      "finished_at": "2026-07-16T13:56:11.142523+00:00",
+      "log_path": ".pipeline/evidence/calendar-meeting-title/logs/dashboard-test.log"
+    },
+    {
+      "id": "dashboard-type",
+      "command": "cd services/dashboard && node scripts/generate-release-version.js && node_modules/.bin/tsc --noEmit",
+      "required": true,
+      "exit_code": 0,
+      "started_at": "2026-07-16T13:56:11.142632+00:00",
+      "finished_at": "2026-07-16T13:56:12.706386+00:00",
+      "log_path": ".pipeline/evidence/calendar-meeting-title/logs/dashboard-type.log"
+    },
+    {
+      "id": "gitnexus",
+      "command": "node /Users/bonginkan-3-gouki/project/generic_tldv/.gitnexus/run.cjs detect-changes --repo /Users/bonginkan-3-gouki/project/generic_tldv/.pipeline/worktrees/calendar-meeting-title/checkout --scope compare --base-ref main",
+      "required": true,
+      "exit_code": 0,
+      "started_at": "2026-07-16T13:56:12.706503+00:00",
+      "finished_at": "2026-07-16T13:56:14.273690+00:00",
+      "log_path": ".pipeline/evidence/calendar-meeting-title/logs/gitnexus.log"
+    }
+  ],
+  "artifacts": [],
+  "scope": {
+    "changed_files": [
+      "AGENTS.md",
+      "CLAUDE.md",
+      "services/dashboard/src/app/meetings/page.tsx",
+      "services/dashboard/src/components/meetings/meeting-card.tsx",
+      "services/dashboard/src/types/vexa.ts",
+      "services/dashboard/tests/test_meeting_cards_ui.test.ts",
+      "services/meeting-api/meeting_api/meetings.py",
+      "services/meeting-api/tests/test_meetings.py",
+      "services/transcription-service/README.md",
+      "メモ.md"
+    ],
+    "forbidden_paths_changed": [],
+    "allowed_paths_outside_with_justification": [],
+    "changed_file_count": 10
+  },
+  "quality_conditions": [
+    {
+      "id": "qc-api",
+      "condition": "一覧APIが保存済みカレンダータイトルを返し検索対象にする",
+      "ok_line": "Meeting API対象テストが通る",
+      "target_state": "Meeting API対象テストが通る",
+      "status": "passed",
+      "evidence": [
+        "command:api-test"
+      ]
+    },
+    {
+      "id": "qc-ui",
+      "condition": "カード表示が手動編集名、カレンダータイトル、会議コードの順になる",
+      "ok_line": "Dashboard対象テストが通る",
+      "target_state": "Dashboard対象テストが通る",
+      "status": "passed",
+      "evidence": [
+        "command:dashboard-test"
+      ]
+    },
+    {
+      "id": "qc-types",
+      "condition": "API追加項目とカード参照の型が整合する",
+      "ok_line": "TypeScript型検査が通る",
+      "target_state": "TypeScript型検査が通る",
+      "status": "passed",
+      "evidence": [
+        "command:dashboard-type"
+      ]
+    },
+    {
+      "id": "qc-scope",
+      "condition": "変更影響が会議一覧経路に限定される",
+      "ok_line": "GitNexus変更検査が通る",
+      "target_state": "GitNexus変更検査が通る",
+      "status": "passed",
+      "evidence": [
+        "command:gitnexus"
+      ]
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "qc-api",
+      "status": "passed",
+      "evidence": [
+        "command:api-test"
+      ]
+    },
+    {
+      "id": "qc-ui",
+      "status": "passed",
+      "evidence": [
+        "command:dashboard-test"
+      ]
+    },
+    {
+      "id": "qc-types",
+      "status": "passed",
+      "evidence": [
+        "command:dashboard-type"
+      ]
+    },
+    {
+      "id": "qc-scope",
+      "status": "passed",
+      "evidence": [
+        "command:gitnexus"
+      ]
+    }
+  ],
+  "missing_evidence": [],
+  "approval": {
+    "state": "pending",
+    "decision_path": ".pipeline/approvals/calendar-meeting-title/approval-decision.json"
+  }
+}

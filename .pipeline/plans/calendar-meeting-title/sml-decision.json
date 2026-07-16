@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "task_id": "calendar-meeting-title",
+  "checkpoint_id": "",
+  "size": "S",
+  "decided_at": "2026-07-16T13:43:37.943243+00:00",
+  "basis": {
+    "residual_uncertainty": "manual decision",
+    "not_based_on": "issue title or diff size alone"
+  },
+  "quality_gates": {
+    "required": [
+      "residency",
+      "preflight",
+      "hd-gate",
+      "doc-staleness",
+      "adapter-contract",
+      "backcast-contracts"
+    ],
+    "external_consultation": "required_for_l"
+  }
+}

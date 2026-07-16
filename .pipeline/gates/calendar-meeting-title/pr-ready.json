@@ -1,0 +1,63 @@
+{
+  "timestamp": "2026-07-16T13:56:35.854193+00:00",
+  "task_id": "calendar-meeting-title",
+  "size": "S",
+  "status": "ready",
+  "checks": [
+    {
+      "check": "harness-residency",
+      "ok": true,
+      "detail": "status=pass"
+    },
+    {
+      "check": "preflight",
+      "ok": true,
+      "detail": "status=pass"
+    },
+    {
+      "check": "hd-gate",
+      "ok": true,
+      "detail": "unresolved=[]"
+    },
+    {
+      "check": "doc-staleness",
+      "ok": true,
+      "detail": "status=pass"
+    },
+    {
+      "check": "adapter-contract",
+      "ok": true,
+      "detail": "status=pass count=5"
+    },
+    {
+      "check": "backcast-contracts",
+      "ok": true,
+      "detail": "status=pass mode=active"
+    },
+    {
+      "check": "external-consultation",
+      "ok": true,
+      "detail": "status=pass policy=plan_required_all_sizes_post_required_for_l"
+    },
+    {
+      "check": "codex-review",
+      "ok": true,
+      "detail": "status=pass model=gpt-5.6-sol effort=ultra"
+    },
+    {
+      "check": "dual-review-consensus",
+      "ok": true,
+      "detail": "status=pass size=S"
+    },
+    {
+      "check": "feedback-prune",
+      "ok": true,
+      "detail": "status=pass required=False"
+    },
+    {
+      "check": "sml-decision",
+      "ok": true,
+      "detail": "size=S"
+    }
+  ]
+}

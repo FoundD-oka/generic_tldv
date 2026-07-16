@@ -1,0 +1,10 @@
+{
+  "provider": "claude-fable-cli",
+  "model": "fable",
+  "contract_version": 2,
+  "tool_mode": "context_only",
+  "safe_mode": true,
+  "launch_mode": "safe",
+  "session_id": "f05089e5-8dca-4b9e-b353-20be5568b46c",
+  "updated_at": "2026-07-16T13:47:48.751694+00:00"
+}
