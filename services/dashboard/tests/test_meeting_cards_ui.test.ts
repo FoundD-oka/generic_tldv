@@ -5,11 +5,15 @@ const pageSource = readFileSync("src/app/meetings/page.tsx", "utf8");
 const cardSource = readFileSync("src/components/meetings/meeting-card.tsx", "utf8");
 
 describe("会議一覧カード", () => {
-  it("参加者タイトルの後に会議コードを識別用fallbackとして使う", () => {
+  it("手動編集名、カレンダータイトル、会議コードの順で表示する", () => {
     expect(cardSource).toContain(
-      'rawTitle || participantsTitle || meeting.platform_specific_id || "無題の会議"',
+      'rawTitle || calendarTitle || meeting.platform_specific_id || "無題の会議"',
     );
-    expect(cardSource).toContain('setEditedTitle(rawTitle || participantsTitle || "")');
+    expect(cardSource).toContain(
+      "meeting.data?.calendar_title || meeting.data?.calendar_event?.title",
+    );
+    expect(cardSource).toContain('setEditedTitle(rawTitle || calendarTitle || "")');
+    expect(cardSource).not.toContain("participantsTitle");
   });
 
   it("開始前の会議でも作成日時を表示する", () => {
@@ -23,7 +27,7 @@ describe("会議一覧カード", () => {
     );
   });
 
-  it("参加者由来タイトルのローカライズ済みtemplateをカードへ渡す", () => {
-    expect(pageSource).toContain("participantsTitleTemplate={copy.participantsMeetingTitle}");
+  it("一覧ページからカードへ会議データだけを渡す", () => {
+    expect(pageSource).toContain("<MeetingCard meeting={meeting} />");
   });
 });

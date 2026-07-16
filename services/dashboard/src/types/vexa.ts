@@ -40,6 +40,11 @@ export interface StatusTransition {
 export interface MeetingData {
   name?: string;
   title?: string;
+  calendar_title?: string;
+  calendar_event?: {
+    title?: string;
+    [key: string]: unknown;
+  };
   notes?: string;
   participants?: string[];
   languages?: string[];

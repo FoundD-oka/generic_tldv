@@ -1375,6 +1375,30 @@ async def delete_browser_storage(user_id: int):
         raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")
 
 
+def _meeting_list_data_summary(d: Optional[dict]) -> dict:
+    d = d or {}
+    participants = d.get("participants") or []
+    notes = d.get("notes")
+    transitions = d.get("status_transition") or []
+    calendar_event = d.get("calendar_event")
+    calendar_title = (
+        calendar_event.get("title")
+        if isinstance(calendar_event, dict)
+        else None
+    )
+    return {
+        "name": d.get("name") or d.get("title"),
+        "calendar_title": calendar_title,
+        "completion_reason": d.get("completion_reason"),
+        "participants": participants[:3],
+        "participants_count": len(participants),
+        "notes_preview": (notes[:120] if isinstance(notes, str) else None),
+        "languages": d.get("languages"),
+        "last_transition": transitions[-1] if transitions else None,
+        "has_recording": bool(d.get("recordings")),
+    }
+
+
 @router.get(
     "/bots",
     summary="List recent meetings/bots for the authenticated user",
@@ -1399,6 +1423,7 @@ async def list_user_bots(
             (Meeting.platform_specific_id.ilike(q))
             | (Meeting.data["name"].astext.ilike(q))
             | (Meeting.data["title"].astext.ilike(q))
+            | (Meeting.data["calendar_event"]["title"].astext.ilike(q))
         )
     if status:
         stmt = stmt.where(Meeting.status == status)
@@ -1425,22 +1450,6 @@ async def list_user_bots(
     # opt-in for callers that genuinely need it. Default off.
     include_full_data = include == "data"
 
-    def _data_summary(d: dict) -> dict:
-        d = d or {}
-        participants = d.get("participants") or []
-        notes = d.get("notes")
-        transitions = d.get("status_transition") or []
-        return {
-            "name": d.get("name") or d.get("title"),
-            "completion_reason": d.get("completion_reason"),
-            "participants": participants[:3],
-            "participants_count": len(participants),
-            "notes_preview": (notes[:120] if isinstance(notes, str) else None),
-            "languages": d.get("languages"),
-            "last_transition": transitions[-1] if transitions else None,
-            "has_recording": bool(d.get("recordings")),
-        }
-
     return {
         "meetings": [
             {
@@ -1451,7 +1460,7 @@ async def list_user_bots(
                 "bot_container_id": m.bot_container_id,
                 "start_time": m.start_time.isoformat() if m.start_time else None,
                 "end_time": m.end_time.isoformat() if m.end_time else None,
-                "data": (m.data or {}) if include_full_data else _data_summary(m.data),
+                "data": (m.data or {}) if include_full_data else _meeting_list_data_summary(m.data),
                 "created_at": m.created_at.isoformat() if m.created_at else None,
                 "updated_at": m.updated_at.isoformat() if m.updated_at else None,
             }

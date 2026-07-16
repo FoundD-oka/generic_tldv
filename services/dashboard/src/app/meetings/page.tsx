@@ -259,10 +259,7 @@ export default function MeetingsPage() {
                   className="animate-fade-in-up"
                   style={{ animationDelay: `${Math.min(index, 10) * 30}ms`, animationFillMode: "backwards" }}
                 >
-                  <MeetingCard
-                    meeting={meeting}
-                    participantsTitleTemplate={copy.participantsMeetingTitle}
-                  />
+                  <MeetingCard meeting={meeting} />
                 </div>
               ))}
             </div>
