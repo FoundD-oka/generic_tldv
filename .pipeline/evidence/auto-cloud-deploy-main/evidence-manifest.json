@@ -1,0 +1,53 @@
+{
+  "schema_version": "1.0",
+  "task_id": "auto-cloud-deploy-main",
+  "checkpoint_id": "main-auto-deploy-live",
+  "repo": {
+    "branch_name": "main",
+    "head_sha": "3d1f022b1739cd8c6d5f26fb467946ac6b524bb7",
+    "remote_sha": "3d1f022b1739cd8c6d5f26fb467946ac6b524bb7"
+  },
+  "commands": [
+    {
+      "id": "github-actions",
+      "required": true,
+      "exit_code": 0,
+      "status": "passed",
+      "evidence": "https://github.com/FoundD-oka/generic_tldv/actions/runs/29546909824"
+    },
+    {
+      "id": "cloud-build",
+      "required": true,
+      "exit_code": 0,
+      "status": "passed",
+      "evidence": "78956af1-350a-4124-af18-977fc92bc789"
+    },
+    {
+      "id": "cloud-run",
+      "required": true,
+      "exit_code": 0,
+      "status": "passed",
+      "evidence": "kabosu-dashboard-00027-b8l at 100 percent traffic"
+    },
+    {
+      "id": "live-http",
+      "required": true,
+      "exit_code": 0,
+      "status": "passed",
+      "evidence": "/ and /api/config returned HTTP 200"
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "workflow",
+      "path": ".github/workflows/deploy-dashboard-gcp.yml",
+      "exists": true
+    },
+    {
+      "id": "cloudbuild-config",
+      "path": "deploy/gcp/cloudbuild-dashboard.yaml",
+      "exists": true
+    }
+  ],
+  "missing_evidence": []
+}
