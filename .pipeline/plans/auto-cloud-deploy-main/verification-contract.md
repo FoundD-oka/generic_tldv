@@ -5,8 +5,8 @@
 - external consultation provider: claude-fable-cli
 
 ## Required Commands
-- `gcloud builds triggers describe kabosu-dashboard-main-deploy --region=asia-northeast1`
-- `gcloud builds list --filter=buildTriggerId=<trigger-id>`
+- GitHub Actions `Deploy dashboard to GCP` がmain pushで成功する
+- 対応するCloud Buildが成功し、`_DEPLOY_SHA` がmain HEADと一致する
 - `gcloud run services describe kabosu-dashboard --region=asia-northeast1`
 - 公開URLの `/` と `/api/config` がHTTP 200
 - デプロイ前後でCloud Runの環境変数名とSecret参照が維持される

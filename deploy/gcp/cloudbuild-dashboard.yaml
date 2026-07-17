@@ -5,8 +5,8 @@
 #   gcloud builds submit --config deploy/gcp/cloudbuild-dashboard.yaml \
 #     --substitutions _VEXA_API_URL=https://<api-host> .
 #
-# main ブランチ用 Cloud BuildトリガーではGitHub webhookのcommit SHAを
-# _DEPLOY_SHAへ渡してイメージタグに使い、
+# main ブランチ用GitHub Actionsではpushされたcommit SHAを_DEPLOY_SHAへ渡し、
+# Cloud BuildがそのSHAをイメージタグに使って、
 # push 完了後に kabosu-dashboard の Cloud Run revision を同じイメージへ更新する。
 substitutions:
   _REGION: asia-northeast1

@@ -1,0 +1,48 @@
+name: Deploy dashboard to GCP
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-dashboard-gcp
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/127347460378/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-deploy@pm-qe-mgmt-20260624.iam.gserviceaccount.com
+
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Build and deploy dashboard
+        shell: bash
+        run: |
+          set -euo pipefail
+          VEXA_API_URL="$(
+            gcloud run services describe kabosu-dashboard \
+              --project=pm-qe-mgmt-20260624 \
+              --region=asia-northeast1 \
+              --format=json \
+              | jq -r '.spec.template.spec.containers[0].env[] | select(.name == "VEXA_API_URL") | .value'
+          )"
+          test -n "$VEXA_API_URL"
+          gcloud builds submit . \
+            --project=pm-qe-mgmt-20260624 \
+            --config=deploy/gcp/cloudbuild-dashboard.yaml \
+            --substitutions="_VEXA_API_URL=$VEXA_API_URL,_DEPLOY_SHA=$GITHUB_SHA" \
+            --quiet
