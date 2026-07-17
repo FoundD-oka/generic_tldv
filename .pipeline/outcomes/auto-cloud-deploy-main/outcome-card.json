@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0",
+  "task_id": "auto-cloud-deploy-main",
+  "runtime_profile": "codex-app",
+  "size": "M",
+  "result": {
+    "at_pass": true,
+    "fp_pass": true,
+    "nft_pass": true,
+    "hd_resolved": true,
+    "blocking_findings": 0
+  },
+  "evidence": {
+    "session_ledger": ".pipeline/sessions/auto-cloud-deploy-main/events.jsonl",
+    "verification": [
+      ".pipeline/evidence/auto-cloud-deploy-main/evidence-manifest.json",
+      ".pipeline/evidence/auto-cloud-deploy-main/evidence-pack.md",
+      ".pipeline/evidence/auto-cloud-deploy-main/qa-judgment.json"
+    ]
+  },
+  "notes": [
+    "main push限定のGitHub ActionsがGCP Workload Identityで認証し、Cloud Buildを起動する。",
+    "Cloud Buildはcommit SHA付きイメージをArtifact Registryへpushし、kabosu-dashboardのCloud Run revisionを更新する。",
+    "初回自動デプロイはCloud Build 78956af1-350a-4124-af18-977fc92bc789、Cloud Run revision kabosu-dashboard-00027-b8lで成功した。",
+    "公開URLと設定保持を確認し、不採用のWebhook関連リソースは削除済み。"
+  ]
+}

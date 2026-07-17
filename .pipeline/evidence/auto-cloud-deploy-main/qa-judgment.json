@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0",
+  "task_id": "auto-cloud-deploy-main",
+  "verdict": "pass",
+  "reviewer": "codex-app-independent-qa",
+  "summary": "main限定のWorkload Identity条件、GitHub Actions、Cloud Build、Artifact Registry、Cloud Run revision、公開HTTP応答、既存環境変数とSecret参照の保持を実環境で照合した。初回main pushによる自動デプロイは成功し、blocking findingは0件。",
+  "blocking_findings": [],
+  "residual_risks": [
+    "actions/checkout@v4にNode.js 20非推奨警告が出るが、GitHub runnerはNode.js 24で実行を継続し、今回のworkflowは成功している。",
+    "Dashboard buildはCloud Runの現在のVEXA_API_URLを読み取って使用するため、デプロイ時に既存Cloud Runサービスが参照可能である必要がある。"
+  ]
+}
