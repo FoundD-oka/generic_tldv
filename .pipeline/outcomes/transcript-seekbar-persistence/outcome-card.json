@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0",
+  "task_id": "transcript-seekbar-persistence",
+  "runtime_profile": "codex-app",
+  "size": "S",
+  "result": {
+    "at_pass": true,
+    "fp_pass": true,
+    "nft_pass": true,
+    "hd_resolved": true,
+    "blocking_findings": 0
+  },
+  "evidence": {
+    "verification": [
+      ".pipeline/evidence/transcript-seekbar-persistence/evidence-manifest.json",
+      ".pipeline/evidence/transcript-seekbar-persistence/evidence-pack.md",
+      "npm --prefix services/dashboard test -- tests/test_transcript_scroll.test.ts tests/test_voiceprint_enrollment_ui.test.ts",
+      "npm --prefix services/dashboard run build",
+      "node .gitnexus/run.cjs detect-changes --scope staged"
+    ]
+  },
+  "notes": [
+    "再生中発話への追従をscrollIntoViewから文字起こしコンテナ自身のscrollToへ変更し、外側ページと会議全体シークバーを動かさないようにした。",
+    "中央寄せ座標、上端・下端クランプ、スクロール不要ケースをユニットテストで確認した。",
+    "対象テスト8件、対象Lint、本番Dashboard build、S必須ゲートが成功した。"
+  ]
+}

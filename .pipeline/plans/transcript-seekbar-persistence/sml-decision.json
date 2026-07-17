@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "task_id": "transcript-seekbar-persistence",
+  "checkpoint_id": "transcript-seekbar-persistence-cp-001",
+  "size": "S",
+  "decided_at": "2026-07-17T06:37:26.050353+00:00",
+  "basis": {
+    "residual_uncertainty": "会議詳細のUIスクロール処理1か所と純粋ヘルパー・テストのみ。APIやデータ契約変更なし",
+    "not_based_on": "issue title or diff size alone"
+  },
+  "quality_gates": {
+    "required": [
+      "residency",
+      "preflight",
+      "hd-gate",
+      "doc-staleness",
+      "adapter-contract",
+      "backcast-contracts"
+    ],
+    "external_consultation": "required"
+  }
+}

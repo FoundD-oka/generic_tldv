@@ -1,0 +1,12 @@
+{
+  "timestamp": "2026-07-17T06:41:46.273737+00:00",
+  "status": "pass",
+  "diff_hash": "sha256:4cc8b0318c18f90aa144775f337aa0ada3da951ced6e544248a9cb418d7518ad",
+  "changed_files": [
+    "services/dashboard/src/components/transcript/transcript-viewer.tsx",
+    "services/dashboard/src/lib/transcript-scroll.ts",
+    "services/dashboard/tests/test_transcript_scroll.test.ts"
+  ],
+  "flags": [],
+  "blocks": []
+}

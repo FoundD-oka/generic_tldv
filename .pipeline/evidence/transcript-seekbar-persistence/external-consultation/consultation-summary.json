@@ -1,0 +1,126 @@
+{
+  "schema_version": "1.1",
+  "task_id": "transcript-seekbar-persistence",
+  "provider": "claude-fable-cli",
+  "status": "completed",
+  "mode": "plan",
+  "target_kind": "plan",
+  "target_hash": "sha256:e916ea94a7f6d5486f8e707d91fab31345974ed7ce31337ef56ec0946ccb2956",
+  "model": "fable",
+  "authentication_mode": "not_used",
+  "redaction_confirmed": true,
+  "prompt_hash": "sha256:321519892c0cd1b3a00ee000cbbc67aeb34c45abdf816aebc2f60de0b9fb1247",
+  "response_hash": "sha256:73a13e36343b827bc9cdb8147fca792a721ff013ff5f3a9a1d8877d1741a29e9",
+  "brief_path": ".pipeline/plans/transcript-seekbar-persistence/consultation-brief.md",
+  "response_path": ".pipeline/evidence/transcript-seekbar-persistence/external-consultation/fable-plan.md",
+  "raw_response_path": ".pipeline/evidence/transcript-seekbar-persistence/external-consultation/fable-plan-20260717T063341792029Z.raw.json",
+  "not_source_of_truth": true,
+  "session_id": "46ccc591-0909-4dbb-beb3-c5c3e2b4dcd8",
+  "resumed_session": "",
+  "call_index": 1,
+  "max_calls": 5,
+  "invocation": {
+    "contract_version": 2,
+    "safe_mode": true,
+    "launch_mode": "safe",
+    "tool_mode": "context_only",
+    "max_turns": 3,
+    "max_budget_usd": "1.00",
+    "timeout_seconds": 300,
+    "brief_truncated": false,
+    "truncations": []
+  },
+  "fallback_to_codex_only": false,
+  "skip_reason": "",
+  "verdict": "SHOULD_FIX",
+  "confidence": "medium",
+  "summary": "The root-cause analysis (scrollIntoView propagating to ancestor scroll containers) and the fix direction (container-local scrollTo via a testable helper) are sound. However, the new helper `transcript-scroll.ts` and its test are untracked files whose contents are not in the supplied diff, so the center/clamp math, coordinate basis, and smooth-scroll behavior cannot be verified from this brief. A few concrete risks should be checked before merging: coordinate calculation must be relative to the actual scrolling element (offsetTop can be relative to a different offsetParent), the previous `behavior: \"smooth\"` should be preserved intentionally or its removal documented, and the test should cover the bottom-end clamp in addition to the top clamp.",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "SHOULD_FIX",
+      "title": "Helper and test contents are unverifiable from the provided context",
+      "evidence": "git status shows `?? services/dashboard/src/lib/transcript-scroll.ts` and `?? services/dashboard/tests/test_transcript_scroll.test.ts` as untracked; the diff excerpt only covers transcript-viewer.tsx, so the centering/clamp logic under review is not visible.",
+      "recommendation": "Confirm locally that scrollTranscriptItemToCenter computes the target as (segment position relative to container) - (container.clientHeight - segment.offsetHeight) / 2 and that tests assert this; include these files in the review evidence before closing the task."
+    },
+    {
+      "id": "F2",
+      "severity": "SHOULD_FIX",
+      "title": "Coordinate basis must be the actual scroll container, not offsetParent",
+      "evidence": "The plan says positions are computed \"文字起こしコンテナ基準\"; if the helper uses element.offsetTop, that value is relative to the nearest positioned ancestor, which may not be scrollRef.current (e.g., if an intermediate wrapper or ScrollArea viewport is positioned), producing wrong scroll targets.",
+      "recommendation": "Prefer getBoundingClientRect-based math (segRect.top - containerRect.top + container.scrollTop) or verify offsetParent === container; also confirm scrollRef points at the element that actually has overflow scrolling, otherwise scrollTo is a no-op."
+    },
+    {
+      "id": "F3",
+      "severity": "SHOULD_FIX",
+      "title": "Smooth-scroll behavior change and jsdom compatibility",
+      "evidence": "The removed code used scrollIntoView({ behavior: \"smooth\", block: \"center\" }); the diff does not show whether the helper passes behavior: \"smooth\" to scrollTo, and jsdom does not implement scrollTo with options (element.scrollTo may be undefined or throw in tests).",
+      "recommendation": "Preserve behavior: \"smooth\" (or record the UX change deliberately), and have the helper return/compute the target scrollTop as a pure function so tests can assert the number without relying on jsdom scroll APIs."
+    },
+    {
+      "id": "F4",
+      "severity": "NOTE",
+      "title": "Test coverage: add bottom clamp and container-larger-than-content cases",
+      "evidence": "plan.md lists only \"中央寄せ座標と上端クランプ\" as test targets; segments near the end of the transcript and containers whose content fits without scrolling are common edge cases (browsers clamp scrollTop natively, but a pure helper returning the target value will not).",
+      "recommendation": "Add tests for max clamp (scrollHeight - clientHeight), zero/negative scroll range, and a segment taller than the container."
+    },
+    {
+      "id": "F5",
+      "severity": "NOTE",
+      "title": "Auto-follow can still fight manual user scrolling within the pane",
+      "evidence": "The effect fires on every activePlaybackIndex change during playback and unconditionally recenters, so a user scrolling the transcript to read earlier content will be yanked back on the next segment change; this pre-exists the change and is arguably out of scope per plan.md.",
+      "recommendation": "No action required for this task; note it as residual behavior, or consider suppressing follow-up while the user is actively scrolling in a follow-up task."
+    }
+  ],
+  "adoption_status": [
+    {
+      "id": "F1",
+      "severity": "SHOULD_FIX",
+      "status": "already_handled",
+      "note": "新規ヘルパーとテスト内容をローカル確認し、証跡対象に含めた",
+      "updated_at": "2026-07-17T06:36:45.140459+00:00"
+    },
+    {
+      "id": "F2",
+      "severity": "SHOULD_FIX",
+      "status": "already_handled",
+      "note": "getBoundingClientRect差分とscrollRefのoverflow-y-auto要素を使用している",
+      "updated_at": "2026-07-17T06:36:45.232048+00:00"
+    },
+    {
+      "id": "F3",
+      "severity": "SHOULD_FIX",
+      "status": "already_handled",
+      "note": "scrollToのsmoothを維持し、座標計算を純粋関数としてテスト可能にした",
+      "updated_at": "2026-07-17T06:36:45.320588+00:00"
+    },
+    {
+      "id": "F4",
+      "severity": "NOTE",
+      "status": "adopted",
+      "note": "下端クランプとスクロール不要ケースのテストを追加した",
+      "updated_at": "2026-07-17T06:36:45.406178+00:00"
+    },
+    {
+      "id": "F5",
+      "severity": "NOTE",
+      "status": "deferred",
+      "note": "手動スクロールと自動追従の競合は既存挙動で今回の範囲外",
+      "updated_at": "2026-07-17T06:36:45.488021+00:00"
+    }
+  ],
+  "open_must_fix_count": 0,
+  "adopted_points": [
+    "Helper and test contents are unverifiable from the provided context",
+    "Coordinate basis must be the actual scroll container, not offsetParent",
+    "Smooth-scroll behavior change and jsdom compatibility",
+    "Test coverage: add bottom clamp and container-larger-than-content cases"
+  ],
+  "rejected_points": [],
+  "needs_verification": [
+    "F1: Confirm locally that scrollTranscriptItemToCenter computes the target as (segment position relative to container) - (container.clientHeight - segment.offsetHeight) / 2 and that tests assert this; include these files in the review evidence before closing the task.",
+    "F2: Prefer getBoundingClientRect-based math (segRect.top - containerRect.top + container.scrollTop) or verify offsetParent === container; also confirm scrollRef points at the element that actually has overflow scrolling, otherwise scrollTo is a no-op.",
+    "F3: Preserve behavior: \"smooth\" (or record the UX change deliberately), and have the helper return/compute the target scrollTop as a pure function so tests can assert the number without relying on jsdom scroll APIs."
+  ],
+  "notes": "Fable CLI advisory review evidence. Classify each finding with the classify command after reflecting or rejecting it."
+}

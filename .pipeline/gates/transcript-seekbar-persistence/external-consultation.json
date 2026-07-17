@@ -1,0 +1,27 @@
+{
+  "timestamp": "2026-07-17T06:41:46.279688+00:00",
+  "task_id": "transcript-seekbar-persistence",
+  "size": "S",
+  "status": "pass",
+  "policy": "plan_required_all_sizes_post_required_for_l",
+  "plan_material_version": "plan-v1",
+  "provider": "claude-fable-cli",
+  "checks": [
+    {
+      "stage": "plan",
+      "required": true,
+      "status": "pass",
+      "path": ".pipeline/evidence/transcript-seekbar-persistence/external-consultation/consultation-plan-summary.json",
+      "errors": []
+    },
+    {
+      "stage": "post",
+      "required": false,
+      "status": "pass",
+      "path": ".pipeline/evidence/transcript-seekbar-persistence/external-consultation/consultation-post-summary.json",
+      "errors": []
+    }
+  ],
+  "errors": [],
+  "warnings": []
+}
