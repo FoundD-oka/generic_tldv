@@ -48,6 +48,7 @@ import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 import { normalizeVoiceprintSelectionTiming } from "@/lib/voiceprint-selection";
 import { isRetranscriptionInProgress } from "@/lib/retranscription-status";
+import { scrollTranscriptItemToCenter } from "@/lib/transcript-scroll";
 
 // Linkify URLs in chat message text — splits text into plain strings and clickable <a> elements
 const URL_REGEX = /(https?:\/\/[^\s<>"')\]]+)/gi;
@@ -737,10 +738,14 @@ export function TranscriptViewer({
 
     // Use a small delay to let the DOM update
     requestAnimationFrame(() => {
-      activeSegmentRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "center",
-      });
+      const container = scrollRef.current;
+      const activeSegment = activeSegmentRef.current;
+      if (!container || !activeSegment) return;
+
+      // Keep playback follow-up inside the transcript pane. scrollIntoView()
+      // also scrolls outer ancestors and can push the meeting-wide seek bar
+      // out of the viewport when a transcript segment is selected.
+      scrollTranscriptItemToCenter(container, activeSegment);
     });
   }, [activePlaybackIndex, isPlaybackActive]);
 

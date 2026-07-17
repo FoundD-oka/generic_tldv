@@ -1,0 +1,16 @@
+{
+  "timestamp": "2026-07-17T06:38:08.633987+00:00",
+  "task_id": "transcript-seekbar-persistence",
+  "size": "S",
+  "status": "pass",
+  "plan_hash": "sha256:e916ea94a7f6d5486f8e707d91fab31345974ed7ce31337ef56ec0946ccb2956",
+  "plan_material_version": "plan-v1",
+  "checks": [
+    {
+      "check": "fable-plan-review",
+      "ok": true,
+      "errors": []
+    }
+  ],
+  "errors": []
+}

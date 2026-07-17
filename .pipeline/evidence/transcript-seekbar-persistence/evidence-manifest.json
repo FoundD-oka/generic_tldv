@@ -1,0 +1,114 @@
+{
+  "manifest_version": "1.0",
+  "task_id": "transcript-seekbar-persistence",
+  "goal_id": "transcript-seekbar-persistence-goal",
+  "checkpoint_id": "transcript-seekbar-persistence-cp-001",
+  "repo": {
+    "base_branch": "",
+    "base_sha": "a424d30bdb83ef744893c7487858f9e6cb78238c",
+    "head_sha": "a424d30bdb83ef744893c7487858f9e6cb78238c",
+    "branch_name": "harness/transcript-seekbar-persistence",
+    "worktree_path": "/Users/bonginkan-3-gouki/project/generic_tldv/.pipeline/worktrees/transcript-seekbar-persistence/checkout",
+    "generated_at": "2026-07-17T06:40:17.114449+00:00"
+  },
+  "commands": [
+    {
+      "id": "dashboard-target-tests",
+      "command": "npm --prefix services/dashboard test -- tests/test_transcript_scroll.test.ts tests/test_voiceprint_enrollment_ui.test.ts",
+      "required": true,
+      "exit_code": 0,
+      "started_at": "2026-07-17T06:40:01.861223+00:00",
+      "finished_at": "2026-07-17T06:40:02.584380+00:00",
+      "log_path": ".pipeline/evidence/transcript-seekbar-persistence/logs/dashboard-target-tests.log"
+    },
+    {
+      "id": "dashboard-lint",
+      "command": "cd services/dashboard && npm exec eslint -- src/components/transcript/transcript-viewer.tsx src/lib/transcript-scroll.ts tests/test_transcript_scroll.test.ts",
+      "required": true,
+      "exit_code": 0,
+      "started_at": "2026-07-17T06:40:02.584517+00:00",
+      "finished_at": "2026-07-17T06:40:04.350225+00:00",
+      "log_path": ".pipeline/evidence/transcript-seekbar-persistence/logs/dashboard-lint.log"
+    },
+    {
+      "id": "dashboard-build",
+      "command": "VEXA_API_URL=http://127.0.0.1:18056 npm --prefix services/dashboard run build",
+      "required": true,
+      "exit_code": 0,
+      "started_at": "2026-07-17T06:40:04.350342+00:00",
+      "finished_at": "2026-07-17T06:40:17.113858+00:00",
+      "log_path": ".pipeline/evidence/transcript-seekbar-persistence/logs/dashboard-build.log"
+    }
+  ],
+  "artifacts": [],
+  "scope": {
+    "changed_files": [
+      "services/dashboard/src/components/transcript/transcript-viewer.tsx",
+      "services/dashboard/src/lib/transcript-scroll.ts",
+      "services/dashboard/tests/test_transcript_scroll.test.ts"
+    ],
+    "forbidden_paths_changed": [],
+    "allowed_paths_outside_with_justification": [],
+    "changed_file_count": 3
+  },
+  "quality_conditions": [
+    {
+      "id": "QC-01",
+      "condition": "外側ページを動かさないコンテナ内スクロール",
+      "ok_line": "対象ユニットテストが通る",
+      "target_state": "対象ユニットテストが通る",
+      "status": "passed",
+      "evidence": [
+        "command:dashboard-target-tests"
+      ]
+    },
+    {
+      "id": "QC-02",
+      "condition": "変更ファイルの静的品質",
+      "ok_line": "対象Lintが通る",
+      "target_state": "対象Lintが通る",
+      "status": "passed",
+      "evidence": [
+        "command:dashboard-lint"
+      ]
+    },
+    {
+      "id": "QC-03",
+      "condition": "本番Dashboard互換性",
+      "ok_line": "production buildが通る",
+      "target_state": "production buildが通る",
+      "status": "passed",
+      "evidence": [
+        "command:dashboard-build"
+      ]
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "QC-01",
+      "status": "passed",
+      "evidence": [
+        "command:dashboard-target-tests"
+      ]
+    },
+    {
+      "id": "QC-02",
+      "status": "passed",
+      "evidence": [
+        "command:dashboard-lint"
+      ]
+    },
+    {
+      "id": "QC-03",
+      "status": "passed",
+      "evidence": [
+        "command:dashboard-build"
+      ]
+    }
+  ],
+  "missing_evidence": [],
+  "approval": {
+    "state": "pending",
+    "decision_path": ".pipeline/approvals/transcript-seekbar-persistence/approval-decision.json"
+  }
+}

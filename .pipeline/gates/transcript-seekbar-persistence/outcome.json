@@ -1,0 +1,8 @@
+{
+  "timestamp": "2026-07-17T06:42:05.839569+00:00",
+  "task_id": "transcript-seekbar-persistence",
+  "size": "S",
+  "status": "pass",
+  "card_path": ".pipeline/outcomes/transcript-seekbar-persistence/outcome-card.json",
+  "failures": []
+}
