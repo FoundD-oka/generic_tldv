@@ -11,7 +11,7 @@
 - 仮説A: 既存Cloud Build定義へ明示的なDocker pushと `gcloud run services update --image` を追加すれば、同じ定義でbuildからrevision切替まで完結する。ローカルのgcloudヘルプと現行構成確認で支持。
 - 仮説B: `gcloud run services update` へイメージだけ指定すれば、既存の環境変数、Secret参照、認証設定を保持できる。現行サービス設定を更新前後で比較して検証する。
 - 仮説C: Cloud Build既定サービスアカウントにはCloud Run Developerと、Cloud Run実行サービスアカウントに対するService Account Userが必要。現行IAM確認で未付与と判明。
-- 仮説D: GitHub App接続は対話OAuthが必要で自動設定できない。一方、公開リポジトリに対する署名Secret付きWebhookトリガーなら、GCP側で認証しつつ `body.ref` を `refs/heads/main` に限定できる。公式Cloud Build資料とCLIで支持。
+- 仮説D: GitHub App接続は対話OAuthが必要で自動設定できず、署名Webhook受信APIは公式の最小構成でもHTTP 400を返した。既存Workload Identity providerへ `FoundD-oka/generic_tldv` のmainだけを追加し、GitHub ActionsからCloud Buildを起動すれば、長期鍵を置かずGCP側IAMで認証・権限管理できる。実環境のWIF/IAM確認とGoogle公式Actionsの現行release確認で支持。
 
 ## 反証確認
 
@@ -21,4 +21,4 @@
 
 ## 信頼度
 
-高。GCPの現行サービス、実行アカウント、既存Cloud Build履歴を実環境で確認済み。初回Webhookトリガー実行はpushで確定する。
+高。GCPの現行サービス、実行アカウント、Workload Identity、既存Cloud Build履歴を実環境で確認済み。初回GitHub ActionsとCloud Build実行はpushで確定する。
