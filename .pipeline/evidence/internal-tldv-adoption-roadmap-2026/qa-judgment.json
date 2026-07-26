@@ -1,0 +1,38 @@
+{
+  "schema_version": "1.0",
+  "task_id": "internal-tldv-adoption-roadmap-2026",
+  "reviewer": "codex-app-self-review",
+  "verdict": "pass",
+  "blocking_findings": [],
+  "checks": [
+    {
+      "id": "qa-001",
+      "result": "pass",
+      "summary": "正本にK-01からK-15の算式・母数・最終目標がある"
+    },
+    {
+      "id": "qa-002",
+      "result": "pass",
+      "summary": "Phase 0から4に対象・作業・Exit KPIがある"
+    },
+    {
+      "id": "qa-003",
+      "result": "pass",
+      "summary": "開発・検証会議を含む暫定値を正式KPIから分離している"
+    },
+    {
+      "id": "qa-004",
+      "result": "pass",
+      "summary": "録音例外、Go、Hold、Rollback、データ・権限事故の停止条件がある"
+    },
+    {
+      "id": "qa-005",
+      "result": "pass",
+      "summary": "人向け成果物を日本語へ統一している"
+    }
+  ],
+  "limitations": [
+    "現行tl;dvの利用者数、会議数、費用、必須機能は未取得のためPhase 0の成果物とした",
+    "独立QA担当ではなくCodex App内の自己レビューである"
+  ]
+}

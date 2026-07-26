@@ -1,0 +1,492 @@
+{
+  "schema_version": "1.0",
+  "task_id": "full-repo-refactoring-2026-07-24-v2",
+  "purpose": "Playwright specへ直接実装する9シナリオのinventory。JSONをaction生成器やfixture生成器として解釈しない。",
+  "test_implementation": {
+    "spec_path": "services/dashboard/tests/e2e/refactor-visual.spec.ts",
+    "config_path": "services/dashboard/playwright.refactor.config.ts",
+    "package_script": "test:e2e:refactor",
+    "package_script_value": "playwright test --config=playwright.refactor.config.ts",
+    "baseline_command": "cd services/dashboard && REFRACTOR_VISUAL_MODE=baseline npm run test:e2e:refactor -- --update-snapshots",
+    "final_command": "cd services/dashboard && REFRACTOR_VISUAL_MODE=final npm run test:e2e:refactor",
+    "server_command": "npm run build && npm run start -- -p 4173 -H 127.0.0.1",
+    "reuse_existing_server": false,
+    "playwright_config_requirement": "webServer.reuseExistingServer=falseとし、既存またはstaleな4173 serverを再利用しない。",
+    "fixed_http_origin": "http://127.0.0.1:4173",
+    "fixed_websocket_url": "ws://127.0.0.1:4173/ws",
+    "one_browser_context_per_test": true
+  },
+  "viewports": [
+    {"project": "desktop", "width": 1440, "height": 900},
+    {"project": "mobile", "width": 390, "height": 844}
+  ],
+  "browser_defaults": {
+    "locale": "ja-JP",
+    "timezone_id": "Asia/Tokyo",
+    "color_scheme": "light",
+    "reduced_motion": "reduce",
+    "fixed_time": "2026-01-15T12:00:00.000Z",
+    "animations": "disabled"
+  },
+  "network_rules": {
+    "install_routes_before_goto": true,
+    "abort_unmocked_api_requests": true,
+    "abort_unexpected_external_requests": true,
+    "allow_next_static_assets": true,
+    "allow_declared_fixture_blog_request": true,
+    "fail_on_page_error": true,
+    "fail_on_console_error": true,
+    "fail_on_request_failure": true,
+    "fail_on_unexpected_http_4xx_or_5xx": true,
+    "real_user_data_forbidden": true,
+    "real_credentials_forbidden": true
+  },
+  "common_routes": {
+    "baseline": [
+      {"method": "GET", "url": "/api/auth/me", "fixture": "auth-baseline", "expected_count": 1},
+      {"method": "GET", "url": "/api/config", "fixture": "config-baseline", "expected_count": 1},
+      {"method": "GET", "url": "/api/billing/status", "fixture": "billing-empty", "expected_count": 1},
+      {"method": "GET", "url": "https://blog.vexa.ai/notifications.json", "fixture": "blog-empty", "expected_count": 1}
+    ],
+    "final": [
+      {"method": "GET", "url": "/api/auth/me", "fixture": "auth-final", "expected_count": 1},
+      {"method": "GET", "url": "/api/config", "fixture": "config-final", "expected_count": 1},
+      {"method": "GET", "url": "/api/billing/status", "fixture": "billing-empty", "expected_count": 1},
+      {"method": "GET", "url": "https://blog.vexa.ai/notifications.json", "fixture": "blog-empty", "expected_count": 1}
+    ]
+  },
+  "fixture_files": {
+    "auth-baseline": "services/dashboard/tests/fixtures/refactor-e2e/global/auth-baseline.json",
+    "auth-final": "services/dashboard/tests/fixtures/refactor-e2e/global/auth-final.json",
+    "config-baseline": "services/dashboard/tests/fixtures/refactor-e2e/global/config-baseline.json",
+    "config-final": "services/dashboard/tests/fixtures/refactor-e2e/global/config-final.json",
+    "billing-empty": "services/dashboard/tests/fixtures/refactor-e2e/global/billing-empty.json",
+    "blog-empty": "services/dashboard/tests/fixtures/refactor-e2e/global/blog-empty.json",
+    "meeting-list": "services/dashboard/tests/fixtures/refactor-e2e/api/meeting-list.json",
+    "detail-completed-a": "services/dashboard/tests/fixtures/refactor-e2e/api/detail-completed-a.json",
+    "detail-completed-b": "services/dashboard/tests/fixtures/refactor-e2e/api/detail-completed-b.json",
+    "detail-needs-human-a": "services/dashboard/tests/fixtures/refactor-e2e/api/detail-needs-human-a.json",
+    "detail-browser-requested-a": "services/dashboard/tests/fixtures/refactor-e2e/api/detail-browser-requested-a.json",
+    "detail-media-a": "services/dashboard/tests/fixtures/refactor-e2e/api/detail-media-a.json",
+    "detail-active-a": "services/dashboard/tests/fixtures/refactor-e2e/api/detail-active-a.json",
+    "transcript-refactor-a": "services/dashboard/tests/fixtures/refactor-e2e/api/transcript-refactor-a.json",
+    "transcript-literal-search-a": "services/dashboard/tests/fixtures/refactor-e2e/api/transcript-literal-search-a.json",
+    "transcript-simple-a": "services/dashboard/tests/fixtures/refactor-e2e/api/transcript-simple-a.json",
+    "transcript-simple-b": "services/dashboard/tests/fixtures/refactor-e2e/api/transcript-simple-b.json",
+    "transcript-audio-a": "services/dashboard/tests/fixtures/refactor-e2e/api/transcript-audio-a.json",
+    "transcript-av-a": "services/dashboard/tests/fixtures/refactor-e2e/api/transcript-av-a.json",
+    "transcript-live-43": "services/dashboard/tests/fixtures/refactor-e2e/api/transcript-live-43.json",
+    "chat-a": "services/dashboard/tests/fixtures/refactor-e2e/api/chat-a.json",
+    "chat-b": "services/dashboard/tests/fixtures/refactor-e2e/api/chat-b.json",
+    "ai-disabled": "services/dashboard/tests/fixtures/refactor-e2e/api/ai-disabled.json",
+    "webhooks-empty-a": "services/dashboard/tests/fixtures/refactor-e2e/api/webhooks-empty-a.json",
+    "webhooks-empty-b": "services/dashboard/tests/fixtures/refactor-e2e/api/webhooks-empty-b.json",
+    "audio-master": "services/dashboard/tests/fixtures/refactor-e2e/api/audio-master.json",
+    "video-master": "services/dashboard/tests/fixtures/refactor-e2e/api/video-master.json",
+    "audio-media": "services/dashboard/tests/fixtures/refactor-e2e/media/silence-1s.wav",
+    "video-media": "services/dashboard/tests/fixtures/refactor-e2e/media/black-1s.webm",
+    "live-websocket": "services/dashboard/tests/fixtures/refactor-e2e/ws/live-websocket.json"
+  },
+  "concrete_fixture_bodies": {
+    "auth-baseline": {"authenticated":true,"user":{"id":"fixture-user-1","email":"fixture@example.invalid","name":"Fixture User"},"token":"fixture-browser-token"},
+    "auth-final": {"authenticated":true,"user":{"id":"fixture-user-1","email":"fixture@example.invalid","name":"Fixture User"}},
+    "config-baseline": {"wsUrl":"ws://127.0.0.1:4173/ws","apiUrl":"http://127.0.0.1:4173","publicApiUrl":"https://api.fixture.invalid","decisionListenerUrl":"https://decision.fixture.invalid","authToken":"fixture-browser-token","defaultBotName":null,"brand":{"name":"カボス","shortName":"カボス","slug":"kabosu","locale":"ja","botName":"カボス","issueUrl":"https://issues.fixture.invalid/new"},"sharedAuth":{"enabled":false,"email":""},"hostedMode":false,"webappUrl":"https://webapp.fixture.invalid"},
+    "config-final": {"wsUrl":"ws://127.0.0.1:4173/ws","apiUrl":"http://127.0.0.1:4173","publicApiUrl":"https://api.fixture.invalid","decisionListenerUrl":"https://decision.fixture.invalid","defaultBotName":null,"brand":{"name":"カボス","shortName":"カボス","slug":"kabosu","locale":"ja","botName":"カボス","issueUrl":"https://issues.fixture.invalid/new"},"sharedAuth":{"enabled":false,"email":""},"hostedMode":false,"webappUrl":"https://webapp.fixture.invalid"},
+    "billing-empty": {"subscription_status":null,"subscription_tier":null,"subscription_trial_end":null},
+    "blog-empty": [],
+    "meeting-list": {"has_more":false,"meetings":[{"start_time":"2026-01-02T10:00:00Z","end_time":"2026-01-02T10:30:00Z","bot_container_id":null,"data":{"recording_enabled":false,"recordings":[],"name":"Fixture Meeting A"},"created_at":"2026-01-02T09:59:00Z","updated_at":"2026-01-02T10:30:00Z","id":1001,"platform":"google_meet","native_meeting_id":"fixture-native-a","status":"completed"},{"start_time":"2026-01-02T10:00:00Z","end_time":"2026-01-02T10:30:00Z","bot_container_id":null,"data":{"recording_enabled":false,"recordings":[],"name":"Fixture Meeting B"},"created_at":"2026-01-02T09:59:00Z","updated_at":"2026-01-02T10:30:00Z","id":1002,"platform":"google_meet","native_meeting_id":"fixture-native-b","status":"completed"}]},
+    "detail-completed-a": {"start_time":"2026-01-02T10:00:00.000Z","end_time":"2026-01-02T10:30:00.000Z","bot_container_id":null,"data":{"name":"Fixture Meeting A","recording_enabled":false,"recordings":[]},"created_at":"2026-01-02T09:59:00.000Z","updated_at":"2026-01-02T10:30:00.000Z","id":1001,"platform":"google_meet","native_meeting_id":"fixture-native-a","status":"completed"},
+    "detail-completed-b": {"start_time":"2026-01-02T10:00:00.000Z","end_time":"2026-01-02T10:30:00.000Z","bot_container_id":null,"data":{"name":"Fixture Meeting B","recording_enabled":false,"recordings":[]},"created_at":"2026-01-02T09:59:00.000Z","updated_at":"2026-01-02T10:30:00.000Z","id":1002,"platform":"google_meet","native_meeting_id":"fixture-native-b","status":"completed"},
+    "detail-needs-human-a": {"start_time":"2026-01-02T10:00:00.000Z","end_time":"2026-01-02T10:30:00.000Z","bot_container_id":null,"data":{"name":"Fixture Meeting A","recording_enabled":false,"recordings":[]},"created_at":"2026-01-02T09:59:00.000Z","updated_at":"2026-01-02T10:30:00.000Z","id":1001,"platform":"google_meet","native_meeting_id":"fixture-native-a","status":"needs_human_help"},
+    "detail-browser-requested-a": {"start_time":"2026-01-02T10:00:00.000Z","end_time":"2026-01-02T10:30:00.000Z","bot_container_id":null,"data":{"name":"Fixture Browser Session","mode":"browser_session","session_token":"fixture-session-handle","recording_enabled":false,"recordings":[]},"created_at":"2026-01-02T09:59:00.000Z","updated_at":"2026-01-02T10:30:00.000Z","id":1001,"platform":"browser_session","native_meeting_id":"fixture-native-a","status":"requested"},
+    "detail-media-a": {"start_time":"2026-01-02T10:00:00.000Z","end_time":"2026-01-02T10:30:00.000Z","bot_container_id":null,"data":{"name":"Fixture Media Meeting","recording_enabled":false,"recordings":[]},"created_at":"2026-01-02T09:59:00.000Z","updated_at":"2026-01-02T10:30:00.000Z","id":1001,"platform":"google_meet","native_meeting_id":"fixture-native-a","status":"completed"},
+    "detail-active-a": {"start_time":"2026-01-02T10:00:00.000Z","end_time":"2026-01-02T10:30:00.000Z","bot_container_id":null,"data":{"name":"Fixture Live Meeting","recording_enabled":false,"recordings":[]},"created_at":"2026-01-02T09:59:00.000Z","updated_at":"2026-01-02T10:30:00.000Z","id":1001,"platform":"google_meet","native_meeting_id":"fixture-native-a","status":"active"},
+    "transcript-refactor-a": {"id":1001,"platform":"google_meet","native_meeting_id":"fixture-native-a","status":"completed","start_time":"2026-01-02T10:00:00.000Z","end_time":"2026-01-02T10:30:00.000Z","data":{"name":"Fixture Meeting A"},"segments":[{"start":0,"end":8,"text":"wide-a","speaker":"Alice","language":"en","absolute_start_time":"2026-01-02T10:00:00.000Z","absolute_end_time":"2026-01-02T10:00:08.000Z","created_at":"2026-01-02T10:01:01.000Z","segment_id":"wide-a","session_uid":"session-a"},{"start":2,"end":3,"text":"marker-b","speaker":"Bob","language":"en","absolute_start_time":"2026-01-02T10:00:02.000Z","absolute_end_time":"2026-01-02T10:00:03.000Z","created_at":"2026-01-02T10:01:01.000Z","segment_id":"marker-b","session_uid":"session-a"},{"start":1,"end":4,"text":"contained-a","speaker":"Alice","language":"en","absolute_start_time":"2026-01-02T10:00:01.000Z","absolute_end_time":"2026-01-02T10:00:04.000Z","created_at":"2026-01-02T10:01:01.000Z","segment_id":"contained-a","session_uid":"session-a"},{"start":0,"end":1,"text":"session-b-zero","speaker":"Carol","language":"en","absolute_start_time":"2026-01-02T10:01:00.000Z","absolute_end_time":"2026-01-02T10:01:01.000Z","created_at":"2026-01-02T10:01:01.000Z","segment_id":"session-b-zero","session_uid":"session-b"}],"recordings":[]},
+    "transcript-literal-search-a": {"id":1001,"platform":"google_meet","native_meeting_id":"fixture-native-a","status":"completed","start_time":"2026-01-02T10:00:00.000Z","end_time":"2026-01-02T10:30:00.000Z","data":{"name":"Fixture Meeting A"},"segments":[{"start":0,"end":2,"text":"fixture literal [ match","speaker":"Alice","language":"en","absolute_start_time":"2026-01-02T10:00:00.000Z","absolute_end_time":"2026-01-02T10:00:02.000Z","created_at":"2026-01-02T10:00:02.000Z","segment_id":"literal-search-1","session_uid":"session-a"}],"recordings":[]},
+    "transcript-simple-a": {"id":1001,"platform":"google_meet","native_meeting_id":"fixture-native-a","status":"completed","start_time":"2026-01-02T10:00:00.000Z","end_time":"2026-01-02T10:30:00.000Z","data":{"name":"Fixture Meeting A"},"segments":[{"start":0,"end":1,"text":"Fixture A marker","speaker":"Alice","language":"en","absolute_start_time":"2026-01-02T10:00:00.000Z","absolute_end_time":"2026-01-02T10:00:01.000Z","created_at":"2026-01-02T10:00:01.000Z","segment_id":"simple-a","session_uid":"session-a"}],"recordings":[]},
+    "transcript-simple-b": {"id":1002,"platform":"google_meet","native_meeting_id":"fixture-native-b","status":"completed","start_time":"2026-01-02T10:00:00.000Z","end_time":"2026-01-02T10:30:00.000Z","data":{"name":"Fixture Meeting B"},"segments":[{"start":0,"end":1,"text":"Fixture B marker","speaker":"Bob","language":"en","absolute_start_time":"2026-01-02T10:01:00.000Z","absolute_end_time":"2026-01-02T10:01:01.000Z","created_at":"2026-01-02T10:01:01.000Z","segment_id":"simple-b","session_uid":"session-b"}],"recordings":[]},
+    "transcript-audio-a": {"id":1001,"platform":"google_meet","native_meeting_id":"fixture-native-a","status":"completed","start_time":"2026-01-02T10:00:00.000Z","end_time":"2026-01-02T10:30:00.000Z","data":{"name":"Fixture Media Meeting"},"segments":[{"start":0,"end":1,"text":"Fixture audio marker","speaker":"Alice","language":"en","absolute_start_time":"2026-01-02T10:00:00.000Z","absolute_end_time":"2026-01-02T10:00:01.000Z","created_at":"2026-01-02T10:00:01.000Z","segment_id":"audio-a","session_uid":"session-audio"}],"recordings":[{"user_id":9001,"source":"bot","status":"completed","created_at":"2026-01-02T10:00:00.000Z","completed_at":"2026-01-02T10:30:00.000Z","media_files":[],"playback_url":{"audio":"/recordings/701/master?type=audio","video":null},"id":701,"meeting_id":1001,"session_uid":"session-audio"}]},
+    "transcript-av-a": {"id":1001,"platform":"google_meet","native_meeting_id":"fixture-native-a","status":"completed","start_time":"2026-01-02T10:00:00.000Z","end_time":"2026-01-02T10:30:00.000Z","data":{"name":"Fixture Media Meeting"},"segments":[{"start":0,"end":1,"text":"Fixture audio video marker","speaker":"Alice","language":"en","absolute_start_time":"2026-01-02T10:00:00.000Z","absolute_end_time":"2026-01-02T10:00:01.000Z","created_at":"2026-01-02T10:00:01.000Z","segment_id":"av-a","session_uid":"session-audio"}],"recordings":[{"user_id":9001,"source":"bot","status":"completed","created_at":"2026-01-02T10:00:00.000Z","completed_at":"2026-01-02T10:30:00.000Z","media_files":[],"playback_url":{"audio":"/recordings/701/master?type=audio","video":null},"id":701,"meeting_id":1001,"session_uid":"session-audio"},{"user_id":9001,"source":"bot","status":"completed","created_at":"2026-01-02T10:00:00.000Z","completed_at":"2026-01-02T10:30:00.000Z","media_files":[],"playback_url":{"audio":null,"video":"/recordings/702/master?type=video"},"id":702,"meeting_id":1001,"session_uid":"session-video"}]},
+    "transcript-live-43": {
+      "id": 1001,
+      "platform": "google_meet",
+      "native_meeting_id": "fixture-native-a",
+      "status": "active",
+      "start_time": "2026-01-02T10:00:00.000Z",
+      "end_time": "2026-01-02T10:30:00.000Z",
+      "data": {"name":"Fixture Live Meeting"},
+      "segments": [
+        {"segment_id":"live-001","session_uid":"live-session","speaker":"Alice","start":0,"end":1.5,"text":"Live fixture segment 001","language":"en","absolute_start_time":"2026-01-02T10:00:00.000Z","absolute_end_time":"2026-01-02T10:00:01.500Z","created_at":"2026-01-02T10:00:01.500Z"},
+        {"segment_id":"live-002","session_uid":"live-session","speaker":"Bob","start":2,"end":3.5,"text":"Live fixture segment 002","language":"en","absolute_start_time":"2026-01-02T10:00:02.000Z","absolute_end_time":"2026-01-02T10:00:03.500Z","created_at":"2026-01-02T10:00:03.500Z"},
+        {"segment_id":"live-003","session_uid":"live-session","speaker":"Alice","start":4,"end":5.5,"text":"Live fixture segment 003","language":"en","absolute_start_time":"2026-01-02T10:00:04.000Z","absolute_end_time":"2026-01-02T10:00:05.500Z","created_at":"2026-01-02T10:00:05.500Z"},
+        {"segment_id":"live-004","session_uid":"live-session","speaker":"Bob","start":6,"end":7.5,"text":"Live fixture segment 004","language":"en","absolute_start_time":"2026-01-02T10:00:06.000Z","absolute_end_time":"2026-01-02T10:00:07.500Z","created_at":"2026-01-02T10:00:07.500Z"},
+        {"segment_id":"live-005","session_uid":"live-session","speaker":"Alice","start":8,"end":9.5,"text":"Live fixture segment 005","language":"en","absolute_start_time":"2026-01-02T10:00:08.000Z","absolute_end_time":"2026-01-02T10:00:09.500Z","created_at":"2026-01-02T10:00:09.500Z"},
+        {"segment_id":"live-006","session_uid":"live-session","speaker":"Bob","start":10,"end":11.5,"text":"Live fixture segment 006","language":"en","absolute_start_time":"2026-01-02T10:00:10.000Z","absolute_end_time":"2026-01-02T10:00:11.500Z","created_at":"2026-01-02T10:00:11.500Z"},
+        {"segment_id":"live-007","session_uid":"live-session","speaker":"Alice","start":12,"end":13.5,"text":"Live fixture segment 007","language":"en","absolute_start_time":"2026-01-02T10:00:12.000Z","absolute_end_time":"2026-01-02T10:00:13.500Z","created_at":"2026-01-02T10:00:13.500Z"},
+        {"segment_id":"live-008","session_uid":"live-session","speaker":"Bob","start":14,"end":15.5,"text":"Live fixture segment 008","language":"en","absolute_start_time":"2026-01-02T10:00:14.000Z","absolute_end_time":"2026-01-02T10:00:15.500Z","created_at":"2026-01-02T10:00:15.500Z"},
+        {"segment_id":"live-009","session_uid":"live-session","speaker":"Alice","start":16,"end":17.5,"text":"Live fixture segment 009","language":"en","absolute_start_time":"2026-01-02T10:00:16.000Z","absolute_end_time":"2026-01-02T10:00:17.500Z","created_at":"2026-01-02T10:00:17.500Z"},
+        {"segment_id":"live-010","session_uid":"live-session","speaker":"Bob","start":18,"end":19.5,"text":"Live fixture segment 010","language":"en","absolute_start_time":"2026-01-02T10:00:18.000Z","absolute_end_time":"2026-01-02T10:00:19.500Z","created_at":"2026-01-02T10:00:19.500Z"},
+        {"segment_id":"live-011","session_uid":"live-session","speaker":"Alice","start":20,"end":21.5,"text":"Live fixture segment 011","language":"en","absolute_start_time":"2026-01-02T10:00:20.000Z","absolute_end_time":"2026-01-02T10:00:21.500Z","created_at":"2026-01-02T10:00:21.500Z"},
+        {"segment_id":"live-012","session_uid":"live-session","speaker":"Bob","start":22,"end":23.5,"text":"Live fixture segment 012","language":"en","absolute_start_time":"2026-01-02T10:00:22.000Z","absolute_end_time":"2026-01-02T10:00:23.500Z","created_at":"2026-01-02T10:00:23.500Z"},
+        {"segment_id":"live-013","session_uid":"live-session","speaker":"Alice","start":24,"end":25.5,"text":"Live fixture segment 013","language":"en","absolute_start_time":"2026-01-02T10:00:24.000Z","absolute_end_time":"2026-01-02T10:00:25.500Z","created_at":"2026-01-02T10:00:25.500Z"},
+        {"segment_id":"live-014","session_uid":"live-session","speaker":"Bob","start":26,"end":27.5,"text":"Live fixture segment 014","language":"en","absolute_start_time":"2026-01-02T10:00:26.000Z","absolute_end_time":"2026-01-02T10:00:27.500Z","created_at":"2026-01-02T10:00:27.500Z"},
+        {"segment_id":"live-015","session_uid":"live-session","speaker":"Alice","start":28,"end":29.5,"text":"Live fixture segment 015","language":"en","absolute_start_time":"2026-01-02T10:00:28.000Z","absolute_end_time":"2026-01-02T10:00:29.500Z","created_at":"2026-01-02T10:00:29.500Z"},
+        {"segment_id":"live-016","session_uid":"live-session","speaker":"Bob","start":30,"end":31.5,"text":"Live fixture segment 016","language":"en","absolute_start_time":"2026-01-02T10:00:30.000Z","absolute_end_time":"2026-01-02T10:00:31.500Z","created_at":"2026-01-02T10:00:31.500Z"},
+        {"segment_id":"live-017","session_uid":"live-session","speaker":"Alice","start":32,"end":33.5,"text":"Live fixture segment 017","language":"en","absolute_start_time":"2026-01-02T10:00:32.000Z","absolute_end_time":"2026-01-02T10:00:33.500Z","created_at":"2026-01-02T10:00:33.500Z"},
+        {"segment_id":"live-018","session_uid":"live-session","speaker":"Bob","start":34,"end":35.5,"text":"Live fixture segment 018","language":"en","absolute_start_time":"2026-01-02T10:00:34.000Z","absolute_end_time":"2026-01-02T10:00:35.500Z","created_at":"2026-01-02T10:00:35.500Z"},
+        {"segment_id":"live-019","session_uid":"live-session","speaker":"Alice","start":36,"end":37.5,"text":"Live fixture segment 019","language":"en","absolute_start_time":"2026-01-02T10:00:36.000Z","absolute_end_time":"2026-01-02T10:00:37.500Z","created_at":"2026-01-02T10:00:37.500Z"},
+        {"segment_id":"live-020","session_uid":"live-session","speaker":"Bob","start":38,"end":39.5,"text":"Live fixture segment 020","language":"en","absolute_start_time":"2026-01-02T10:00:38.000Z","absolute_end_time":"2026-01-02T10:00:39.500Z","created_at":"2026-01-02T10:00:39.500Z"},
+        {"segment_id":"live-021","session_uid":"live-session","speaker":"Alice","start":40,"end":41.5,"text":"Live fixture segment 021","language":"en","absolute_start_time":"2026-01-02T10:00:40.000Z","absolute_end_time":"2026-01-02T10:00:41.500Z","created_at":"2026-01-02T10:00:41.500Z"},
+        {"segment_id":"live-022","session_uid":"live-session","speaker":"Bob","start":42,"end":43.5,"text":"Live fixture segment 022","language":"en","absolute_start_time":"2026-01-02T10:00:42.000Z","absolute_end_time":"2026-01-02T10:00:43.500Z","created_at":"2026-01-02T10:00:43.500Z"},
+        {"segment_id":"live-023","session_uid":"live-session","speaker":"Alice","start":44,"end":45.5,"text":"Live fixture segment 023","language":"en","absolute_start_time":"2026-01-02T10:00:44.000Z","absolute_end_time":"2026-01-02T10:00:45.500Z","created_at":"2026-01-02T10:00:45.500Z"},
+        {"segment_id":"live-024","session_uid":"live-session","speaker":"Bob","start":46,"end":47.5,"text":"Live fixture segment 024","language":"en","absolute_start_time":"2026-01-02T10:00:46.000Z","absolute_end_time":"2026-01-02T10:00:47.500Z","created_at":"2026-01-02T10:00:47.500Z"},
+        {"segment_id":"live-025","session_uid":"live-session","speaker":"Alice","start":48,"end":49.5,"text":"Live fixture segment 025","language":"en","absolute_start_time":"2026-01-02T10:00:48.000Z","absolute_end_time":"2026-01-02T10:00:49.500Z","created_at":"2026-01-02T10:00:49.500Z"},
+        {"segment_id":"live-026","session_uid":"live-session","speaker":"Bob","start":50,"end":51.5,"text":"Live fixture segment 026","language":"en","absolute_start_time":"2026-01-02T10:00:50.000Z","absolute_end_time":"2026-01-02T10:00:51.500Z","created_at":"2026-01-02T10:00:51.500Z"},
+        {"segment_id":"live-027","session_uid":"live-session","speaker":"Alice","start":52,"end":53.5,"text":"Live fixture segment 027","language":"en","absolute_start_time":"2026-01-02T10:00:52.000Z","absolute_end_time":"2026-01-02T10:00:53.500Z","created_at":"2026-01-02T10:00:53.500Z"},
+        {"segment_id":"live-028","session_uid":"live-session","speaker":"Bob","start":54,"end":55.5,"text":"Live fixture segment 028","language":"en","absolute_start_time":"2026-01-02T10:00:54.000Z","absolute_end_time":"2026-01-02T10:00:55.500Z","created_at":"2026-01-02T10:00:55.500Z"},
+        {"segment_id":"live-029","session_uid":"live-session","speaker":"Alice","start":56,"end":57.5,"text":"Live fixture segment 029","language":"en","absolute_start_time":"2026-01-02T10:00:56.000Z","absolute_end_time":"2026-01-02T10:00:57.500Z","created_at":"2026-01-02T10:00:57.500Z"},
+        {"segment_id":"live-030","session_uid":"live-session","speaker":"Bob","start":58,"end":59.5,"text":"Live fixture segment 030","language":"en","absolute_start_time":"2026-01-02T10:00:58.000Z","absolute_end_time":"2026-01-02T10:00:59.500Z","created_at":"2026-01-02T10:00:59.500Z"},
+        {"segment_id":"live-031","session_uid":"live-session","speaker":"Alice","start":60,"end":61.5,"text":"Live fixture segment 031","language":"en","absolute_start_time":"2026-01-02T10:01:00.000Z","absolute_end_time":"2026-01-02T10:01:01.500Z","created_at":"2026-01-02T10:01:01.500Z"},
+        {"segment_id":"live-032","session_uid":"live-session","speaker":"Bob","start":62,"end":63.5,"text":"Live fixture segment 032","language":"en","absolute_start_time":"2026-01-02T10:01:02.000Z","absolute_end_time":"2026-01-02T10:01:03.500Z","created_at":"2026-01-02T10:01:03.500Z"},
+        {"segment_id":"live-033","session_uid":"live-session","speaker":"Alice","start":64,"end":65.5,"text":"Live fixture segment 033","language":"en","absolute_start_time":"2026-01-02T10:01:04.000Z","absolute_end_time":"2026-01-02T10:01:05.500Z","created_at":"2026-01-02T10:01:05.500Z"},
+        {"segment_id":"live-034","session_uid":"live-session","speaker":"Bob","start":66,"end":67.5,"text":"Live fixture segment 034","language":"en","absolute_start_time":"2026-01-02T10:01:06.000Z","absolute_end_time":"2026-01-02T10:01:07.500Z","created_at":"2026-01-02T10:01:07.500Z"},
+        {"segment_id":"live-035","session_uid":"live-session","speaker":"Alice","start":68,"end":69.5,"text":"Live fixture segment 035","language":"en","absolute_start_time":"2026-01-02T10:01:08.000Z","absolute_end_time":"2026-01-02T10:01:09.500Z","created_at":"2026-01-02T10:01:09.500Z"},
+        {"segment_id":"live-036","session_uid":"live-session","speaker":"Bob","start":70,"end":71.5,"text":"Live fixture segment 036","language":"en","absolute_start_time":"2026-01-02T10:01:10.000Z","absolute_end_time":"2026-01-02T10:01:11.500Z","created_at":"2026-01-02T10:01:11.500Z"},
+        {"segment_id":"live-037","session_uid":"live-session","speaker":"Alice","start":72,"end":73.5,"text":"Live fixture segment 037","language":"en","absolute_start_time":"2026-01-02T10:01:12.000Z","absolute_end_time":"2026-01-02T10:01:13.500Z","created_at":"2026-01-02T10:01:13.500Z"},
+        {"segment_id":"live-038","session_uid":"live-session","speaker":"Bob","start":74,"end":75.5,"text":"Live fixture segment 038","language":"en","absolute_start_time":"2026-01-02T10:01:14.000Z","absolute_end_time":"2026-01-02T10:01:15.500Z","created_at":"2026-01-02T10:01:15.500Z"},
+        {"segment_id":"live-039","session_uid":"live-session","speaker":"Alice","start":76,"end":77.5,"text":"Live fixture segment 039","language":"en","absolute_start_time":"2026-01-02T10:01:16.000Z","absolute_end_time":"2026-01-02T10:01:17.500Z","created_at":"2026-01-02T10:01:17.500Z"},
+        {"segment_id":"live-040","session_uid":"live-session","speaker":"Bob","start":78,"end":79.5,"text":"Live fixture segment 040","language":"en","absolute_start_time":"2026-01-02T10:01:18.000Z","absolute_end_time":"2026-01-02T10:01:19.500Z","created_at":"2026-01-02T10:01:19.500Z"},
+        {"segment_id":"live-041","session_uid":"live-session","speaker":"Alice","start":80,"end":81.5,"text":"Live fixture segment 041","language":"en","absolute_start_time":"2026-01-02T10:01:20.000Z","absolute_end_time":"2026-01-02T10:01:21.500Z","created_at":"2026-01-02T10:01:21.500Z"},
+        {"segment_id":"live-042","session_uid":"live-session","speaker":"Bob","start":82,"end":83.5,"text":"Live fixture segment 042","language":"en","absolute_start_time":"2026-01-02T10:01:22.000Z","absolute_end_time":"2026-01-02T10:01:23.500Z","created_at":"2026-01-02T10:01:23.500Z"},
+        {"segment_id":"live-043","session_uid":"live-session","speaker":"Alice","start":84,"end":85.5,"text":"Live fixture segment 043","language":"en","absolute_start_time":"2026-01-02T10:01:24.000Z","absolute_end_time":"2026-01-02T10:01:25.500Z","created_at":"2026-01-02T10:01:25.500Z"}
+      ],
+      "recordings": []
+    },
+    "chat-a": {"messages":[],"meeting_id":1001},
+    "chat-b": {"messages":[],"meeting_id":1002},
+    "ai-disabled": {"enabled":false,"provider":null,"model":null},
+    "webhooks-empty-a": {"attempts":[]},
+    "webhooks-empty-b": {"attempts":[]},
+    "audio-master": {"url":"https://storage.fixture.invalid/audio.wav","duration_seconds":1},
+    "video-master": {"url":"https://storage.fixture.invalid/video.webm","duration_seconds":1},
+    "live-websocket": {"baseline_client_path":"/ws?api_key=fixture-browser-token","final_client_path":"/ws","expected_subscribe_frame":{"action":"subscribe","meetings":[{"platform":"google_meet","native_id":"fixture-native-a"}]},"server_subscribed_frame":{"type":"subscribed","meetings":[1001]},"server_emit_frame":{"type":"transcript","meeting":{"id":1001},"speaker":"Alice","confirmed":[{"segment_id":"live-044","session_uid":"live-session","speaker":"Alice","text":"Live fixture segment 044","language":"en","start":86,"end_time":87.5,"absolute_start_time":"2026-01-02T10:01:26.000Z","absolute_end_time":"2026-01-02T10:01:27.500Z","completed":true}],"pending":[],"ts":"2026-01-02T10:01:27.500Z"},"real_socket_connection_count":0,"forbidden_baseline_subscribe_fields":["token","authToken","api_key"],"forbidden_final_url_query_or_frame_fields":["token","authToken","api_key"],"forbidden_final_subprotocol_values":["fixture-browser-token","token","authToken","api_key"]}
+  },
+  "binary_fixture_sources": {
+    "audio-media": {
+      "target_path": "services/dashboard/tests/fixtures/refactor-e2e/media/silence-1s.wav",
+      "content_type": "audio/wav",
+      "one_time_creation_argv": ["python3","-I","-S","-c","import pathlib,sys,wave; p=pathlib.Path(sys.argv[1]); p.parent.mkdir(parents=True,exist_ok=True); w=wave.open(str(p),'wb'); w.setnchannels(1); w.setsampwidth(2); w.setframerate(8000); w.writeframes(b'\\x00\\x00'*8000); w.close()", "services/dashboard/tests/fixtures/refactor-e2e/media/silence-1s.wav"],
+      "expected_byte_length": 16044,
+      "expected_duration_seconds": 1,
+      "expected_channels": 1,
+      "expected_sample_rate_hz": 8000,
+      "expected_sample_width_bytes": 2
+    },
+    "video-media": {
+      "target_path": "services/dashboard/tests/fixtures/refactor-e2e/media/black-1s.webm",
+      "content_type": "video/webm",
+      "encoding": "base64",
+      "base64_payload": "GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQJChYECGFOAZwEAAAAAAAIcEU2bdLpNu4tTq4QVSalmU6yBoU27i1OrhBZUrmtTrIHGTbuMU6uEElTDZ1OsggEQTbuMU6uEHFO7a1OsggIG7AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmoCrXsYMPQkBNgIRMYXZmV0GETGF2ZkSJiECRDAAAAAAAFlSua8WuAQAAAAAAADzXgQFzxYgAAAAAAAAAAZyBACK1nIN1bmSGhVZfVlA4g4EBI+ODhAXpRLHgkLCBELqBEJqBAlWwhFW5gQESVMNn0HNzzWPAi2PFiAAAAAAAAAABZ8iYRaOHRU5DT0RFUkSHi0xhdmMgbGlidnB4Z8ihRaOIRFVSQVRJT05Eh5MwMDowMDowMS4wOTEwMDAwMDAAH0O2dUCb54EAo6OBAACAEAIAnQEqEAAQAABHCIWFiIWEiAICAAwNYAD+/6tQgKOVgQJTALEBAAUQrAAYABhYL/QACAAAo5WBArYAsQEABRCsABgAGFgv9AAIAACjlYEDGQCxAQAFEKwAGAAYWC/0AAgAAKOVgQN9ALEBAAUQrAAYABhYL/QACAAAo5WBA+AAsQEABRCsABgAGFgv9AAIAAAcU7trkbuPs4EAt4r3gQHxggFl8IED",
+      "one_time_creation_argv": ["python3","-I","-S","-c","import base64,json,pathlib,sys; d=json.loads(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')); s=d['binary_fixture_sources'][sys.argv[2]]; p=pathlib.Path(s['target_path']); p.parent.mkdir(parents=True,exist_ok=True); p.write_bytes(base64.b64decode(s['base64_payload'],validate=True))",".pipeline/plans/full-repo-refactoring-2026-07-24-v2/planned-visual-changes.json","video-media"],
+      "expected_byte_length": 588,
+      "expected_prefix_hex": "1a45dfa3",
+      "expected_container": "WebM",
+      "expected_codec": "VP8",
+      "expected_width": 16,
+      "expected_height": 16,
+      "expected_duration_seconds": {"minimum":0.9,"maximum":1.2},
+      "verification": "RF-00Cでbyte長と先頭4 byteをstdlibで確認し、lockfile済みPlaywright Chromiumでloadedmetadata、videoWidth、videoHeight、duration範囲を確認する。"
+    }
+  },
+  "fixture_authoring_rules": [
+    "concrete_fixture_bodiesの各値を対応するfixture_files pathへJSONとしてそのまま書く。DTOを補完、生成、展開、mergeしない。",
+    "concrete_fixture_bodiesの28 keyと、fixture_filesからaudio-mediaとvideo-mediaを除いた28 keyは完全一致させる。",
+    "binary_fixture_sourcesの2 commandはRF-00Cで一度だけ実行し、生成物をcommitする。生成commandをproduction codeまたはtest codeへ残さない。",
+    "config-baselineとconfig-finalは記載済みの固定originを変更しない。",
+    "fixture fileが不存在、invalid JSON、または実credentialを含む場合はtestを失敗させる。"
+  ],
+  "media_response_behavior": {
+    "head_returns_headers_without_body": true,
+    "get_supports_byte_range": true,
+    "body_get_minimum_count": 1,
+    "request_maximum_count": 4
+  },
+  "screenshot_barrier": {
+    "expected_request_counts": "common_routesと当該scenario.requestsの全expected_countを満たし、mediaはbodyを持つGETが1件以上完了する。",
+    "in_flight_zero": "宣言済みfixture requestのin-flight=0が連続500ms続く。",
+    "fonts_ready": "await document.fonts.readyが完了する。",
+    "animation_frames": "fonts完了後にrequestAnimationFrameを2回待ち、その後だけsnapshotを撮る。"
+  },
+  "scenarios": [
+    {
+      "id": "S01",
+      "title": "Meeting一覧",
+      "route": "/meetings",
+      "related_rf": [],
+      "requests": [
+        {"method": "GET", "url": "/api/vexa/meetings?limit=50", "responses": ["meeting-list", "meeting-list"], "expected_count": 2}
+      ],
+      "actions": {
+        "common": [
+          "await page.goto('/meetings')",
+          "await expect(page.getByTestId('meeting-list')).toHaveAttribute('data-ready', 'true')"
+        ]
+      },
+      "assertions": {
+        "list-ready": "[data-testid=\"meeting-list\"]のdata-readyがtrue",
+        "cards-1001-1002-visible": "meeting-card-1001とmeeting-card-1002が各1件可視"
+      },
+      "expected_visual_change": false,
+      "allowed_selectors": []
+    },
+    {
+      "id": "S02",
+      "title": "完了Meeting詳細",
+      "route": "/meetings/1001",
+      "related_rf": ["RF-13", "RF-14"],
+      "requests": [
+        {"method": "GET", "url": "/api/vexa/meetings/1001", "responses": ["detail-completed-a"], "expected_count": 1},
+        {"method": "GET", "url": "/api/vexa/transcripts/google_meet/fixture-native-a?meeting_id=1001", "responses": ["transcript-refactor-a"], "expected_count": 1},
+        {"method": "GET", "url": "/api/vexa/bots/google_meet/fixture-native-a/chat", "responses": ["chat-a"], "expected_count": 1},
+        {"method": "GET", "url": "/api/ai/config", "responses": ["ai-disabled"], "expected_count": 1},
+        {"method": "GET", "url": "/api/webhooks/deliveries/1001", "responses": ["webhooks-empty-a"], "expected_count": 1}
+      ],
+      "actions": {
+        "common": [
+          "await page.goto('/meetings/1001')",
+          "await expect(page.getByTestId('transcript-segment-list')).toHaveAttribute('data-ready', 'true')"
+        ]
+      },
+      "assertions": {
+        "detail-root-a": "meeting-detailのdata-meeting-idが1001",
+        "back-button-visible": "meeting-detail-backが1件可視",
+        "dedup-visible-ids": "speakerとstreamが異なるsegmentを誤って重複排除せず、同一segmentの重複表示は0",
+        "absolute-order": "表示segment IDがfixtureのabsolute timestamp昇順と一致"
+      },
+      "expected_visual_change": true,
+      "allowed_selectors": ["[data-testid=\"transcript-segment-list\"]"]
+    },
+    {
+      "id": "S03",
+      "title": "literal transcript検索",
+      "route": "/meetings/1001?fixture=literal-search",
+      "related_rf": ["RF-12"],
+      "requests": [
+        {"method": "GET", "url": "/api/vexa/meetings/1001", "responses": ["detail-completed-a"], "expected_count": 1},
+        {"method": "GET", "url": "/api/vexa/transcripts/google_meet/fixture-native-a?meeting_id=1001", "responses": ["transcript-literal-search-a"], "expected_count": 1},
+        {"method": "GET", "url": "/api/vexa/bots/google_meet/fixture-native-a/chat", "responses": ["chat-a"], "expected_count": 1},
+        {"method": "GET", "url": "/api/ai/config", "responses": ["ai-disabled"], "expected_count": 1},
+        {"method": "GET", "url": "/api/webhooks/deliveries/1001", "responses": ["webhooks-empty-a"], "expected_count": 1}
+      ],
+      "actions": {
+        "baseline": [
+          "await page.goto('/meetings/1001?fixture=literal-search')",
+          "await page.getByTestId('transcript-search-input').fill('fixture')",
+          "await expect(page.getByTestId('transcript-search-results')).toHaveAttribute('data-ready', 'true')"
+        ],
+        "final": [
+          "await page.goto('/meetings/1001?fixture=literal-search')",
+          "await page.getByTestId('transcript-search-input').fill('[')",
+          "await expect(page.getByTestId('transcript-search-results')).toHaveAttribute('data-ready', 'true')"
+        ]
+      },
+      "assertions": {
+        "detail-root-a": "meeting-detailのdata-meeting-idが1001",
+        "literal-search-no-error": "入力'['でpage errorとconsole errorが0",
+        "literal-search-one-hit": "入力'['のliteral一致結果がexact 1"
+      },
+      "expected_visual_change": true,
+      "allowed_selectors": [
+        "[data-testid=\"transcript-search-panel\"]",
+        "[data-testid=\"transcript-search-results\"]",
+        "[data-testid=\"transcript-segment-list\"]"
+      ]
+    },
+    {
+      "id": "S04",
+      "title": "Meeting高速切替",
+      "route": "/meetings/1001?fixture=fast-switch",
+      "related_rf": ["RF-15"],
+      "requests": [
+        {"method": "GET", "url": "/api/vexa/meetings/1001", "responses": ["detail-completed-a"], "expected_count": 1},
+        {"method": "GET", "url": "/api/vexa/transcripts/google_meet/fixture-native-a?meeting_id=1001", "responses": ["transcript-simple-a"], "expected_count": 1},
+        {"method": "GET", "url": "/api/vexa/bots/google_meet/fixture-native-a/chat", "responses": ["chat-a"], "expected_count": 1},
+        {"method": "GET", "url": "/api/webhooks/deliveries/1001", "responses": ["webhooks-empty-a"], "expected_count": 1},
+        {"method": "GET", "url": "/api/vexa/meetings?limit=50", "responses": ["meeting-list", "meeting-list"], "expected_count": 2},
+        {"method": "GET", "url": "/api/vexa/meetings/1002", "responses": ["detail-completed-b"], "expected_count": 1},
+        {"method": "GET", "url": "/api/vexa/transcripts/google_meet/fixture-native-b?meeting_id=1002", "responses": ["transcript-simple-b"], "expected_count": 1},
+        {"method": "GET", "url": "/api/vexa/bots/google_meet/fixture-native-b/chat", "responses": ["chat-b"], "expected_count": 1},
+        {"method": "GET", "url": "/api/webhooks/deliveries/1002", "responses": ["webhooks-empty-b"], "expected_count": 1},
+        {"method": "GET", "url": "/api/ai/config", "responses": ["ai-disabled", "ai-disabled"], "expected_count": 2}
+      ],
+      "actions": {
+        "common": [
+          "await page.goto('/meetings/1001?fixture=fast-switch')",
+          "await page.getByTestId('meeting-detail-back').click()",
+          "await page.getByTestId('meeting-card-1002').click()",
+          "await expect(page.getByTestId('meeting-detail')).toHaveAttribute('data-meeting-id', '1002')"
+        ]
+      },
+      "assertions": {
+        "meeting-b-after-switch": "切替完了時のmeeting-detailが1002",
+        "meeting-a-segment-absent": "Meeting A固有segmentが0件"
+      },
+      "expected_visual_change": false,
+      "allowed_selectors": []
+    },
+    {
+      "id": "S05",
+      "title": "post-meeting polling",
+      "route": "/meetings/1001?fixture=post-meeting",
+      "related_rf": ["RF-17"],
+      "requests": [
+        {"method": "GET", "url": "/api/vexa/meetings/1001", "responses": ["detail-needs-human-a", "detail-needs-human-a", "detail-completed-a"], "expected_count": 3},
+        {"method": "GET", "url": "/api/vexa/transcripts/google_meet/fixture-native-a?meeting_id=1001", "responses": ["transcript-simple-a", "transcript-simple-a"], "expected_count": 2},
+        {"method": "GET", "url": "/api/vexa/bots/google_meet/fixture-native-a/chat", "responses": ["chat-a", "chat-a"], "expected_count": 2},
+        {"method": "GET", "url": "/api/ai/config", "responses": ["ai-disabled"], "expected_count": 1},
+        {"method": "GET", "url": "/api/webhooks/deliveries/1001", "responses": ["webhooks-empty-a"], "expected_count": 1}
+      ],
+      "actions": {
+        "common": [
+          "await page.goto('/meetings/1001?fixture=post-meeting')",
+          "await requestCounter.waitFor('GET /api/vexa/meetings/1001', 2)",
+          "await page.clock.fastForward(5000)",
+          "await requestCounter.waitFor('GET /api/vexa/meetings/1001', 3)",
+          "await expect(page.getByTestId('meeting-status')).toHaveAttribute('data-status', 'completed')"
+        ]
+      },
+      "assertions": {
+        "completed-visible": "3回目のdetail取得後にstatus=completedが可視"
+      },
+      "expected_visual_change": false,
+      "allowed_selectors": []
+    },
+    {
+      "id": "S06",
+      "title": "Browser Session starting表示",
+      "route": "/meetings/1001?fixture=browser-starting",
+      "related_rf": ["RF-20"],
+      "requests": [
+        {"method": "GET", "url": "/api/vexa/meetings/1001", "responses": ["detail-browser-requested-a", "detail-browser-requested-a"], "expected_count": 2}
+      ],
+      "actions": {
+        "common": [
+          "await page.goto('/meetings/1001?fixture=browser-starting')",
+          "await requestCounter.waitFor('GET /api/vexa/meetings/1001', 2)",
+          "await expect(page.getByTestId('browser-session-panel')).toHaveAttribute('data-raw-status', 'requested')"
+        ]
+      },
+      "assertions": {
+        "browser-starting-visible": "raw status=requestedを表示分類startingとして可視化"
+      },
+      "expected_visual_change": true,
+      "allowed_selectors": ["[data-testid=\"browser-session-panel\"]"]
+    },
+    {
+      "id": "S07",
+      "title": "Audio Player",
+      "route": "/meetings/1001?fixture=audio-player",
+      "related_rf": ["RF-21"],
+      "requests": [
+        {"method": "GET", "url": "/api/vexa/meetings/1001", "responses": ["detail-media-a"], "expected_count": 1},
+        {"method": "GET", "url": "/api/vexa/transcripts/google_meet/fixture-native-a?meeting_id=1001", "responses": ["transcript-audio-a"], "expected_count": 1},
+        {"method": "GET", "url": "/api/vexa/bots/google_meet/fixture-native-a/chat", "responses": ["chat-a"], "expected_count": 1},
+        {"method": "GET", "url": "/api/ai/config", "responses": ["ai-disabled"], "expected_count": 1},
+        {"method": "GET", "url": "/api/webhooks/deliveries/1001", "responses": ["webhooks-empty-a"], "expected_count": 1},
+        {"method": "GET", "url": "/api/vexa/recordings/701/master?type=audio", "responses": ["audio-master"], "expected_count": 1},
+        {"method": "GET_OR_HEAD", "url": "/api/vexa/recordings/701/master?type=audio&proxy=1", "responses": ["audio-media"], "expected_count": "1..4"}
+      ],
+      "actions": {
+        "common": [
+          "await page.goto('/meetings/1001?fixture=audio-player')",
+          "await expect(page.getByTestId('audio-player')).toHaveAttribute('data-ready', 'true')"
+        ]
+      },
+      "assertions": {
+        "audio-visible": "audio-playerが1件可視でdata-ready=true"
+      },
+      "expected_visual_change": false,
+      "allowed_selectors": []
+    },
+    {
+      "id": "S08",
+      "title": "Audio・Video Player",
+      "route": "/meetings/1001?fixture=video-player",
+      "related_rf": ["RF-22"],
+      "requests": [
+        {"method": "GET", "url": "/api/vexa/meetings/1001", "responses": ["detail-media-a"], "expected_count": 1},
+        {"method": "GET", "url": "/api/vexa/transcripts/google_meet/fixture-native-a?meeting_id=1001", "responses": ["transcript-av-a"], "expected_count": 1},
+        {"method": "GET", "url": "/api/vexa/bots/google_meet/fixture-native-a/chat", "responses": ["chat-a"], "expected_count": 1},
+        {"method": "GET", "url": "/api/ai/config", "responses": ["ai-disabled"], "expected_count": 1},
+        {"method": "GET", "url": "/api/webhooks/deliveries/1001", "responses": ["webhooks-empty-a"], "expected_count": 1},
+        {"method": "GET", "url": "/api/vexa/recordings/701/master?type=audio", "responses": ["audio-master"], "expected_count": 1},
+        {"method": "GET_OR_HEAD", "url": "/api/vexa/recordings/701/master?type=audio&proxy=1", "responses": ["audio-media"], "expected_count": "1..4"},
+        {"method": "GET", "url": "/api/vexa/recordings/702/master?type=video", "responses": ["video-master"], "expected_count": 1},
+        {"method": "GET_OR_HEAD", "url": "/api/vexa/recordings/702/master?type=video&proxy=1", "responses": ["video-media"], "expected_count": "1..4"}
+      ],
+      "actions": {
+        "common": [
+          "await page.goto('/meetings/1001?fixture=video-player')",
+          "await expect(page.getByTestId('audio-player')).toHaveAttribute('data-ready', 'true')",
+          "await expect(page.getByTestId('video-player')).toHaveAttribute('data-ready', 'true')"
+        ]
+      },
+      "assertions": {
+        "audio-visible": "audio-playerが1件可視でdata-ready=true",
+        "video-visible": "video-playerが1件可視でdata-ready=true"
+      },
+      "expected_visual_change": false,
+      "allowed_selectors": []
+    },
+    {
+      "id": "S09",
+      "title": "Live transcript follow",
+      "route": "/meetings/1001?fixture=live-follow",
+      "related_rf": ["RF-18"],
+      "requests": [
+        {"method": "GET", "url": "/api/vexa/meetings/1001", "responses": ["detail-active-a", "detail-active-a"], "expected_count": 2},
+        {"method": "GET", "url": "/api/vexa/transcripts/google_meet/fixture-native-a?meeting_id=1001", "responses": ["transcript-live-43"], "expected_count": 1},
+        {"method": "GET", "url": "/api/vexa/transcripts/google_meet/fixture-native-a", "responses": ["transcript-live-43"], "expected_count": 1},
+        {"method": "GET", "url": "/api/vexa/bots/google_meet/fixture-native-a/chat", "responses": ["chat-a", "chat-a"], "expected_count": 2},
+        {"method": "GET", "url": "/api/ai/config", "responses": ["ai-disabled"], "expected_count": 1},
+        {"method": "FAKE_WEBSOCKET", "url": "/ws", "responses": ["live-websocket"], "expected_count": 1}
+      ],
+      "actions": {
+        "common": [
+          "await page.goto('/meetings/1001?fixture=live-follow')",
+          "await fixtureWebSocket.waitForSubscribe()",
+          "await expect(page.getByTestId('transcript-scroll-container')).toHaveAttribute('data-ready', 'true')",
+          "await setOuterScrollTop(0)",
+          "await setInnerScrollTopToMaximum()",
+          "const before = await readOuterAndInnerScrollTop()",
+          "await fixtureWebSocket.emitFromFile('live-websocket')",
+          "await expect(page.locator('[data-segment-id=\"live-044\"]')).toBeVisible()",
+          "await waitForAnimationFrames(page, 2)",
+          "const after = await readOuterAndInnerScrollTop()",
+          "await setOuterAndInnerScrollTop(0)",
+          "await waitForAnimationFrames(page, 2)"
+        ]
+      },
+      "assertions": {
+        "detail-root-a": "meeting-detailのdata-meeting-idが1001",
+        "outer-app-scroll-unchanged": "after.outerがbefore.outerと一致",
+        "inner-transcript-scroll-increased": "live-044受信後のafter.innerがbefore.innerより大きい",
+        "websocket-token-surfaces-zero": "final modeのWebSocket URL、subprotocol、subscribe frameにtoken、authToken、api_key、fixture-browser-tokenが0"
+      },
+      "expected_visual_change": false,
+      "allowed_selectors": []
+    }
+  ],
+  "snapshot_contract": {
+    "filename": "{scenario_id}--{project}.png",
+    "expected_scenario_count": 9,
+    "expected_viewport_count": 2,
+    "expected_screenshot_count": 18,
+    "stable_scenarios": ["S01", "S04", "S05", "S07", "S08", "S09"],
+    "masked_scenarios": ["S02", "S03", "S06"],
+    "stable_max_diff_pixels": 0,
+    "masked_area_rule": "allowed_selectorsだけをPlaywright toHaveScreenshotのmaskへ渡し、mask外はmaxDiffPixels=0とする。",
+    "baseline_created_by_rf": "RF-00C",
+    "final_snapshot_update_forbidden": true
+  }
+}

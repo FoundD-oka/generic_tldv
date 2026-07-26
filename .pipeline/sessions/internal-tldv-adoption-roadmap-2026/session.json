@@ -1,0 +1,11 @@
+{
+  "schema_version": "2.0",
+  "task_id": "internal-tldv-adoption-roadmap-2026",
+  "runtime_profile": "codex-app",
+  "started_at": "2026-07-17T04:40:25.876752+00:00",
+  "completed_at": "2026-07-17T04:40:25.876752+00:00",
+  "status": "succeeded",
+  "event_count": 2,
+  "events": ".pipeline/sessions/internal-tldv-adoption-roadmap-2026/events.jsonl",
+  "latest_run_id": "d0905fcb-7c41-474b-bbfa-4d4aac617395"
+}

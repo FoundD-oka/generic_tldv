@@ -1,0 +1,126 @@
+{
+  "manifest_version": "1.0",
+  "task_id": "internal-tldv-adoption-roadmap-2026",
+  "goal_id": "internal-tldv-adoption-roadmap-2026-goal",
+  "checkpoint_id": "internal-tldv-adoption-roadmap-2026-cp-001",
+  "repo": {
+    "base_branch": "HEAD",
+    "base_sha": "a424d30bdb83ef744893c7487858f9e6cb78238c",
+    "head_sha": "a424d30bdb83ef744893c7487858f9e6cb78238c",
+    "branch_name": "main",
+    "worktree_path": "/Users/bonginkan-3-gouki/project/generic_tldv",
+    "generated_at": "2026-07-17T04:36:20.032156+00:00"
+  },
+  "commands": [
+    {
+      "id": "verify-doc",
+      "command": "test -f docs/2026-07-17_社内tl-dv置き換えロードマップ.md && rg -q 'K-15' docs/2026-07-17_社内tl-dv置き換えロードマップ.md && rg -q 'Phase 4' docs/2026-07-17_社内tl-dv置き換えロードマップ.md && rg -q 'Rollback' docs/2026-07-17_社内tl-dv置き換えロードマップ.md",
+      "required": true,
+      "exit_code": 0,
+      "started_at": "2026-07-17T04:36:19.996338+00:00",
+      "finished_at": "2026-07-17T04:36:20.032003+00:00",
+      "log_path": ".pipeline/evidence/internal-tldv-adoption-roadmap-2026/logs/verify-doc.log"
+    }
+  ],
+  "artifacts": [],
+  "scope": {
+    "changed_files": [],
+    "forbidden_paths_changed": [],
+    "allowed_paths_outside_with_justification": [],
+    "changed_file_count": 0
+  },
+  "quality_conditions": [
+    {
+      "id": "qc-kpi",
+      "condition": "主要KPIに算式・母数・最終目標がある",
+      "ok_line": "K-01〜K-15が正本に定義される",
+      "target_state": "K-01〜K-15が正本に定義される",
+      "status": "passed",
+      "evidence": [
+        "command:verify-doc"
+      ]
+    },
+    {
+      "id": "qc-roadmap",
+      "condition": "各Phaseに対象・作業・Exit KPIがある",
+      "ok_line": "Phase 0〜4を確認できる",
+      "target_state": "Phase 0〜4を確認できる",
+      "status": "passed",
+      "evidence": [
+        "command:verify-doc"
+      ]
+    },
+    {
+      "id": "qc-baseline",
+      "condition": "実装と稼働実績を分ける",
+      "ok_line": "日付付き暫定値と注意事項がある",
+      "target_state": "日付付き暫定値と注意事項がある",
+      "status": "passed",
+      "evidence": [
+        "command:verify-doc"
+      ]
+    },
+    {
+      "id": "qc-safety",
+      "condition": "例外、Hold、Rollbackがある",
+      "ok_line": "データ・権限事故で停止できる",
+      "target_state": "データ・権限事故で停止できる",
+      "status": "passed",
+      "evidence": [
+        "command:verify-doc"
+      ]
+    },
+    {
+      "id": "qc-next",
+      "condition": "次の意思決定が明示される",
+      "ok_line": "パイロット、対象会議、過去データ、成果物を決められる",
+      "target_state": "パイロット、対象会議、過去データ、成果物を決められる",
+      "status": "passed",
+      "evidence": [
+        "command:verify-doc"
+      ]
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "qc-kpi",
+      "status": "passed",
+      "evidence": [
+        "command:verify-doc"
+      ]
+    },
+    {
+      "id": "qc-roadmap",
+      "status": "passed",
+      "evidence": [
+        "command:verify-doc"
+      ]
+    },
+    {
+      "id": "qc-baseline",
+      "status": "passed",
+      "evidence": [
+        "command:verify-doc"
+      ]
+    },
+    {
+      "id": "qc-safety",
+      "status": "passed",
+      "evidence": [
+        "command:verify-doc"
+      ]
+    },
+    {
+      "id": "qc-next",
+      "status": "passed",
+      "evidence": [
+        "command:verify-doc"
+      ]
+    }
+  ],
+  "missing_evidence": [],
+  "approval": {
+    "state": "pending",
+    "decision_path": ".pipeline/approvals/internal-tldv-adoption-roadmap-2026/approval-decision.json"
+  }
+}

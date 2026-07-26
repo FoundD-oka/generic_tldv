@@ -1,0 +1,36 @@
+{
+  "timestamp": "2026-07-24T04:46:18.284326+00:00",
+  "task_id": "full-repo-refactoring-2026-07-24",
+  "size": "L",
+  "status": "block",
+  "plan_hash": "sha256:22db979f98f3612e2f4d80239194283f975b63d7804fe632a0f39fcb7b957521",
+  "plan_material_version": "plan-v1",
+  "checks": [
+    {
+      "check": "fable-plan-review",
+      "ok": false,
+      "errors": [
+        "required artifact is missing or invalid"
+      ]
+    },
+    {
+      "check": "codex-ultra-plan-review",
+      "ok": false,
+      "errors": [
+        "required artifact is missing or invalid"
+      ]
+    },
+    {
+      "check": "dual-plan-consensus",
+      "ok": false,
+      "errors": [
+        "required artifact is missing or invalid"
+      ]
+    }
+  ],
+  "errors": [
+    "fable-plan-review: required artifact is missing or invalid",
+    "codex-ultra-plan-review: required artifact is missing or invalid",
+    "dual-plan-consensus: required artifact is missing or invalid"
+  ]
+}

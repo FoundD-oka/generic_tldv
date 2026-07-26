@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0",
+  "task_id": "full-repo-refactoring-2026-07-24",
+  "goal_id": "full-repo-refactoring-2026-07-24-goal",
+  "source": {
+    "type": "manual",
+    "created_at": "2026-07-24T05:16:33.803332+00:00"
+  },
+  "raw_request": [
+    "既存公開契約と利用者可視意味を維持し、認証境界・競合・検証偽陽性を直して巨大責務と循環を計画順に分解する"
+  ],
+  "interpreted_goal": {
+    "description": "既存公開契約と利用者可視意味を維持し、認証境界・競合・検証偽陽性を直して巨大責務と循環を計画順に分解する",
+    "business_outcome": []
+  },
+  "success_metrics": [
+    {
+      "id": "sm-001",
+      "text": "全項目固有test、required suite、構造gate、fixture E2Eが同一最終HEADで成功する"
+    }
+  ],
+  "non_goals": [],
+  "approval": {
+    "state": "pending",
+    "required_before_checkpoint_split": false,
+    "approver_role": "client_owner"
+  }
+}
