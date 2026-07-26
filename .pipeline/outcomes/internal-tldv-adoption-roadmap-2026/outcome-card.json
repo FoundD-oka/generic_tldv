@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0",
+  "task_id": "internal-tldv-adoption-roadmap-2026",
+  "size": "M",
+  "result": {
+    "at_pass": true,
+    "fp_pass": true,
+    "nft_pass": true,
+    "hd_resolved": true,
+    "blocking_findings": 0
+  },
+  "evidence": {
+    "verification": [
+      "test・rg・jqによる正本/KPI/Phase/停止条件/manifest検証",
+      ".pipeline/evidence/internal-tldv-adoption-roadmap-2026/evidence-manifest.json",
+      ".pipeline/evidence/internal-tldv-adoption-roadmap-2026/evidence-pack.md",
+      ".pipeline/evidence/internal-tldv-adoption-roadmap-2026/qa-judgment.json",
+      ".pipeline/gates/internal-tldv-adoption-roadmap-2026/backcast.json"
+    ],
+    "session_ledger": ".pipeline/sessions/internal-tldv-adoption-roadmap-2026/events.jsonl"
+  },
+  "summary": "現行実装と稼働DBの暫定値を根拠に、KPIゲート付きの社内tl;dv置き換えロードマップを日本語で作成した。"
+}

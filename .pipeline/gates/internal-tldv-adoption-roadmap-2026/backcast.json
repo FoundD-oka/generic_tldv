@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-07-17T04:40:17.606679+00:00",
+  "task_id": "internal-tldv-adoption-roadmap-2026",
+  "status": "pass",
+  "mode": "active",
+  "details": {
+    "checkpoint_contract": ".pipeline/plans/internal-tldv-adoption-roadmap-2026/checkpoint-contract.json",
+    "evidence_manifest": ".pipeline/evidence/internal-tldv-adoption-roadmap-2026/evidence-manifest.json",
+    "approval_decision": ".pipeline/approvals/internal-tldv-adoption-roadmap-2026/approval-decision.json",
+    "state_machine": ".pipeline/rules/backcast-state-machine.json",
+    "mode": "optional"
+  },
+  "errors": [],
+  "warnings": []
+}

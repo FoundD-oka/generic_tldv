@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "task_id": "internal-tldv-adoption-roadmap-2026",
+  "checkpoint_id": "internal-tldv-adoption-roadmap-2026-cp-001",
+  "size": "M",
+  "decided_at": "2026-07-17T04:35:17.879185+00:00",
+  "basis": {
+    "residual_uncertainty": "全社利用への段階移行は運用・品質・セキュリティ・定着の複数カテゴリを横断するが、今回は実装や外部公開を伴わない計画成果物であるため",
+    "not_based_on": "issue title or diff size alone"
+  },
+  "quality_gates": {
+    "required": [
+      "residency",
+      "preflight",
+      "hd-gate",
+      "doc-staleness",
+      "adapter-contract",
+      "backcast-contracts",
+      "evidence-manifest",
+      "evidence-pack",
+      "qa-judgment",
+      "outcome-judgment"
+    ],
+    "external_consultation": "optional"
+  }
+}

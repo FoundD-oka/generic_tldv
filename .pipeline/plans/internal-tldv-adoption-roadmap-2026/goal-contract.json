@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0",
+  "task_id": "internal-tldv-adoption-roadmap-2026",
+  "goal_id": "internal-tldv-adoption-roadmap-2026-goal",
+  "source": {
+    "type": "manual",
+    "created_at": "2026-07-17T04:35:17.808296+00:00"
+  },
+  "raw_request": [
+    "対象社内会議をカボスへ段階移行し、旧tl;dvを安全に停止できるロードマップとKPIを作る"
+  ],
+  "interpreted_goal": {
+    "description": "対象社内会議をカボスへ段階移行し、旧tl;dvを安全に停止できるロードマップとKPIを作る",
+    "business_outcome": []
+  },
+  "success_metrics": [
+    {
+      "id": "sm-001",
+      "text": "現状根拠、KPI算式、Phase 0〜4のExit条件、例外、停止条件、次の意思決定が一つの日本語ロードマップで判断できる"
+    }
+  ],
+  "non_goals": [],
+  "approval": {
+    "state": "pending",
+    "required_before_checkpoint_split": false,
+    "approver_role": "client_owner"
+  }
+}

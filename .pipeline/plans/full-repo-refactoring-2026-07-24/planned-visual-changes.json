@@ -1,0 +1,2236 @@
+{
+  "schema_version": "2.0",
+  "task_id": "full-repo-refactoring-2026-07-24",
+  "viewports": {
+    "desktop": {
+      "width": 1440,
+      "height": 900
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844
+    }
+  },
+  "isolation_contract": {
+    "browser_context": "Create a new Playwright BrowserContext for every mode, scenario, and viewport tuple. Reusing pages, cookies, local/session storage, IndexedDB, Cache Storage, service workers, request counters, fake clocks, or WebSockets is fatal.",
+    "runner_owned_server": true,
+    "external_base_url_forbidden": true,
+    "fixed_locale": "ja-JP",
+    "fixed_timezone": "Asia/Tokyo",
+    "fixed_color_scheme": "light",
+    "reduced_motion": "reduce",
+    "fixed_clock_time": "2026-01-15T12:00:00.000Z",
+    "browser_context_required_fields": [
+      "id",
+      "mode",
+      "scenario_id",
+      "viewport",
+      "created_at",
+      "installed_before_goto",
+      "locale",
+      "timezone",
+      "color_scheme",
+      "reduced_motion",
+      "clock_time"
+    ],
+    "context_id_required_on_records": [
+      "action_results",
+      "fixture_requests",
+      "fixture_consumption",
+      "screenshot_barrier_results",
+      "screenshots",
+      "assertion_results"
+    ],
+    "real_user_or_token_data_forbidden": true
+  },
+  "fixture_materialization_contract": {
+    "output_rule": "Every http-json, http-binary, and fake-websocket fixture path is a concrete tracked authoring file. Every http-json authoring file is already a concrete DTO body before the E2E server starts. An http-json-template authoring file is the sole exception: it remains tracked with only the allow-listed placeholders and is materialized to a task-owned untracked regular file after loopback port reservation and before Next.js start or route installation. Authoring-only keys are forbidden in every served materialized JSON response body. Literal DTO response keys such as data, segments, and recordings are required where their DTO declares them.",
+    "merge_order": [
+      "referenced DTO materialization_defaults",
+      "fixture-local materialization_defaults",
+      "fixture exact identity/fixed values",
+      "fixture exact arrays or deterministic recipe expansion"
+    ],
+    "merge_semantics": "Objects are recursively merged, arrays and scalars replace the earlier value, and a later null is an explicit value. Projection rules are applied before the final DTO-key validation. Duplicate keys, an authoring key without an exact projection rule, two authoring keys projecting different values to the same DTO path, unknown DTO keys, unresolved placeholders, missing required keys, non-finite numbers, and type mismatches are fatal.",
+    "projection_scope": "authoring_projection_rules applies only to body-authoring keys after path and transport metadata have been removed. Top-level fixture metadata is never projected into a served body and must match the exact transport_metadata_allowlist for that transport. A key that is in neither the transport allow-list nor authoring_projection_rules is fatal.",
+    "transport_metadata_allowlist": {
+      "http-json": [
+        "path",
+        "transport"
+      ],
+      "http-json-template": [
+        "path",
+        "transport"
+      ],
+      "http-binary": [
+        "path",
+        "transport",
+        "content_type",
+        "range_policy_ref"
+      ],
+      "fake-websocket": [
+        "path",
+        "transport",
+        "baseline_client_path",
+        "final_client_path",
+        "expected_subscribe_frame",
+        "server_subscribed_frame",
+        "server_emit_frame",
+        "forbidden_baseline_subscribe_fields",
+        "forbidden_final_url_query_or_frame_fields",
+        "forbidden_final_subprotocol_values",
+        "real_socket_connection_count"
+      ]
+    },
+    "authoring_projection_rules": {
+      "schema_ref": "Select the named DTO contract and emit no key.",
+      "exact_identity": "Recursively merge the object into the response root and emit no exact_identity key.",
+      "meeting_identity": "Recursively merge the object into the response root and emit no meeting_identity key.",
+      "data_exact": "Recursively merge the object into response.data and emit no data_exact key.",
+      "row_defaults": "For each exact_rows element, recursively merge row_defaults first and the row second; emit the resulting array as response.meetings.",
+      "exact_rows": "Materialize response.meetings in the listed order after row_defaults projection; emit no exact_rows key.",
+      "segment_defaults": "Apply to every segment before that segment's exact or recipe values; *_rule members are evaluated during authoring materialization and are not emitted.",
+      "segments_exact": "Emit the array as response.segments in listed order after segment defaults.",
+      "segments_exact_order": "Emit the array as response.segments in listed order after segment defaults; reordering is forbidden.",
+      "segments_recipe": "Expand the declared finite recipe during RF-00C fixture creation and commit the concrete response.segments array; screenshot runtime generation is forbidden.",
+      "recording_schema_ref": "Select the DTO defaults for every projected recording and emit no recording_schema_ref key.",
+      "recordings_exact": "Emit the array as response.recordings in listed order after RecordingData defaults.",
+      "recordings_exact_order": "Emit the array as response.recordings in listed order after RecordingData defaults; reordering is forbidden.",
+      "recordings": "Treat as the literal response.recordings value.",
+      "fixed_values": "Recursively merge the object into the response root and emit no fixed_values key.",
+      "exact_body": "Use the value itself as the complete response body and do not combine it with DTO defaults.",
+      "schema": "Validate materialization and emit no schema key.",
+      "exact_top_level_keys": "Validate the final root key set and emit no exact_top_level_keys key.",
+      "forbidden_keys_recursive": "Walk the complete materialized body in deterministic JSON pointer order, reject when any object key exactly matches a listed value, and emit no forbidden_keys_recursive key.",
+      "reason_*": "Documentation-only; emit no key. Only keys beginning exactly with reason_ match this rule."
+    },
+    "segments_recipe_dsl": {
+      "recipe_exact_keys": [
+        "recipe_version",
+        "generator",
+        "index",
+        "field_order",
+        "fields"
+      ],
+      "recipe_version": 1,
+      "generator": "indexed-segment-sequence-v1",
+      "index_exact_keys": [
+        "name",
+        "first",
+        "last",
+        "step"
+      ],
+      "index_rule": "name must be literal i; first, last, and step must be integers; require first=1, last=43, step=1 and therefore exactly 43 output rows in ascending i order.",
+      "field_rule_exact_ops": {
+        "literal": "Exact keys op,value. Emit value unchanged.",
+        "format-index": "Exact keys op,prefix,width. width is a positive integer. Emit prefix followed by base-10 i left-padded with ASCII zero to exactly width digits; overflow is fatal.",
+        "parity-select": "Exact keys op,odd,even. Emit odd when i modulo 2 is 1, otherwise even.",
+        "affine-index": "Exact keys op,multiply,add. Emit multiply*i+add using exact JSON integer arithmetic; a non-integer result is fatal.",
+        "add-field": "Exact keys op,field,add. field must name an earlier field holding a finite number. Emit field+add and reject non-finite output.",
+        "iso-add-field-seconds": "Exact keys op,base,field,fraction_digits. base must be an RFC3339 UTC instant ending Z, field must name an earlier finite-number field, fraction_digits must equal 3. Add field seconds in integer milliseconds and emit UTC YYYY-MM-DDTHH:mm:ss.sssZ; fractional milliseconds or calendar overflow errors are fatal.",
+        "copy-field": "Exact keys op,field. field must name an earlier field and its value is copied byte-for-byte."
+      },
+      "required_field_order": [
+        "segment_id",
+        "session_uid",
+        "speaker",
+        "start",
+        "end",
+        "text",
+        "language",
+        "absolute_start_time",
+        "absolute_end_time",
+        "created_at"
+      ],
+      "evaluation_rule": "field_order must equal required_field_order byte-for-byte and fields must contain exactly the same keys. Evaluate one row at a time in field_order, reject forward references and unknown op/keys, validate every row against RawTranscriptResponse.segment_exact_types, replace segments_recipe with the concrete segments array in the tracked fixture during RF-00C, and never ship the recipe object in a served body."
+    },
+    "projection_order": [
+      "select schema_ref and DTO defaults",
+      "apply fixture materialization_defaults",
+      "project exact_identity or meeting_identity to the root",
+      "project fixed_values and data_exact",
+      "project exact rows, segments, and recordings",
+      "remove documentation-only keys",
+      "validate exact DTO keys and types"
+    ],
+    "template_runtime_contract": {
+      "template_transport": "http-json-template",
+      "allowed_placeholders": {
+        "${originHttp}": "http://127.0.0.1:<reserved_next_port>",
+        "${originWs}": "ws://127.0.0.1:<reserved_next_port>",
+        "${basePath}": "The normalized Next.js basePath: empty string or one leading slash, no trailing slash."
+      },
+      "substitution_scope": "Replace placeholders only inside JSON string values, never inside object keys. Parse the tracked authoring file with duplicate-key rejection, walk string values in deterministic JSON pointer order, and replace every occurrence left-to-right exactly once using the frozen value map. Unknown placeholder names, malformed ${...}, a placeholder remaining after one pass, a non-loopback origin, or a basePath outside the declared grammar is fatal.",
+      "canonical_serialization": "For placeholder_values, materialized JSON bodies, and receipt hash input, recursively sort every object key by its UTF-8 byte sequence, preserve array order, then use Node.js JSON.stringify with no replacer and no spacing. Encode the resulting string as UTF-8 with no BOM and no trailing newline. Reject lone surrogates, non-finite numbers, duplicate keys, and values outside JSON types before serialization. placeholder_values_sha256 hashes the exact canonical placeholder_values bytes; materialized_body_sha256 hashes the exact canonical bytes written to the materialized file; materialization_receipt_sha256 hashes the exact canonical receipt object bytes without adding a self-hash field.",
+      "timing": "Validate the explicit run-refactor-e2e.sh --task and --attempt-id inputs first, reserve the loopback port, and freeze basePath. Baseline requires task=full-repo-refactoring-2026-07-24 and attempt-id equal to the canonical RF-00C item ATTEMPT_ID. Final requires task equal to the release-boundaries-resolved R7 task and attempt-id equal to the selected closure attempt. Before Next.js start and before installing any HTTP or WebSocket binding, materialize each template to .pipeline/tmp/<validated-task-id>/e2e/<canonical-attempt-id>/materialized-fixtures/<fixture-id>.json using O_EXCL|O_NOFOLLOW, fsync, and mode 0400. Never infer either value from an evidence path, nonce, mtime, or latest directory.",
+      "tracked_tree_rule": "Never rewrite, stage, or serve the tracked template as a concrete runtime file. Verify the tracked template Git blob and worktree SHA-256 are unchanged before and after capture.",
+      "reconstruction_rule": "Each manifest receipt stores the nonsecret exact placeholder_values object with keys basePath, originHttp, and originWs. A verifier must be able to read the tracked authoring Git blob, reapply the declared single-pass substitution with those values, canonical-serialize the result, and reproduce placeholder_values_sha256, materialized_body_sha256, and materialization_receipt_sha256 after the temporary materialized file has been deleted.",
+      "receipt_fields": [
+        "fixture_id",
+        "tracked_authoring_path",
+        "tracked_authoring_blob_sha",
+        "tracked_authoring_sha256",
+        "placeholder_values",
+        "placeholder_values_sha256",
+        "materialized_relative_path",
+        "materialized_body_sha256",
+        "dto_contract",
+        "created_before_server_start",
+        "tracked_unchanged_after_capture"
+      ],
+      "receipt_field_types": {
+        "fixture_id": "string",
+        "tracked_authoring_path": "repo-relative string",
+        "tracked_authoring_blob_sha": "lowercase 40-or-64-hex Git object id",
+        "tracked_authoring_sha256": "lowercase 64-hex",
+        "placeholder_values": "exact object {basePath:string,originHttp:string,originWs:string}; origins must be loopback and share one reserved port, basePath must match the declared grammar",
+        "placeholder_values_sha256": "lowercase 64-hex",
+        "materialized_relative_path": "task-temp-relative string",
+        "materialized_body_sha256": "lowercase 64-hex",
+        "dto_contract": "schema_ref string when the fixture declares schema_ref, otherwise JSON null",
+        "created_before_server_start": "literal true",
+        "tracked_unchanged_after_capture": "literal true"
+      }
+    },
+    "http_json_response_defaults": {
+      "status": 200,
+      "content_type": "application/json; charset=utf-8"
+    },
+    "binding_snapshot_identity": [
+      "scenario_id",
+      "mode",
+      "method",
+      "raw_path_query",
+      "fixture",
+      "status",
+      "content_type",
+      "tracked_authoring_sha256",
+      "materialized_body_sha256",
+      "materialization_receipt_sha256"
+    ],
+    "binding_snapshot_receipt_semantics": {
+      "http-json-template": "materialization_receipt_sha256 is the lowercase 64-hex SHA-256 of the exact template receipt object and must be non-null.",
+      "http-json": "materialization_receipt_sha256 must be JSON null; tracked_authoring_sha256 and materialized_body_sha256 must both be lowercase 64-hex and equal because the tracked file is already the concrete body.",
+      "http-binary": "materialization_receipt_sha256 must be JSON null; tracked_authoring_sha256 and materialized_body_sha256 must both be lowercase 64-hex and equal.",
+      "fake-websocket": "materialization_receipt_sha256 must be JSON null; tracked_authoring_sha256 and materialized_body_sha256 bind the tracked fake-WebSocket contract bytes, must both be lowercase 64-hex, and must be equal."
+    },
+    "fixture_materialization_receipts_cardinality": "Exactly one receipt per http-json-template fixture and zero receipts for every other transport, in fixture_id UTF-8 byte order.",
+    "same_fixture_multiple_bindings": "The same fixture file may serve more than one exact binding only when each binding tuple is separately present in the snapshot. Fixture name or path alone is never a binding identity."
+  },
+  "action_dsl": {
+    "encoding": "Each action is one UTF-8 string. Split on the first colon for opcode. Opcode-specific parsing is structural and never eval. Unknown opcode, missing or extra field, non-unique locator, negative count, or unresolved fixture placeholder is fatal.",
+    "default_timeout_ms": 5000,
+    "allowed_actions": {
+      "goto": "Navigate to the exact same-origin path and require the main document status to be 200.",
+      "wait-request-count": "Grammar: wait-request-count:<METHOD> <exact path>=<integer>. After the opcode delimiter, split the remaining string on its final equals sign so query values remain part of the exact path. Wait until the exact bound request count equals the integer; over-count is immediately fatal.",
+      "wait-locator": "Require exactly one matching locator to become visible.",
+      "fill": "Fill the exact unique locator with the remaining literal UTF-8 text.",
+      "click": "Click the exact unique locator once.",
+      "advance-fake-clock": "Advance the Playwright fake clock by the exact non-negative integer milliseconds and flush microtasks.",
+      "set-scroll": "Grammar: set-scroll:locator(<unique selector>)=<finite integer|max>[,...]. max means scrollHeight-clientHeight. Set only the listed element scrollTop values; window scrolling is not allowed.",
+      "record-scroll": "Grammar: record-scroll:<name>=locator(<unique selector>).scrollTop[,...]. Names are ASCII identifiers and values must be finite numbers.",
+      "wait-animation-frames": "Wait the exact positive integer number of requestAnimationFrame callbacks.",
+      "wait-fixture-websocket": "Wait for the named fake WebSocket state: connected, subscribed, emitted, or closed.",
+      "emit-fixture-websocket": "Emit the exact named server frame once through the in-process fake WebSocket. A matching subscribed state is required first."
+    },
+    "action_result_required_fields": [
+      "scenario_id",
+      "viewport",
+      "mode",
+      "index",
+      "action",
+      "started_at",
+      "finished_at",
+      "status",
+      "context_id",
+      "observations"
+    ]
+  },
+  "network_contract": {
+    "binding_time": "Install all common and scenario request bindings, including the fake WebSocket, before the first action. A request must never race fixture installation.",
+    "url_matching": "Match method, origin class, raw path, and raw query byte-for-byte. Query order is significant. Redirects are not followed unless an exact redirect fixture is declared.",
+    "infrastructure_passthrough_allowlist": [
+      "GET main documents for /meetings and /meetings/1001 with the scenario's exact query",
+      "same-origin Next.js RSC requests for those exact routes when the request has the RSC header and only the framework _rsc query value differs",
+      "same-origin /_next/static/**",
+      "same-origin /favicon.ico",
+      "same-origin brand/icon image assets already referenced by the rendered page"
+    ],
+    "fatal_unbound_classes": [
+      "all other same-origin /api/**",
+      "all other same-origin WebSocket or EventSource connections",
+      "all external HTTP(S), WS(S), DNS-like browser fetches, beacons, and prefetches",
+      "localhost services other than the runner-owned Dashboard server"
+    ],
+    "blog_binding": {
+      "method": "GET",
+      "url": "https://blog.vexa.ai/notifications.json",
+      "fixture": "blog-empty",
+      "expected_count": 1
+    },
+    "common_profile_merge": "Start with the mode's four bindings below. A scenario common_overrides entry replaces only the named binding's expected_count; all other fields remain unchanged.",
+    "common_profiles": {
+      "baseline": {
+        "auth": {
+          "method": "GET",
+          "path": "/api/auth/me",
+          "fixture": "auth-baseline",
+          "expected_count": 1
+        },
+        "config": {
+          "method": "GET",
+          "path": "/api/config",
+          "fixture": "config-baseline",
+          "expected_count": 1
+        },
+        "billing": {
+          "method": "GET",
+          "path": "/api/billing/status",
+          "fixture": "billing-empty",
+          "expected_count": 1
+        },
+        "blog": {
+          "method": "GET",
+          "url": "https://blog.vexa.ai/notifications.json",
+          "fixture": "blog-empty",
+          "expected_count": 1
+        }
+      },
+      "final": {
+        "auth": {
+          "method": "GET",
+          "path": "/api/auth/me",
+          "fixture": "auth-final",
+          "expected_count": 1
+        },
+        "config": {
+          "method": "GET",
+          "path": "/api/config",
+          "fixture": "config-final",
+          "expected_count": 1
+        },
+        "billing": {
+          "method": "GET",
+          "path": "/api/billing/status",
+          "fixture": "billing-empty",
+          "expected_count": 1
+        },
+        "blog": {
+          "method": "GET",
+          "url": "https://blog.vexa.ai/notifications.json",
+          "fixture": "blog-empty",
+          "expected_count": 1
+        }
+      }
+    },
+    "screenshot_barrier": {
+      "order": [
+        "Every non-binary common and scenario fixture has been consumed exactly expected_count times.",
+        "Every required binary fixture has completed at least one body-bearing GET and remains within its request maximum.",
+        "For S09, the fake WebSocket has accepted the exact subscribe frame and the named server frame has been emitted and handled.",
+        "The in-flight bound fixture request count is zero continuously for 500 milliseconds.",
+        "document.fonts.ready resolves.",
+        "Two requestAnimationFrame callbacks complete."
+      ],
+      "screenshot_before_barrier_forbidden": true,
+      "unused_required_fixture_detected_before_screenshot": true,
+      "optional_media_head_or_range_may_be_unused": true
+    }
+  },
+  "dto_contracts": {
+    "contract_scope": "These are strict machine-readable fixture-body contracts, not permissive copies of every optional production field. Materialized E2E bodies must contain exactly the declared root and nested keys, with no additional production-optional keys. Type strings are closed unions: integer excludes booleans, finite-number excludes NaN and infinities, and object/array require the nested contract stated here.",
+    "RawMeeting": {
+      "exact_top_level_keys": [
+        "id",
+        "platform",
+        "native_meeting_id",
+        "status",
+        "start_time",
+        "end_time",
+        "bot_container_id",
+        "data",
+        "created_at",
+        "updated_at"
+      ],
+      "top_level_exact_types": {
+        "id": "integer",
+        "platform": "google_meet|browser_session",
+        "native_meeting_id": "string",
+        "status": "requested|active|needs_human_help|completed",
+        "start_time": "string|null",
+        "end_time": "string|null",
+        "bot_container_id": "string|null",
+        "data": "object",
+        "created_at": "string",
+        "updated_at": "string"
+      },
+      "data_allowed_keys": [
+        "name",
+        "recording_enabled",
+        "recordings",
+        "mode",
+        "session_token"
+      ],
+      "data_exact_types": {
+        "name": "string",
+        "recording_enabled": "boolean",
+        "recordings": "array",
+        "mode": "browser_session",
+        "session_token": "string"
+      },
+      "materialization_defaults": {
+        "start_time": "2026-01-02T10:00:00.000Z",
+        "end_time": "2026-01-02T10:30:00.000Z",
+        "bot_container_id": null,
+        "data": {},
+        "created_at": "2026-01-02T09:59:00.000Z",
+        "updated_at": "2026-01-02T10:30:00.000Z"
+      }
+    },
+    "RawTranscriptResponse": {
+      "exact_top_level_keys": [
+        "id",
+        "platform",
+        "native_meeting_id",
+        "status",
+        "start_time",
+        "end_time",
+        "data",
+        "segments",
+        "recordings"
+      ],
+      "top_level_exact_types": {
+        "id": "integer",
+        "platform": "google_meet|browser_session",
+        "native_meeting_id": "string",
+        "status": "requested|active|needs_human_help|completed",
+        "start_time": "string|null",
+        "end_time": "string|null",
+        "data": "object",
+        "segments": "array<RawTranscriptSegment>",
+        "recordings": "array<RecordingData>"
+      },
+      "data_allowed_keys": [
+        "name"
+      ],
+      "data_exact_types": {
+        "name": "string"
+      },
+      "segment_exact_keys": [
+        "start",
+        "end",
+        "text",
+        "speaker",
+        "language",
+        "absolute_start_time",
+        "absolute_end_time",
+        "created_at",
+        "segment_id",
+        "session_uid"
+      ],
+      "segment_exact_types": {
+        "start": "finite-number",
+        "end": "finite-number",
+        "text": "string",
+        "speaker": "string|null",
+        "language": "string",
+        "absolute_start_time": "string",
+        "absolute_end_time": "string",
+        "created_at": "string",
+        "segment_id": "string|null",
+        "session_uid": "string|null"
+      },
+      "materialization_defaults": {
+        "id": 1001,
+        "platform": "google_meet",
+        "native_meeting_id": "fixture-native-a",
+        "status": "completed",
+        "start_time": "2026-01-02T10:00:00.000Z",
+        "end_time": "2026-01-02T10:30:00.000Z",
+        "data": {
+          "name": "Fixture Meeting A"
+        },
+        "segments": [],
+        "recordings": []
+      },
+      "segment_materialization_defaults": {
+        "start": 0,
+        "end": 1,
+        "text": "fixture segment",
+        "speaker": "Fixture Speaker",
+        "language": "en",
+        "absolute_start_time": "2026-01-02T10:00:00.000Z",
+        "absolute_end_time": "2026-01-02T10:00:01.000Z",
+        "created_at": "2026-01-02T10:00:01.000Z",
+        "segment_id": "fixture-segment",
+        "session_uid": "fixture-session"
+      }
+    },
+    "RecordingData": {
+      "exact_keys": [
+        "id",
+        "meeting_id",
+        "user_id",
+        "session_uid",
+        "source",
+        "status",
+        "created_at",
+        "completed_at",
+        "media_files",
+        "playback_url"
+      ],
+      "exact_types": {
+        "id": "integer",
+        "meeting_id": "integer",
+        "user_id": "integer",
+        "session_uid": "string",
+        "source": "bot",
+        "status": "completed",
+        "created_at": "string",
+        "completed_at": "string|null",
+        "media_files": "array",
+        "playback_url": "object"
+      },
+      "playback_url_exact_keys": [
+        "audio",
+        "video"
+      ],
+      "playback_url_exact_types": {
+        "audio": "string|null",
+        "video": "string|null"
+      },
+      "media_files_exact_length": 0,
+      "fixed_values": {
+        "user_id": 9001,
+        "source": "bot",
+        "status": "completed",
+        "media_files": []
+      },
+      "materialization_defaults": {
+        "user_id": 9001,
+        "source": "bot",
+        "status": "completed",
+        "created_at": "2026-01-02T10:00:00.000Z",
+        "completed_at": "2026-01-02T10:30:00.000Z",
+        "media_files": [],
+        "playback_url": {
+          "audio": null,
+          "video": null
+        }
+      }
+    },
+    "FinalRuntimeConfig": {
+      "exact_top_level_keys": [
+        "wsUrl",
+        "apiUrl",
+        "publicApiUrl",
+        "decisionListenerUrl",
+        "defaultBotName",
+        "brand",
+        "sharedAuth",
+        "hostedMode",
+        "webappUrl"
+      ],
+      "top_level_exact_types": {
+        "wsUrl": "string",
+        "apiUrl": "string",
+        "publicApiUrl": "string",
+        "decisionListenerUrl": "string",
+        "defaultBotName": "string|null",
+        "brand": "object",
+        "sharedAuth": "object",
+        "hostedMode": "boolean",
+        "webappUrl": "string"
+      },
+      "brand_exact_keys": [
+        "name",
+        "shortName",
+        "slug",
+        "locale",
+        "botName",
+        "issueUrl"
+      ],
+      "brand_exact_types": {
+        "name": "string",
+        "shortName": "string",
+        "slug": "string",
+        "locale": "en|ja",
+        "botName": "string",
+        "issueUrl": "string"
+      },
+      "shared_auth_exact_keys": [
+        "enabled",
+        "email"
+      ],
+      "shared_auth_exact_types": {
+        "enabled": "boolean",
+        "email": "string"
+      },
+      "forbidden_keys": [
+        "authToken",
+        "token",
+        "apiKey",
+        "serviceKey"
+      ],
+      "constraints": {
+        "wsUrl": "${originWs}${basePath}/ws",
+        "apiUrl": "${originHttp}${basePath}",
+        "publicApiUrl": "https://api.fixture.invalid",
+        "sharedAuth": {
+          "enabled": false,
+          "email": ""
+        }
+      }
+    }
+  },
+  "fixture_contracts": {
+    "auth-baseline": {
+      "path": "services/dashboard/tests/fixtures/refactor-e2e/global/auth-baseline.json",
+      "transport": "http-json",
+      "exact_body": {
+        "authenticated": true,
+        "user": {
+          "id": "fixture-user-1",
+          "email": "fixture@example.invalid",
+          "name": "Fixture User"
+        },
+        "token": "fixture-browser-token"
+      }
+    },
+    "auth-final": {
+      "path": "services/dashboard/tests/fixtures/refactor-e2e/global/auth-final.json",
+      "transport": "http-json",
+      "exact_body": {
+        "authenticated": true,
+        "user": {
+          "id": "fixture-user-1",
+          "email": "fixture@example.invalid",
+          "name": "Fixture User"
+        }
+      },
+      "forbidden_keys_recursive": [
+        "token",
+        "authToken"
+      ]
+    },
+    "config-baseline": {
+      "path": "services/dashboard/tests/fixtures/refactor-e2e/global/config-baseline.json",
+      "transport": "http-json-template",
+      "exact_top_level_keys": [
+        "wsUrl",
+        "apiUrl",
+        "publicApiUrl",
+        "decisionListenerUrl",
+        "authToken",
+        "defaultBotName",
+        "brand",
+        "sharedAuth",
+        "hostedMode",
+        "webappUrl"
+      ],
+      "fixed_values": {
+        "wsUrl": "${originWs}${basePath}/ws",
+        "apiUrl": "${originHttp}${basePath}",
+        "publicApiUrl": "https://api.fixture.invalid",
+        "decisionListenerUrl": "https://decision.fixture.invalid",
+        "authToken": "fixture-browser-token",
+        "defaultBotName": null,
+        "brand": {
+          "name": "カボス",
+          "shortName": "カボス",
+          "slug": "kabosu",
+          "locale": "ja",
+          "botName": "カボス",
+          "issueUrl": "https://issues.fixture.invalid/new"
+        },
+        "sharedAuth": {
+          "enabled": false,
+          "email": ""
+        },
+        "hostedMode": false,
+        "webappUrl": "https://webapp.fixture.invalid"
+      }
+    },
+    "config-final": {
+      "path": "services/dashboard/tests/fixtures/refactor-e2e/global/config-final.json",
+      "transport": "http-json-template",
+      "schema_ref": "FinalRuntimeConfig",
+      "fixed_values": {
+        "wsUrl": "${originWs}${basePath}/ws",
+        "apiUrl": "${originHttp}${basePath}",
+        "publicApiUrl": "https://api.fixture.invalid",
+        "decisionListenerUrl": "https://decision.fixture.invalid",
+        "defaultBotName": null,
+        "brand": {
+          "name": "カボス",
+          "shortName": "カボス",
+          "slug": "kabosu",
+          "locale": "ja",
+          "botName": "カボス",
+          "issueUrl": "https://issues.fixture.invalid/new"
+        },
+        "sharedAuth": {
+          "enabled": false,
+          "email": ""
+        },
+        "hostedMode": false,
+        "webappUrl": "https://webapp.fixture.invalid"
+      }
+    },
+    "billing-empty": {
+      "path": "services/dashboard/tests/fixtures/refactor-e2e/global/billing-empty.json",
+      "transport": "http-json",
+      "exact_body": {
+        "subscription_status": null,
+        "subscription_tier": null,
+        "subscription_trial_end": null
+      }
+    },
+    "blog-empty": {
+      "path": "services/dashboard/tests/fixtures/refactor-e2e/global/blog-empty.json",
+      "transport": "http-json",
+      "exact_body": []
+    },
+    "meeting-list": {
+      "path": "services/dashboard/tests/fixtures/refactor-e2e/api/meeting-list.json",
+      "transport": "http-json",
+      "schema": {
+        "exact_top_level_keys": [
+          "meetings",
+          "has_more"
+        ],
+        "has_more": false,
+        "meeting_schema_ref": "RawMeeting"
+      },
+      "fixed_values": {
+        "has_more": false
+      },
+      "exact_rows": [
+        {
+          "id": 1001,
+          "platform": "google_meet",
+          "native_meeting_id": "fixture-native-a",
+          "status": "completed",
+          "data": {
+            "name": "Fixture Meeting A"
+          }
+        },
+        {
+          "id": 1002,
+          "platform": "google_meet",
+          "native_meeting_id": "fixture-native-b",
+          "status": "completed",
+          "data": {
+            "name": "Fixture Meeting B"
+          }
+        }
+      ],
+      "row_defaults": {
+        "start_time": "2026-01-02T10:00:00Z",
+        "end_time": "2026-01-02T10:30:00Z",
+        "bot_container_id": null,
+        "data": {
+          "recording_enabled": false,
+          "recordings": []
+        },
+        "created_at": "2026-01-02T09:59:00Z",
+        "updated_at": "2026-01-02T10:30:00Z"
+      }
+    },
+    "detail-completed-a": {
+      "path": "services/dashboard/tests/fixtures/refactor-e2e/api/detail-completed-a.json",
+      "transport": "http-json",
+      "schema_ref": "RawMeeting",
+      "exact_identity": {
+        "id": 1001,
+        "platform": "google_meet",
+        "native_meeting_id": "fixture-native-a",
+        "status": "completed"
+      },
+      "data_exact": {
+        "name": "Fixture Meeting A",
+        "recording_enabled": false,
+        "recordings": []
+      }
+    },
+    "detail-completed-b": {
+      "path": "services/dashboard/tests/fixtures/refactor-e2e/api/detail-completed-b.json",
+      "transport": "http-json",
+      "schema_ref": "RawMeeting",
+      "exact_identity": {
+        "id": 1002,
+        "platform": "google_meet",
+        "native_meeting_id": "fixture-native-b",
+        "status": "completed"
+      },
+      "data_exact": {
+        "name": "Fixture Meeting B",
+        "recording_enabled": false,
+        "recordings": []
+      }
+    },
+    "detail-needs-human-a": {
+      "path": "services/dashboard/tests/fixtures/refactor-e2e/api/detail-needs-human-a.json",
+      "transport": "http-json",
+      "schema_ref": "RawMeeting",
+      "exact_identity": {
+        "id": 1001,
+        "platform": "google_meet",
+        "native_meeting_id": "fixture-native-a",
+        "status": "needs_human_help"
+      },
+      "data_exact": {
+        "name": "Fixture Meeting A",
+        "recording_enabled": false,
+        "recordings": []
+      }
+    },
+    "detail-browser-requested-a": {
+      "path": "services/dashboard/tests/fixtures/refactor-e2e/api/detail-browser-requested-a.json",
+      "transport": "http-json",
+      "schema_ref": "RawMeeting",
+      "exact_identity": {
+        "id": 1001,
+        "platform": "browser_session",
+        "native_meeting_id": "fixture-native-a",
+        "status": "requested"
+      },
+      "data_exact": {
+        "name": "Fixture Browser Session",
+        "mode": "browser_session",
+        "session_token": "fixture-session-handle",
+        "recording_enabled": false,
+        "recordings": []
+      }
+    },
+    "detail-media-a": {
+      "path": "services/dashboard/tests/fixtures/refactor-e2e/api/detail-media-a.json",
+      "transport": "http-json",
+      "schema_ref": "RawMeeting",
+      "exact_identity": {
+        "id": 1001,
+        "platform": "google_meet",
+        "native_meeting_id": "fixture-native-a",
+        "status": "completed"
+      },
+      "data_exact": {
+        "name": "Fixture Media Meeting",
+        "recording_enabled": false,
+        "recordings": []
+      },
+      "reason_recordings_empty": "Recordings are supplied only by the transcript response. Supplying a second array here makes recording effects timing-dependent."
+    },
+    "detail-active-a": {
+      "path": "services/dashboard/tests/fixtures/refactor-e2e/api/detail-active-a.json",
+      "transport": "http-json",
+      "schema_ref": "RawMeeting",
+      "exact_identity": {
+        "id": 1001,
+        "platform": "google_meet",
+        "native_meeting_id": "fixture-native-a",
+        "status": "active"
+      },
+      "data_exact": {
+        "name": "Fixture Live Meeting",
+        "recording_enabled": false,
+        "recordings": []
+      }
+    },
+    "transcript-refactor-a": {
+      "path": "services/dashboard/tests/fixtures/refactor-e2e/api/transcript-refactor-a.json",
+      "transport": "http-json",
+      "schema_ref": "RawTranscriptResponse",
+      "meeting_identity": {
+        "id": 1001,
+        "platform": "google_meet",
+        "native_meeting_id": "fixture-native-a",
+        "status": "completed"
+      },
+      "recordings": [],
+      "segments_exact_order": [
+        {
+          "segment_id": "wide-a",
+          "session_uid": "session-a",
+          "speaker": "Alice",
+          "start": 0,
+          "end": 8,
+          "text": "wide-a",
+          "language": "en",
+          "absolute_start_time": "2026-01-02T10:00:00.000Z",
+          "absolute_end_time": "2026-01-02T10:00:08.000Z",
+          "created_at": "2026-01-02T10:01:01.000Z"
+        },
+        {
+          "segment_id": "marker-b",
+          "session_uid": "session-a",
+          "speaker": "Bob",
+          "start": 2,
+          "end": 3,
+          "text": "marker-b",
+          "language": "en",
+          "absolute_start_time": "2026-01-02T10:00:02.000Z",
+          "absolute_end_time": "2026-01-02T10:00:03.000Z",
+          "created_at": "2026-01-02T10:01:01.000Z"
+        },
+        {
+          "segment_id": "contained-a",
+          "session_uid": "session-a",
+          "speaker": "Alice",
+          "start": 1,
+          "end": 4,
+          "text": "contained-a",
+          "language": "en",
+          "absolute_start_time": "2026-01-02T10:00:01.000Z",
+          "absolute_end_time": "2026-01-02T10:00:04.000Z",
+          "created_at": "2026-01-02T10:01:01.000Z"
+        },
+        {
+          "segment_id": "session-b-zero",
+          "session_uid": "session-b",
+          "speaker": "Carol",
+          "start": 0,
+          "end": 1,
+          "text": "session-b-zero",
+          "language": "en",
+          "absolute_start_time": "2026-01-02T10:01:00.000Z",
+          "absolute_end_time": "2026-01-02T10:01:01.000Z",
+          "created_at": "2026-01-02T10:01:01.000Z"
+        }
+      ]
+    },
+    "transcript-literal-search-a": {
+      "path": "services/dashboard/tests/fixtures/refactor-e2e/api/transcript-literal-search-a.json",
+      "transport": "http-json",
+      "schema_ref": "RawTranscriptResponse",
+      "meeting_identity": {
+        "id": 1001,
+        "platform": "google_meet",
+        "native_meeting_id": "fixture-native-a",
+        "status": "completed"
+      },
+      "recordings": [],
+      "segments_exact": [
+        {
+          "segment_id": "literal-search-1",
+          "session_uid": "session-a",
+          "speaker": "Alice",
+          "start": 0,
+          "end": 2,
+          "text": "fixture literal [ match",
+          "language": "en",
+          "absolute_start_time": "2026-01-02T10:00:00.000Z",
+          "absolute_end_time": "2026-01-02T10:00:02.000Z",
+          "created_at": "2026-01-02T10:00:02.000Z"
+        }
+      ]
+    },
+    "transcript-simple-a": {
+      "path": "services/dashboard/tests/fixtures/refactor-e2e/api/transcript-simple-a.json",
+      "transport": "http-json",
+      "schema_ref": "RawTranscriptResponse",
+      "meeting_identity": {
+        "id": 1001,
+        "platform": "google_meet",
+        "native_meeting_id": "fixture-native-a",
+        "status": "completed"
+      },
+      "segments_exact": [
+        {
+          "segment_id": "simple-a",
+          "session_uid": "session-a",
+          "speaker": "Alice",
+          "start": 0,
+          "end": 1,
+          "text": "Fixture A marker",
+          "language": "en",
+          "absolute_start_time": "2026-01-02T10:00:00.000Z",
+          "absolute_end_time": "2026-01-02T10:00:01.000Z",
+          "created_at": "2026-01-02T10:00:01.000Z"
+        }
+      ],
+      "recordings": []
+    },
+    "transcript-simple-b": {
+      "path": "services/dashboard/tests/fixtures/refactor-e2e/api/transcript-simple-b.json",
+      "transport": "http-json",
+      "schema_ref": "RawTranscriptResponse",
+      "meeting_identity": {
+        "id": 1002,
+        "platform": "google_meet",
+        "native_meeting_id": "fixture-native-b",
+        "status": "completed"
+      },
+      "data_exact": {
+        "name": "Fixture Meeting B"
+      },
+      "segments_exact": [
+        {
+          "segment_id": "simple-b",
+          "session_uid": "session-b",
+          "speaker": "Bob",
+          "start": 0,
+          "end": 1,
+          "text": "Fixture B marker",
+          "language": "en",
+          "absolute_start_time": "2026-01-02T10:01:00.000Z",
+          "absolute_end_time": "2026-01-02T10:01:01.000Z",
+          "created_at": "2026-01-02T10:01:01.000Z"
+        }
+      ],
+      "recordings": []
+    },
+    "transcript-audio-a": {
+      "path": "services/dashboard/tests/fixtures/refactor-e2e/api/transcript-audio-a.json",
+      "transport": "http-json",
+      "schema_ref": "RawTranscriptResponse",
+      "meeting_identity": {
+        "id": 1001,
+        "platform": "google_meet",
+        "native_meeting_id": "fixture-native-a",
+        "status": "completed"
+      },
+      "data_exact": {
+        "name": "Fixture Media Meeting"
+      },
+      "segments_exact": [
+        {
+          "segment_id": "audio-a",
+          "session_uid": "session-audio",
+          "speaker": "Alice",
+          "start": 0,
+          "end": 1,
+          "text": "Fixture audio marker",
+          "language": "en",
+          "absolute_start_time": "2026-01-02T10:00:00.000Z",
+          "absolute_end_time": "2026-01-02T10:00:01.000Z",
+          "created_at": "2026-01-02T10:00:01.000Z"
+        }
+      ],
+      "recordings_exact": [
+        {
+          "id": 701,
+          "meeting_id": 1001,
+          "session_uid": "session-audio",
+          "playback_url": {
+            "audio": "/recordings/701/master?type=audio",
+            "video": null
+          }
+        }
+      ],
+      "recording_schema_ref": "RecordingData"
+    },
+    "transcript-av-a": {
+      "path": "services/dashboard/tests/fixtures/refactor-e2e/api/transcript-av-a.json",
+      "transport": "http-json",
+      "schema_ref": "RawTranscriptResponse",
+      "meeting_identity": {
+        "id": 1001,
+        "platform": "google_meet",
+        "native_meeting_id": "fixture-native-a",
+        "status": "completed"
+      },
+      "data_exact": {
+        "name": "Fixture Media Meeting"
+      },
+      "segments_exact": [
+        {
+          "segment_id": "av-a",
+          "session_uid": "session-audio",
+          "speaker": "Alice",
+          "start": 0,
+          "end": 1,
+          "text": "Fixture audio video marker",
+          "language": "en",
+          "absolute_start_time": "2026-01-02T10:00:00.000Z",
+          "absolute_end_time": "2026-01-02T10:00:01.000Z",
+          "created_at": "2026-01-02T10:00:01.000Z"
+        }
+      ],
+      "recordings_exact_order": [
+        {
+          "id": 701,
+          "meeting_id": 1001,
+          "session_uid": "session-audio",
+          "playback_url": {
+            "audio": "/recordings/701/master?type=audio",
+            "video": null
+          }
+        },
+        {
+          "id": 702,
+          "meeting_id": 1001,
+          "session_uid": "session-video",
+          "playback_url": {
+            "audio": null,
+            "video": "/recordings/702/master?type=video"
+          }
+        }
+      ],
+      "recording_schema_ref": "RecordingData"
+    },
+    "transcript-live-43": {
+      "path": "services/dashboard/tests/fixtures/refactor-e2e/api/transcript-live-43.json",
+      "transport": "http-json",
+      "schema_ref": "RawTranscriptResponse",
+      "meeting_identity": {
+        "id": 1001,
+        "platform": "google_meet",
+        "native_meeting_id": "fixture-native-a",
+        "status": "active"
+      },
+      "data_exact": {
+        "name": "Fixture Live Meeting"
+      },
+      "recordings": [],
+      "segments_recipe": {
+        "recipe_version": 1,
+        "generator": "indexed-segment-sequence-v1",
+        "index": {
+          "name": "i",
+          "first": 1,
+          "last": 43,
+          "step": 1
+        },
+        "field_order": [
+          "segment_id",
+          "session_uid",
+          "speaker",
+          "start",
+          "end",
+          "text",
+          "language",
+          "absolute_start_time",
+          "absolute_end_time",
+          "created_at"
+        ],
+        "fields": {
+          "segment_id": {
+            "op": "format-index",
+            "prefix": "live-",
+            "width": 3
+          },
+          "session_uid": {
+            "op": "literal",
+            "value": "live-session"
+          },
+          "speaker": {
+            "op": "parity-select",
+            "odd": "Alice",
+            "even": "Bob"
+          },
+          "start": {
+            "op": "affine-index",
+            "multiply": 2,
+            "add": -2
+          },
+          "end": {
+            "op": "add-field",
+            "field": "start",
+            "add": 1.5
+          },
+          "text": {
+            "op": "format-index",
+            "prefix": "Live fixture segment ",
+            "width": 3
+          },
+          "language": {
+            "op": "literal",
+            "value": "en"
+          },
+          "absolute_start_time": {
+            "op": "iso-add-field-seconds",
+            "base": "2026-01-02T10:00:00.000Z",
+            "field": "start",
+            "fraction_digits": 3
+          },
+          "absolute_end_time": {
+            "op": "iso-add-field-seconds",
+            "base": "2026-01-02T10:00:00.000Z",
+            "field": "end",
+            "fraction_digits": 3
+          },
+          "created_at": {
+            "op": "copy-field",
+            "field": "absolute_end_time"
+          }
+        }
+      }
+    },
+    "chat-a": {
+      "path": "services/dashboard/tests/fixtures/refactor-e2e/api/chat-a.json",
+      "transport": "http-json",
+      "exact_body": {
+        "messages": [],
+        "meeting_id": 1001
+      }
+    },
+    "chat-b": {
+      "path": "services/dashboard/tests/fixtures/refactor-e2e/api/chat-b.json",
+      "transport": "http-json",
+      "exact_body": {
+        "messages": [],
+        "meeting_id": 1002
+      }
+    },
+    "ai-disabled": {
+      "path": "services/dashboard/tests/fixtures/refactor-e2e/api/ai-disabled.json",
+      "transport": "http-json",
+      "exact_body": {
+        "enabled": false,
+        "provider": null,
+        "model": null
+      }
+    },
+    "webhooks-empty-a": {
+      "path": "services/dashboard/tests/fixtures/refactor-e2e/api/webhooks-empty-a.json",
+      "transport": "http-json",
+      "exact_body": {
+        "attempts": []
+      }
+    },
+    "webhooks-empty-b": {
+      "path": "services/dashboard/tests/fixtures/refactor-e2e/api/webhooks-empty-b.json",
+      "transport": "http-json",
+      "exact_body": {
+        "attempts": []
+      }
+    },
+    "audio-master": {
+      "path": "services/dashboard/tests/fixtures/refactor-e2e/api/audio-master.json",
+      "transport": "http-json",
+      "exact_body": {
+        "url": "https://storage.fixture.invalid/audio.wav",
+        "duration_seconds": 1
+      }
+    },
+    "video-master": {
+      "path": "services/dashboard/tests/fixtures/refactor-e2e/api/video-master.json",
+      "transport": "http-json",
+      "exact_body": {
+        "url": "https://storage.fixture.invalid/video.webm",
+        "duration_seconds": 1
+      }
+    },
+    "audio-media": {
+      "path": "services/dashboard/tests/fixtures/refactor-e2e/media/silence-1s.wav",
+      "transport": "http-binary",
+      "content_type": "audio/wav",
+      "range_policy_ref": "media-range"
+    },
+    "video-media": {
+      "path": "services/dashboard/tests/fixtures/refactor-e2e/media/black-1s.webm",
+      "transport": "http-binary",
+      "content_type": "video/webm",
+      "range_policy_ref": "media-range"
+    },
+    "live-websocket": {
+      "path": "services/dashboard/tests/fixtures/refactor-e2e/ws/live-websocket.json",
+      "transport": "fake-websocket",
+      "baseline_client_path": "/ws?api_key=fixture-browser-token",
+      "final_client_path": "/ws",
+      "expected_subscribe_frame": {
+        "action": "subscribe",
+        "meetings": [
+          {
+            "platform": "google_meet",
+            "native_id": "fixture-native-a"
+          }
+        ]
+      },
+      "server_subscribed_frame": {
+        "type": "subscribed",
+        "meetings": [
+          1001
+        ]
+      },
+      "server_emit_frame": {
+        "type": "transcript",
+        "meeting": {
+          "id": 1001
+        },
+        "speaker": "Alice",
+        "confirmed": [
+          {
+            "segment_id": "live-044",
+            "session_uid": "live-session",
+            "speaker": "Alice",
+            "text": "Live fixture segment 044",
+            "language": "en",
+            "start": 86,
+            "end_time": 87.5,
+            "absolute_start_time": "2026-01-02T10:01:26.000Z",
+            "absolute_end_time": "2026-01-02T10:01:27.500Z",
+            "completed": true
+          }
+        ],
+        "pending": [],
+        "ts": "2026-01-02T10:01:27.500Z"
+      },
+      "real_socket_connection_count": 0,
+      "forbidden_baseline_subscribe_fields": [
+        "token",
+        "authToken",
+        "api_key"
+      ],
+      "forbidden_final_url_query_or_frame_fields": [
+        "token",
+        "authToken",
+        "api_key"
+      ],
+      "forbidden_final_subprotocol_values": [
+        "fixture-browser-token",
+        "token",
+        "authToken",
+        "api_key"
+      ]
+    }
+  },
+  "binary_range_contracts": {
+    "media-range": {
+      "size_symbol": "L is the exact fixture byte length and must be greater than zero.",
+      "state_table": [
+        {
+          "request": "GET without Range",
+          "status": 200,
+          "headers": {
+            "Accept-Ranges": "bytes",
+            "Content-Length": "L"
+          },
+          "body": "all bytes [0,L)"
+        },
+        {
+          "request": "HEAD without Range",
+          "status": 200,
+          "headers": {
+            "Accept-Ranges": "bytes",
+            "Content-Length": "L"
+          },
+          "body_bytes": 0
+        },
+        {
+          "request": "GET or HEAD Range: bytes=N-M where 0<=N<L and N<=M",
+          "status": 206,
+          "normalization": "end=min(M,L-1)",
+          "headers": {
+            "Accept-Ranges": "bytes",
+            "Content-Range": "bytes N-end/L",
+            "Content-Length": "end-N+1"
+          },
+          "get_body": "exact bytes [N,end+1)",
+          "head_body_bytes": 0
+        },
+        {
+          "request": "GET or HEAD Range: bytes=N- where 0<=N<L",
+          "status": 206,
+          "headers": {
+            "Accept-Ranges": "bytes",
+            "Content-Range": "bytes N-(L-1)/L",
+            "Content-Length": "L-N"
+          },
+          "get_body": "exact bytes [N,L)",
+          "head_body_bytes": 0
+        },
+        {
+          "request": "GET or HEAD Range: bytes=-S where S>0",
+          "status": 206,
+          "normalization": "start=max(0,L-S); a suffix greater than L returns the full representation as 206",
+          "headers": {
+            "Accept-Ranges": "bytes",
+            "Content-Range": "bytes start-(L-1)/L",
+            "Content-Length": "L-start"
+          },
+          "get_body": "exact bytes [start,L)",
+          "head_body_bytes": 0
+        },
+        {
+          "request": "GET or HEAD with malformed unit/syntax, multiple ranges, bytes=-0, N>M, N>=L, or an integer outside the safe non-negative range",
+          "status": 416,
+          "headers": {
+            "Accept-Ranges": "bytes",
+            "Content-Range": "bytes */L",
+            "Content-Length": "0"
+          },
+          "body_bytes": 0
+        }
+      ],
+      "required_body_bearing_get_min": 1,
+      "max_transport_requests_including_head": 4,
+      "logical_consumption": "HEAD never satisfies the required body GET and never consumes the logical sequence. The first body-bearing GET satisfies required consumption. Further valid GET/HEAD requests are allowed only within the total maximum."
+    }
+  },
+  "assertion_contracts": {
+    "list-ready": {
+      "observed_field": "locator_count:[data-testid=\"meeting-list\"][data-ready=\"true\"]:visible",
+      "operator": "eq",
+      "expected": 1
+    },
+    "cards-1001-1002-visible": {
+      "observed_field": "visible_meeting_card_ids",
+      "operator": "set_eq",
+      "expected": [
+        "1001",
+        "1002"
+      ]
+    },
+    "detail-root-a": {
+      "observed_field": "attributes:[data-testid=\"meeting-detail\"]",
+      "operator": "contains_exact",
+      "expected": {
+        "data-meeting-id": "1001",
+        "data-native-id": "fixture-native-a"
+      }
+    },
+    "back-button-visible": {
+      "observed_field": "locator_count:[data-testid=\"meeting-detail-back\"]:visible",
+      "operator": "eq",
+      "expected": 1
+    },
+    "dedup-visible-ids": {
+      "observed_field": "visible_fixture_segment_ids",
+      "operator": "set_eq",
+      "expected": [
+        "wide-a",
+        "marker-b",
+        "session-b-zero"
+      ]
+    },
+    "absolute-order": {
+      "observed_field": "numeric_or_iso_values:[data-testid=\"transcript-segment-list\"] [data-absolute-start-time]",
+      "operator": "strict_nondecreasing",
+      "expected": true
+    },
+    "literal-search-no-error": {
+      "observed_field": "page_and_console_error_count_after_search",
+      "operator": "eq",
+      "expected": 0
+    },
+    "literal-search-one-hit": {
+      "observed_field": "visible_literal_left_bracket_match_count",
+      "operator": "eq",
+      "expected": 1
+    },
+    "meeting-b-after-switch": {
+      "observed_field": "attributes:[data-testid=\"meeting-detail\"]",
+      "operator": "contains_exact",
+      "expected": {
+        "data-meeting-id": "1002",
+        "data-native-id": "fixture-native-b"
+      }
+    },
+    "meeting-a-segment-absent": {
+      "observed_field": "locator_count:[data-segment-id=\"simple-a\"]",
+      "operator": "eq",
+      "expected": 0
+    },
+    "completed-visible": {
+      "observed_field": "attribute:[data-testid=\"meeting-status\"]:data-status",
+      "operator": "eq",
+      "expected": "completed"
+    },
+    "browser-starting-visible": {
+      "observed_field": "attributes:[data-testid=\"browser-session-panel\"]",
+      "operator": "contains_exact",
+      "expected": {
+        "data-state": "starting",
+        "data-raw-status": "requested"
+      }
+    },
+    "audio-visible": {
+      "observed_field": "locator_count:[data-testid=\"audio-player\"][data-ready=\"true\"]:visible",
+      "operator": "eq",
+      "expected": 1
+    },
+    "video-visible": {
+      "observed_field": "locator_count:[data-testid=\"video-player\"][data-ready=\"true\"]:visible",
+      "operator": "eq",
+      "expected": 1
+    },
+    "outer-app-scroll-unchanged": {
+      "observed_field": "after_outer-before_outer",
+      "operator": "eq",
+      "expected": 0
+    },
+    "inner-transcript-scroll-increased": {
+      "observed_field": "after_inner-before_inner",
+      "operator": "gt",
+      "expected": 0
+    },
+    "websocket-token-surfaces-zero": {
+      "observed_field": "raw_token_occurrence_counts",
+      "operator": "deep_eq",
+      "expected": {
+        "url_query": 0,
+        "subprotocol": 0,
+        "subscribe_frame": 0,
+        "console": 0
+      }
+    }
+  },
+  "scenarios": [
+    {
+      "scenario_id": "S01-meeting-list",
+      "route": "/meetings",
+      "common_overrides": {},
+      "request_bindings": [
+        {
+          "method": "GET",
+          "path": "/api/vexa/meetings?limit=50",
+          "fixtures": [
+            "meeting-list",
+            "meeting-list"
+          ],
+          "expected_count": 2
+        }
+      ],
+      "baseline_actions": [
+        "goto:/meetings",
+        "wait-request-count:GET /api/vexa/meetings?limit=50=2",
+        "wait-locator:[data-testid=\"meeting-list\"][data-ready=\"true\"]"
+      ],
+      "final_actions": [
+        "goto:/meetings",
+        "wait-request-count:GET /api/vexa/meetings?limit=50=2",
+        "wait-locator:[data-testid=\"meeting-list\"][data-ready=\"true\"]"
+      ],
+      "expected_visual_change": false,
+      "rf_ids": [],
+      "behavioral_rf_ids": [],
+      "allowed_selectors": [],
+      "semantic_assertions": [
+        "list-ready",
+        "cards-1001-1002-visible"
+      ]
+    },
+    {
+      "scenario_id": "S02-completed-meeting-detail",
+      "route": "/meetings/1001",
+      "common_overrides": {},
+      "request_bindings": [
+        {
+          "method": "GET",
+          "path": "/api/vexa/meetings/1001",
+          "fixtures": [
+            "detail-completed-a"
+          ],
+          "expected_count": 1
+        },
+        {
+          "method": "GET",
+          "path": "/api/vexa/transcripts/google_meet/fixture-native-a?meeting_id=1001",
+          "fixtures": [
+            "transcript-refactor-a"
+          ],
+          "expected_count": 1
+        },
+        {
+          "method": "GET",
+          "path": "/api/vexa/bots/google_meet/fixture-native-a/chat",
+          "fixtures": [
+            "chat-a"
+          ],
+          "expected_count": 1
+        },
+        {
+          "method": "GET",
+          "path": "/api/ai/config",
+          "fixtures": [
+            "ai-disabled"
+          ],
+          "expected_count": 1
+        },
+        {
+          "method": "GET",
+          "path": "/api/webhooks/deliveries/1001",
+          "fixtures": [
+            "webhooks-empty-a"
+          ],
+          "expected_count": 1
+        }
+      ],
+      "baseline_actions": [
+        "goto:/meetings/1001",
+        "wait-locator:[data-testid=\"transcript-segment-list\"][data-ready=\"true\"]"
+      ],
+      "final_actions": [
+        "goto:/meetings/1001",
+        "wait-locator:[data-testid=\"transcript-segment-list\"][data-ready=\"true\"]"
+      ],
+      "expected_visual_change": true,
+      "rf_ids": [
+        "RF-13",
+        "RF-14"
+      ],
+      "behavioral_rf_ids": [],
+      "allowed_selectors": [
+        "[data-testid=\"transcript-segment-list\"]"
+      ],
+      "semantic_assertions": [
+        "detail-root-a",
+        "back-button-visible",
+        "dedup-visible-ids",
+        "absolute-order"
+      ]
+    },
+    {
+      "scenario_id": "S03-literal-transcript-search",
+      "route": "/meetings/1001?fixture=literal-search",
+      "common_overrides": {},
+      "request_bindings": [
+        {
+          "method": "GET",
+          "path": "/api/vexa/meetings/1001",
+          "fixtures": [
+            "detail-completed-a"
+          ],
+          "expected_count": 1
+        },
+        {
+          "method": "GET",
+          "path": "/api/vexa/transcripts/google_meet/fixture-native-a?meeting_id=1001",
+          "fixtures": [
+            "transcript-literal-search-a"
+          ],
+          "expected_count": 1
+        },
+        {
+          "method": "GET",
+          "path": "/api/vexa/bots/google_meet/fixture-native-a/chat",
+          "fixtures": [
+            "chat-a"
+          ],
+          "expected_count": 1
+        },
+        {
+          "method": "GET",
+          "path": "/api/ai/config",
+          "fixtures": [
+            "ai-disabled"
+          ],
+          "expected_count": 1
+        },
+        {
+          "method": "GET",
+          "path": "/api/webhooks/deliveries/1001",
+          "fixtures": [
+            "webhooks-empty-a"
+          ],
+          "expected_count": 1
+        }
+      ],
+      "baseline_actions": [
+        "goto:/meetings/1001?fixture=literal-search",
+        "wait-locator:[data-testid=\"transcript-search-input\"]",
+        "fill:[data-testid=\"transcript-search-input\"]:fixture",
+        "wait-locator:[data-testid=\"transcript-search-results\"][data-ready=\"true\"]"
+      ],
+      "final_actions": [
+        "goto:/meetings/1001?fixture=literal-search",
+        "wait-locator:[data-testid=\"transcript-search-input\"]",
+        "fill:[data-testid=\"transcript-search-input\"]:[",
+        "wait-locator:[data-testid=\"transcript-search-results\"][data-ready=\"true\"]"
+      ],
+      "expected_visual_change": true,
+      "rf_ids": [
+        "RF-12"
+      ],
+      "behavioral_rf_ids": [],
+      "allowed_selectors": [
+        "[data-testid=\"transcript-search-panel\"]",
+        "[data-testid=\"transcript-search-results\"]",
+        "[data-testid=\"transcript-segment-list\"]"
+      ],
+      "semantic_assertions": [
+        "detail-root-a",
+        "literal-search-no-error",
+        "literal-search-one-hit"
+      ]
+    },
+    {
+      "scenario_id": "S04-fast-meeting-switch",
+      "route": "/meetings/1001?fixture=fast-switch",
+      "common_overrides": {
+        "baseline": {
+          "auth": 3
+        },
+        "final": {
+          "auth": 3
+        }
+      },
+      "request_bindings": [
+        {
+          "method": "GET",
+          "path": "/api/vexa/meetings/1001",
+          "fixtures": [
+            "detail-completed-a"
+          ],
+          "expected_count": 1
+        },
+        {
+          "method": "GET",
+          "path": "/api/vexa/transcripts/google_meet/fixture-native-a?meeting_id=1001",
+          "fixtures": [
+            "transcript-simple-a"
+          ],
+          "expected_count": 1
+        },
+        {
+          "method": "GET",
+          "path": "/api/vexa/bots/google_meet/fixture-native-a/chat",
+          "fixtures": [
+            "chat-a"
+          ],
+          "expected_count": 1
+        },
+        {
+          "method": "GET",
+          "path": "/api/webhooks/deliveries/1001",
+          "fixtures": [
+            "webhooks-empty-a"
+          ],
+          "expected_count": 1
+        },
+        {
+          "method": "GET",
+          "path": "/api/vexa/meetings?limit=50",
+          "fixtures": [
+            "meeting-list",
+            "meeting-list"
+          ],
+          "expected_count": 2
+        },
+        {
+          "method": "GET",
+          "path": "/api/vexa/meetings/1002",
+          "fixtures": [
+            "detail-completed-b"
+          ],
+          "expected_count": 1
+        },
+        {
+          "method": "GET",
+          "path": "/api/vexa/transcripts/google_meet/fixture-native-b?meeting_id=1002",
+          "fixtures": [
+            "transcript-simple-b"
+          ],
+          "expected_count": 1
+        },
+        {
+          "method": "GET",
+          "path": "/api/vexa/bots/google_meet/fixture-native-b/chat",
+          "fixtures": [
+            "chat-b"
+          ],
+          "expected_count": 1
+        },
+        {
+          "method": "GET",
+          "path": "/api/webhooks/deliveries/1002",
+          "fixtures": [
+            "webhooks-empty-b"
+          ],
+          "expected_count": 1
+        },
+        {
+          "method": "GET",
+          "path": "/api/ai/config",
+          "fixtures": [
+            "ai-disabled",
+            "ai-disabled"
+          ],
+          "expected_count": 2
+        }
+      ],
+      "baseline_actions": [
+        "goto:/meetings/1001?fixture=fast-switch",
+        "wait-locator:[data-testid=\"meeting-detail-back\"]",
+        "click:[data-testid=\"meeting-detail-back\"]",
+        "wait-locator:[data-testid=\"meeting-card-1002\"]",
+        "click:[data-testid=\"meeting-card-1002\"]",
+        "wait-locator:[data-testid=\"meeting-detail\"][data-meeting-id=\"1002\"]"
+      ],
+      "final_actions": [
+        "goto:/meetings/1001?fixture=fast-switch",
+        "wait-locator:[data-testid=\"meeting-detail-back\"]",
+        "click:[data-testid=\"meeting-detail-back\"]",
+        "wait-locator:[data-testid=\"meeting-card-1002\"]",
+        "click:[data-testid=\"meeting-card-1002\"]",
+        "wait-locator:[data-testid=\"meeting-detail\"][data-meeting-id=\"1002\"]"
+      ],
+      "expected_visual_change": false,
+      "rf_ids": [],
+      "behavioral_rf_ids": [],
+      "allowed_selectors": [],
+      "semantic_assertions": [
+        "meeting-b-after-switch",
+        "meeting-a-segment-absent"
+      ]
+    },
+    {
+      "scenario_id": "S05-post-meeting-polling",
+      "route": "/meetings/1001?fixture=post-meeting",
+      "common_overrides": {},
+      "request_bindings": [
+        {
+          "method": "GET",
+          "path": "/api/vexa/meetings/1001",
+          "fixtures": [
+            "detail-needs-human-a",
+            "detail-needs-human-a",
+            "detail-completed-a"
+          ],
+          "expected_count": 3
+        },
+        {
+          "method": "GET",
+          "path": "/api/vexa/transcripts/google_meet/fixture-native-a?meeting_id=1001",
+          "fixtures": [
+            "transcript-simple-a",
+            "transcript-simple-a"
+          ],
+          "expected_count": 2
+        },
+        {
+          "method": "GET",
+          "path": "/api/vexa/bots/google_meet/fixture-native-a/chat",
+          "fixtures": [
+            "chat-a",
+            "chat-a"
+          ],
+          "expected_count": 2
+        },
+        {
+          "method": "GET",
+          "path": "/api/ai/config",
+          "fixtures": [
+            "ai-disabled"
+          ],
+          "expected_count": 1
+        },
+        {
+          "method": "GET",
+          "path": "/api/webhooks/deliveries/1001",
+          "fixtures": [
+            "webhooks-empty-a"
+          ],
+          "expected_count": 1
+        }
+      ],
+      "baseline_actions": [
+        "goto:/meetings/1001?fixture=post-meeting",
+        "wait-request-count:GET /api/vexa/meetings/1001=2",
+        "advance-fake-clock:5000",
+        "wait-request-count:GET /api/vexa/meetings/1001=3",
+        "wait-locator:[data-testid=\"meeting-status\"][data-status=\"completed\"]"
+      ],
+      "final_actions": [
+        "goto:/meetings/1001?fixture=post-meeting",
+        "wait-request-count:GET /api/vexa/meetings/1001=2",
+        "advance-fake-clock:5000",
+        "wait-request-count:GET /api/vexa/meetings/1001=3",
+        "wait-locator:[data-testid=\"meeting-status\"][data-status=\"completed\"]"
+      ],
+      "expected_visual_change": false,
+      "rf_ids": [],
+      "behavioral_rf_ids": [],
+      "allowed_selectors": [],
+      "semantic_assertions": [
+        "completed-visible"
+      ]
+    },
+    {
+      "scenario_id": "S06-browser-session-starting",
+      "route": "/meetings/1001?fixture=browser-starting",
+      "common_overrides": {
+        "baseline": {
+          "config": 2
+        },
+        "final": {
+          "config": 1
+        }
+      },
+      "request_bindings": [
+        {
+          "method": "GET",
+          "path": "/api/vexa/meetings/1001",
+          "fixtures": [
+            "detail-browser-requested-a",
+            "detail-browser-requested-a"
+          ],
+          "expected_count": 2
+        }
+      ],
+      "baseline_actions": [
+        "goto:/meetings/1001?fixture=browser-starting",
+        "wait-request-count:GET /api/vexa/meetings/1001=2",
+        "wait-locator:[data-testid=\"browser-session-panel\"][data-raw-status=\"requested\"]"
+      ],
+      "final_actions": [
+        "goto:/meetings/1001?fixture=browser-starting",
+        "wait-request-count:GET /api/vexa/meetings/1001=2",
+        "wait-locator:[data-testid=\"browser-session-panel\"][data-raw-status=\"requested\"]"
+      ],
+      "expected_visual_change": true,
+      "rf_ids": [
+        "RF-20"
+      ],
+      "behavioral_rf_ids": [],
+      "allowed_selectors": [
+        "[data-testid=\"browser-session-panel\"]"
+      ],
+      "semantic_assertions": [
+        "browser-starting-visible"
+      ]
+    },
+    {
+      "scenario_id": "S07-audio-player",
+      "route": "/meetings/1001?fixture=audio-player",
+      "common_overrides": {},
+      "request_bindings": [
+        {
+          "method": "GET",
+          "path": "/api/vexa/meetings/1001",
+          "fixtures": [
+            "detail-media-a"
+          ],
+          "expected_count": 1
+        },
+        {
+          "method": "GET",
+          "path": "/api/vexa/transcripts/google_meet/fixture-native-a?meeting_id=1001",
+          "fixtures": [
+            "transcript-audio-a"
+          ],
+          "expected_count": 1
+        },
+        {
+          "method": "GET",
+          "path": "/api/vexa/bots/google_meet/fixture-native-a/chat",
+          "fixtures": [
+            "chat-a"
+          ],
+          "expected_count": 1
+        },
+        {
+          "method": "GET",
+          "path": "/api/ai/config",
+          "fixtures": [
+            "ai-disabled"
+          ],
+          "expected_count": 1
+        },
+        {
+          "method": "GET",
+          "path": "/api/webhooks/deliveries/1001",
+          "fixtures": [
+            "webhooks-empty-a"
+          ],
+          "expected_count": 1
+        },
+        {
+          "method": "GET",
+          "path": "/api/vexa/recordings/701/master?type=audio",
+          "fixtures": [
+            "audio-master"
+          ],
+          "expected_count": 1
+        },
+        {
+          "methods": [
+            "GET",
+            "HEAD"
+          ],
+          "path": "/api/vexa/recordings/701/master?type=audio&proxy=1",
+          "fixture": "audio-media",
+          "cardinality": "media-range"
+        }
+      ],
+      "baseline_actions": [
+        "goto:/meetings/1001?fixture=audio-player",
+        "wait-locator:[data-testid=\"audio-player\"][data-ready=\"true\"]"
+      ],
+      "final_actions": [
+        "goto:/meetings/1001?fixture=audio-player",
+        "wait-locator:[data-testid=\"audio-player\"][data-ready=\"true\"]"
+      ],
+      "expected_visual_change": false,
+      "rf_ids": [],
+      "behavioral_rf_ids": [],
+      "allowed_selectors": [],
+      "semantic_assertions": [
+        "audio-visible"
+      ]
+    },
+    {
+      "scenario_id": "S08-audio-video-player",
+      "route": "/meetings/1001?fixture=video-player",
+      "common_overrides": {},
+      "request_bindings": [
+        {
+          "method": "GET",
+          "path": "/api/vexa/meetings/1001",
+          "fixtures": [
+            "detail-media-a"
+          ],
+          "expected_count": 1
+        },
+        {
+          "method": "GET",
+          "path": "/api/vexa/transcripts/google_meet/fixture-native-a?meeting_id=1001",
+          "fixtures": [
+            "transcript-av-a"
+          ],
+          "expected_count": 1
+        },
+        {
+          "method": "GET",
+          "path": "/api/vexa/bots/google_meet/fixture-native-a/chat",
+          "fixtures": [
+            "chat-a"
+          ],
+          "expected_count": 1
+        },
+        {
+          "method": "GET",
+          "path": "/api/ai/config",
+          "fixtures": [
+            "ai-disabled"
+          ],
+          "expected_count": 1
+        },
+        {
+          "method": "GET",
+          "path": "/api/webhooks/deliveries/1001",
+          "fixtures": [
+            "webhooks-empty-a"
+          ],
+          "expected_count": 1
+        },
+        {
+          "method": "GET",
+          "path": "/api/vexa/recordings/701/master?type=audio",
+          "fixtures": [
+            "audio-master"
+          ],
+          "expected_count": 1
+        },
+        {
+          "methods": [
+            "GET",
+            "HEAD"
+          ],
+          "path": "/api/vexa/recordings/701/master?type=audio&proxy=1",
+          "fixture": "audio-media",
+          "cardinality": "media-range"
+        },
+        {
+          "method": "GET",
+          "path": "/api/vexa/recordings/702/master?type=video",
+          "fixtures": [
+            "video-master"
+          ],
+          "expected_count": 1
+        },
+        {
+          "methods": [
+            "GET",
+            "HEAD"
+          ],
+          "path": "/api/vexa/recordings/702/master?type=video&proxy=1",
+          "fixture": "video-media",
+          "cardinality": "media-range"
+        }
+      ],
+      "baseline_actions": [
+        "goto:/meetings/1001?fixture=video-player",
+        "wait-locator:[data-testid=\"audio-player\"][data-ready=\"true\"]",
+        "wait-locator:[data-testid=\"video-player\"][data-ready=\"true\"]"
+      ],
+      "final_actions": [
+        "goto:/meetings/1001?fixture=video-player",
+        "wait-locator:[data-testid=\"audio-player\"][data-ready=\"true\"]",
+        "wait-locator:[data-testid=\"video-player\"][data-ready=\"true\"]"
+      ],
+      "expected_visual_change": false,
+      "rf_ids": [],
+      "behavioral_rf_ids": [],
+      "allowed_selectors": [],
+      "semantic_assertions": [
+        "audio-visible",
+        "video-visible"
+      ]
+    },
+    {
+      "scenario_id": "S09-live-follow",
+      "route": "/meetings/1001?fixture=live-follow",
+      "common_overrides": {
+        "baseline": {
+          "config": 2
+        },
+        "final": {
+          "config": 1
+        }
+      },
+      "request_bindings": [
+        {
+          "method": "GET",
+          "path": "/api/vexa/meetings/1001",
+          "fixtures": [
+            "detail-active-a",
+            "detail-active-a"
+          ],
+          "expected_count": 2
+        },
+        {
+          "method": "GET",
+          "path": "/api/vexa/transcripts/google_meet/fixture-native-a?meeting_id=1001",
+          "fixtures": [
+            "transcript-live-43"
+          ],
+          "expected_count": 1
+        },
+        {
+          "method": "GET",
+          "path": "/api/vexa/transcripts/google_meet/fixture-native-a",
+          "fixtures": [
+            "transcript-live-43"
+          ],
+          "expected_count": 1
+        },
+        {
+          "method": "GET",
+          "path": "/api/vexa/bots/google_meet/fixture-native-a/chat",
+          "fixtures": [
+            "chat-a",
+            "chat-a"
+          ],
+          "expected_count": 2
+        },
+        {
+          "method": "GET",
+          "path": "/api/ai/config",
+          "fixtures": [
+            "ai-disabled"
+          ],
+          "expected_count": 1
+        },
+        {
+          "transport": "fake-websocket",
+          "fixture": "live-websocket",
+          "expected_connection_count": 1,
+          "expected_subscribe_count": 1,
+          "expected_emit_count": 1
+        }
+      ],
+      "baseline_actions": [
+        "goto:/meetings/1001?fixture=live-follow",
+        "wait-fixture-websocket:live-websocket=subscribed",
+        "wait-locator:[data-testid=\"transcript-scroll-container\"][data-ready=\"true\"]",
+        "set-scroll:locator([data-testid=\"app-main-scroll\"])=0,locator([data-testid=\"transcript-scroll-container\"])=max",
+        "record-scroll:before_outer=locator([data-testid=\"app-main-scroll\"]).scrollTop,before_inner=locator([data-testid=\"transcript-scroll-container\"]).scrollTop",
+        "emit-fixture-websocket:live-websocket",
+        "wait-locator:[data-segment-id=\"live-044\"]",
+        "wait-animation-frames:2",
+        "record-scroll:after_outer=locator([data-testid=\"app-main-scroll\"]).scrollTop,after_inner=locator([data-testid=\"transcript-scroll-container\"]).scrollTop",
+        "set-scroll:locator([data-testid=\"app-main-scroll\"])=0,locator([data-testid=\"transcript-scroll-container\"])=0",
+        "wait-animation-frames:2"
+      ],
+      "final_actions": [
+        "goto:/meetings/1001?fixture=live-follow",
+        "wait-fixture-websocket:live-websocket=subscribed",
+        "wait-locator:[data-testid=\"transcript-scroll-container\"][data-ready=\"true\"]",
+        "set-scroll:locator([data-testid=\"app-main-scroll\"])=0,locator([data-testid=\"transcript-scroll-container\"])=max",
+        "record-scroll:before_outer=locator([data-testid=\"app-main-scroll\"]).scrollTop,before_inner=locator([data-testid=\"transcript-scroll-container\"]).scrollTop",
+        "emit-fixture-websocket:live-websocket",
+        "wait-locator:[data-segment-id=\"live-044\"]",
+        "wait-animation-frames:2",
+        "record-scroll:after_outer=locator([data-testid=\"app-main-scroll\"]).scrollTop,after_inner=locator([data-testid=\"transcript-scroll-container\"]).scrollTop",
+        "set-scroll:locator([data-testid=\"app-main-scroll\"])=0,locator([data-testid=\"transcript-scroll-container\"])=0",
+        "wait-animation-frames:2"
+      ],
+      "expected_visual_change": false,
+      "rf_ids": [],
+      "behavioral_rf_ids": [
+        "RF-18"
+      ],
+      "allowed_selectors": [],
+      "semantic_assertions": [
+        "detail-root-a",
+        "outer-app-scroll-unchanged",
+        "inner-transcript-scroll-increased",
+        "websocket-token-surfaces-zero"
+      ]
+    }
+  ],
+  "filename_template": "{scenario_id}--{viewport}.png",
+  "expected_screenshot_count": 18,
+  "manifest_required_fields": {
+    "baseline": [
+      "schema_version",
+      "mode",
+      "source_commit_sha",
+      "source_tree_sha",
+      "expected_source_sha",
+      "observed_runtime_sha",
+      "next_build_id",
+      "server_pid",
+      "server_cwd",
+      "runner_nonce",
+      "planned_visual_changes_sha256",
+      "scenario_ids",
+      "viewports",
+      "browser_contexts",
+      "action_results",
+      "fixture_materialization_receipts",
+      "fixture_requests",
+      "fixture_consumption",
+      "screenshot_barrier_results",
+      "screenshots",
+      "console_errors",
+      "page_errors",
+      "request_failures",
+      "http_errors",
+      "child_processes_after",
+      "contains_real_data",
+      "playwright_version",
+      "chromium_version",
+      "render_settings"
+    ],
+    "final": [
+      "schema_version",
+      "mode",
+      "head_sha",
+      "source_commit_sha",
+      "source_tree_sha",
+      "expected_source_sha",
+      "observed_runtime_sha",
+      "next_build_id",
+      "server_pid",
+      "server_cwd",
+      "runner_nonce",
+      "baseline_manifest_sha256",
+      "baseline_png_aggregate_sha256",
+      "planned_visual_changes_sha256",
+      "scenario_ids",
+      "viewports",
+      "browser_contexts",
+      "action_results",
+      "fixture_materialization_receipts",
+      "fixture_requests",
+      "fixture_consumption",
+      "screenshot_barrier_results",
+      "assertion_results",
+      "screenshots",
+      "console_errors",
+      "page_errors",
+      "request_failures",
+      "http_errors",
+      "visual_diffs",
+      "child_processes_after",
+      "contains_real_data",
+      "playwright_version",
+      "chromium_version",
+      "render_settings"
+    ],
+    "pixel_diff_definition": "A pixel differs when any one of its 8-bit RGBA channels differs. pixel_diff_ratio is differing_pixel_count divided by width times height."
+  }
+}

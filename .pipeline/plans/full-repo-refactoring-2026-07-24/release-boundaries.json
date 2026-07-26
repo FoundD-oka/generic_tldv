@@ -1,0 +1,84 @@
+{
+  "schema_version": "1.1",
+  "master_task_id": "full-repo-refactoring-2026-07-24",
+  "releases": [
+    {
+      "release_id": "r1",
+      "release_task_id": "full-repo-refactoring-2026-07-24-r1",
+      "start_item": "RF-00A",
+      "end_item": "RF-05B",
+      "operator_gate_after_merge": "op-05a-drain",
+      "operator_expected_item": "RF-05B",
+      "cutover_gate_before_deploy": null
+    },
+    {
+      "release_id": "r2",
+      "release_task_id": "full-repo-refactoring-2026-07-24-r2",
+      "start_item": "RF-05C",
+      "end_item": "RF-05D1B",
+      "operator_gate_after_merge": "op-05d-drain",
+      "operator_expected_item": "RF-05D1",
+      "cutover_gate_before_deploy": null
+    },
+    {
+      "release_id": "r3",
+      "release_task_id": "full-repo-refactoring-2026-07-24-r3",
+      "start_item": "RF-05C2",
+      "end_item": "RF-06C1",
+      "operator_gate_after_merge": "op-06c-drain",
+      "operator_expected_item": "RF-06C1",
+      "cutover_gate_before_deploy": "op-05d-drain-cutover"
+    },
+    {
+      "release_id": "r4",
+      "release_task_id": "full-repo-refactoring-2026-07-24-r4",
+      "start_item": "RF-05F2",
+      "end_item": "RF-06D1",
+      "operator_gate_after_merge": "op-06d-drain",
+      "operator_expected_item": "RF-06D1",
+      "cutover_gate_before_deploy": "op-06c-drain-cutover"
+    },
+    {
+      "release_id": "r5",
+      "release_task_id": "full-repo-refactoring-2026-07-24-r5",
+      "start_item": "RF-06D2",
+      "end_item": "RF-06F",
+      "operator_gate_after_merge": "op-06f-drain",
+      "operator_expected_item": "RF-06F",
+      "cutover_gate_before_deploy": "op-06d-drain-cutover"
+    },
+    {
+      "release_id": "r6",
+      "release_task_id": "full-repo-refactoring-2026-07-24-r6",
+      "start_item": "RF-06G",
+      "end_item": "RF-09A",
+      "operator_gate_after_merge": "op-09-drain",
+      "operator_expected_item": "RF-09A",
+      "cutover_gate_before_deploy": "op-06f-drain-cutover"
+    },
+    {
+      "release_id": "r7",
+      "release_task_id": "full-repo-refactoring-2026-07-24-r7",
+      "start_item": "RF-09B",
+      "end_item": "RF-75F",
+      "operator_gate_after_merge": null,
+      "operator_expected_item": null,
+      "cutover_gate_before_deploy": "op-09-drain-cutover"
+    }
+  ],
+  "merge_policy": {
+    "squash": false,
+    "rebase_merge": false,
+    "preserve_item_commits": true,
+    "allowed": [
+      "fast-forward",
+      "no-ff merge commit with unchanged release tree"
+    ]
+  },
+  "environment_policy": {
+    "approval_merge_operation_environment_must_match": true,
+    "deployment_fingerprint_is_nonsecret_sha256": true,
+    "cutover_attestation_max_age_seconds": 900,
+    "continuous_freeze_required": true
+  }
+}

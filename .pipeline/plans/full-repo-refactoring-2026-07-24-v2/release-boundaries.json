@@ -1,0 +1,205 @@
+{
+  "schema_version": "2.0",
+  "task_id": "full-repo-refactoring-2026-07-24-v2",
+  "item_order_contract": {
+    "plan_path": ".pipeline/plans/full-repo-refactoring-2026-07-24-v2/plan.md",
+    "heading_pattern": "^### (RF-[0-9A-Z]+) ",
+    "expected_item_count": 129,
+    "rule": "plan.mdのRF見出しを上から展開した順序と、deployment_wavesをwave_id順にstart_itemからend_itemまで展開して連結した順序が完全一致すること。欠落、重複、並べ替えを禁止する。"
+  },
+  "phases": [
+    {
+      "phase_id": "phase-1",
+      "name": "安全網・認可・秘密値・競合修正",
+      "start_item": "RF-00A",
+      "end_item": "RF-30",
+      "item_count": 64
+    },
+    {
+      "phase_id": "phase-2",
+      "name": "テスト・配備・Harnessのfail-closed化",
+      "start_item": "RF-31",
+      "end_item": "RF-51",
+      "item_count": 26
+    },
+    {
+      "phase_id": "phase-3",
+      "name": "move-only抽出・重複・デッド資産・lint・文書の閉鎖",
+      "start_item": "RF-52",
+      "end_item": "RF-75F",
+      "item_count": 39
+    }
+  ],
+  "management_milestones": [
+    {
+      "milestone_id": "M0",
+      "name": "項目0の安全網",
+      "start_item": "RF-00A",
+      "end_item": "RF-00D",
+      "item_count": 6,
+      "completion": "特性テスト、視覚baseline、Ops偽陽性baselineが再現可能に実行できること。"
+    },
+    {
+      "milestone_id": "M1",
+      "name": "高リスク修正の完了",
+      "start_item": "RF-01",
+      "end_item": "RF-30",
+      "item_count": 58,
+      "completion": "認可・秘密値・credential cutover・非同期競合の対象テストがすべて成功すること。"
+    },
+    {
+      "milestone_id": "M2",
+      "name": "検証・運用基盤の完了",
+      "start_item": "RF-31",
+      "end_item": "RF-51",
+      "item_count": 26,
+      "completion": "tests3、配備検査、Harnessが未実行や不適用を成功として扱わないこと。"
+    },
+    {
+      "milestone_id": "M3",
+      "name": "構造整理の完了",
+      "start_item": "RF-52",
+      "end_item": "RF-75F",
+      "item_count": 39,
+      "completion": "move-only抽出、重複・デッド資産削除、lint、文書同期を完了し、全体CIが成功すること。"
+    }
+  ],
+  "deployment_waves": [
+    {
+      "wave_id": "D1",
+      "start_item": "RF-00A",
+      "end_item": "RF-05B",
+      "item_count": 16,
+      "checkpoint_after": "OP-05A-DRAIN",
+      "minimum_gate": {
+        "environment": "配備commitと対象環境を記録する。",
+        "observation_window": "identity TTL、client retry、cache TTLの最大値に300秒を加えた時間以上を観測する。",
+        "legacy_count_zero": "unsigned identity、旧share・Telegram・webhook保存、旧Dashboard client、一時migration principal・Secret参照・grantが0である。",
+        "new_path_success_positive": "Meeting、Agent、Calendar、Admin、MCPの署名identityと新share・Telegram・webhook経路が各1件以上成功する。",
+        "rollback_artifact_retained": "D1配備物を保持し、OP-05A不合格時はRF-05Cへ進まない。"
+      }
+    },
+    {
+      "wave_id": "D2",
+      "start_item": "RF-05C",
+      "end_item": "RF-05D1B",
+      "item_count": 3,
+      "checkpoint_after": "OP-05D-DRAIN",
+      "minimum_gate": {
+        "environment": "配備commitと対象環境を記録する。",
+        "observation_window": "request timeoutとscheduler pollの合計、またはworkload session lifetimeの大きい方に300秒を加えた時間以上を観測する。",
+        "legacy_count_zero": "Runtime legacy request、Agent internal/direct static、Meeting managed static、旧Agent・Meeting workloadが0である。",
+        "new_path_success_positive": "RuntimeのMeeting・Agent・Gateway principalとGateway経由CLIが各1件以上成功する。",
+        "rollback_artifact_retained": "D2 compatibility配備物を保持し、OP-05D不合格時はRF-05C2へ進まない。"
+      }
+    },
+    {
+      "wave_id": "D3",
+      "start_item": "RF-05C2",
+      "end_item": "RF-06C1",
+      "item_count": 9,
+      "checkpoint_after": "OP-06C-DRAIN",
+      "minimum_gate": {
+        "environment": "配備commitと対象環境を記録する。",
+        "observation_window": "Redis reconnect、identity TTL、MeetingToken TTL、旧collector session lifetimeの最大値に300秒を加えた時間以上を観測する。",
+        "legacy_count_zero": "Redis anonymous接続、no-kid identity、Admin署名MeetingToken、旧storage credential参照が0である。",
+        "new_path_success_positive": "各Redis service principal、kid付きidentity、current MeetingToken、Agent・Browser storage brokerが各1件以上成功する。",
+        "rollback_artifact_retained": "D3 compatibility配備物を保持し、OP-06C不合格時はRF-05F2へ進まない。"
+      }
+    },
+    {
+      "wave_id": "D4",
+      "start_item": "RF-05F2",
+      "end_item": "RF-06D1",
+      "item_count": 4,
+      "checkpoint_after": "OP-06D-DRAIN",
+      "minimum_gate": {
+        "environment": "配備commitと対象環境を記録する。",
+        "observation_window": "capability TTL、client retry、active session lifetimeの最大値に300秒を加えた時間以上を観測する。",
+        "legacy_count_zero": "Meeting Bot legacy Redisとtranscription・wake・TTS・recordingのlegacy token利用、旧session・Secret参照が0である。",
+        "new_path_success_positive": "event brokerとtranscription・wake・TTS・recording capabilityが各1件以上成功する。",
+        "rollback_artifact_retained": "D4 compatibility配備物を保持し、OP-06D不合格時はRF-06D2へ進まない。"
+      }
+    },
+    {
+      "wave_id": "D5",
+      "start_item": "RF-06D2",
+      "end_item": "RF-06F",
+      "item_count": 3,
+      "checkpoint_after": "OP-06F-DRAIN",
+      "minimum_gate": {
+        "environment": "配備commitと対象環境を記録する。",
+        "observation_window": "Zoom SDK token TTLに300秒を加えた時間以上を観測する。",
+        "legacy_count_zero": "legacy Zoom HMAC利用とactive old Zoom Botが0である。",
+        "new_path_success_positive": "server署名済みZoom SDK tokenによるjoinが1件以上成功する。",
+        "rollback_artifact_retained": "D5 compatibility配備物を保持し、OP-06F不合格時はRF-06Gへ進まない。"
+      }
+    },
+    {
+      "wave_id": "D6",
+      "start_item": "RF-06G",
+      "end_item": "RF-09A",
+      "item_count": 7,
+      "checkpoint_after": "OP-09-DRAIN",
+      "minimum_gate": {
+        "environment": "配備commitと対象環境を記録する。",
+        "observation_window": "Browser・Agent session lifetimeとproxy capability TTLの最大値に300秒を加えた時間以上を観測する。",
+        "legacy_count_zero": "Browser legacy Redis、旧VNC token route、旧CDP query token、workload内旧proxy credential、active old sessionが0である。",
+        "new_path_success_positive": "相関WS、Browser VNC・CDP、Agent CDP、proxy brokerが各1件以上成功する。",
+        "rollback_artifact_retained": "D6 compatibility配備物を保持し、OP-09不合格時はRF-09Bへ進まない。"
+      }
+    },
+    {
+      "wave_id": "D7",
+      "start_item": "RF-09B",
+      "end_item": "RF-75F",
+      "item_count": 87,
+      "checkpoint_after": null,
+      "minimum_gate": {
+        "environment": "配備commitと対象環境を記録する。",
+        "observation_window": "通常の配備後smokeと対象E2Eが完了するまで観測する。",
+        "legacy_count_zero": "RF-09B対象のBrowser Redis、旧VNC・CDP credentialと、各項目が定める残存違反が0である。",
+        "new_path_success_positive": "相関WS経路、対象smoke、CI、E2Eが成功する。",
+        "rollback_artifact_retained": "直前に合格した配備物を保持し、smokeまたはE2E不合格時は切り戻して完了扱いにしない。"
+      }
+    }
+  ],
+  "operator_checkpoints": [
+    {
+      "checkpoint_id": "OP-05A-DRAIN",
+      "after_wave": "D1",
+      "next_blocked_item": "RF-05C",
+      "operator_expected_item": "RF-05B"
+    },
+    {
+      "checkpoint_id": "OP-05D-DRAIN",
+      "after_wave": "D2",
+      "next_blocked_item": "RF-05C2",
+      "operator_expected_item": "RF-05D1"
+    },
+    {
+      "checkpoint_id": "OP-06C-DRAIN",
+      "after_wave": "D3",
+      "next_blocked_item": "RF-05F2",
+      "operator_expected_item": "RF-06C1"
+    },
+    {
+      "checkpoint_id": "OP-06D-DRAIN",
+      "after_wave": "D4",
+      "next_blocked_item": "RF-06D2",
+      "operator_expected_item": "RF-06D1"
+    },
+    {
+      "checkpoint_id": "OP-06F-DRAIN",
+      "after_wave": "D5",
+      "next_blocked_item": "RF-06G",
+      "operator_expected_item": "RF-06F"
+    },
+    {
+      "checkpoint_id": "OP-09-DRAIN",
+      "after_wave": "D6",
+      "next_blocked_item": "RF-09B",
+      "operator_expected_item": "RF-09A"
+    }
+  ]
+}
