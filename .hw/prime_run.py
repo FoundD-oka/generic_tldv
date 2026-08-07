@@ -105,6 +105,20 @@ def load_json(path: pathlib.Path) -> dict[str, Any]:
     return value
 
 
+def plan_generated_by_fable(text: str) -> bool:
+    """plan.md の frontmatter が generated_by: fable かどうか。
+
+    frontmatter だけを見る。ファイル全体を検索すると、本文のどこかに
+    "generated_by: fable" と書くだけでこの検査を迂回できてしまう。
+    """
+    matched = re.match(r"\A---\r?\n(.*?)\r?\n---\r?\n", text, re.S)
+    if not matched:
+        return False
+    return bool(
+        re.search(r"^generated_by:[ \t]*fable[ \t]*$", matched.group(1), re.M)
+    )
+
+
 def strip_why(text: str) -> str:
     """plan.md から `## Why(実装者に渡さない)` セクションを落とす。
 
@@ -146,9 +160,10 @@ def load_run_context(root: pathlib.Path, task_id: str) -> dict[str, Any]:
             raise PrimeRunError(f"{path} がありません")
 
     plan_text = plan_path.read_text(encoding="utf-8")
-    if "generated_by:" not in plan_text or "fable" not in plan_text:
+    if not plan_generated_by_fable(plan_text):
         raise PrimeRunError(
-            "plan.md に generated_by: fable がありません。プランは planner 経由必須"
+            "plan.md の frontmatter に generated_by: fable がありません。"
+            "プランは planner 経由必須"
         )
 
     return {

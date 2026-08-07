@@ -33,8 +33,22 @@ check "clean-tree" $? "(review-verdictを含めcommitしてから実行)"
 # 2. プランの存在と Fable 産の検査
 [ -f "$PLAN_DIR/plan.md" ]
 check "plan-exists" $? "($PLAN_DIR/plan.md がありません)"
-grep -q "generated_by:.*fable" "$PLAN_DIR/plan.md" 2>/dev/null
-check "plan-by-fable" $? "(plan.mdに generated_by: fable がありません。プランは planner 経由必須)"
+# frontmatter だけを見る。ファイル全体を grep すると、本文のどこかに
+# "generated_by: fable" と書くだけでゲートを迂回できてしまう。
+python3 - "$PLAN_DIR/plan.md" <<'PY'
+import re, sys
+try:
+    text = open(sys.argv[1], encoding="utf-8").read()
+except OSError:
+    sys.exit(1)
+matched = re.match(r"\A---\r?\n(.*?)\r?\n---\r?\n", text, re.S)
+sys.exit(
+    0
+    if matched and re.search(r"^generated_by:[ \t]*fable[ \t]*$", matched.group(1), re.M)
+    else 1
+)
+PY
+check "plan-by-fable" $? "(plan.md の frontmatter に generated_by: fable がありません。プランは planner 経由必須)"
 
 # 3. 不確定性ベース S/M/L 判定の記録
 SIZE="$(
