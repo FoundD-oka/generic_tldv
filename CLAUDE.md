@@ -1,94 +1,89 @@
 # Vexa
 
-## Harness Identity
+このプロジェクトは hw ハーネス(hw-init 導入、2026-08-08)を使う。
+権威の序列: CI > ローカルゲート > エージェント。エージェントの自己申告は証明にならない。
+Fable が指示役(プランとレビュー)、Opus 5 が実行役(実装と修復)を担う。
+例外ゼロで守らせたいことはフック・ゲート・検証契約に置く。このファイルは助言にすぎない。
 
-This project uses the AI Delivery Harness as a Managed Agent Harness. Claude Code,
-Codex CLI, Codex App, and Codex GitHub Action are runtime profiles over the same
-core flow. Runtime reports are not the source of truth; deterministic gates and
-outcome cards are.
+## 受付パイプライン(実装前に必ず)
 
-Read `.ai/HARNESS.md` before planning non-trivial changes.
-Read `docs/managed-agent-harness-architecture.md` before changing runtime profile behavior.
-Read `docs/agent-coding-best-practices.md` before Plan Relay or any task that
-depends on Claude Code, Codex, agentic coding, browser/computer-use, or current
-AI-tool behavior.
+1. 意図を汲み取り、ゴールを再設計する。文字通りの依頼が本当の成果を外すなら
+   reframe する。ただしクライアント合意済みの要求は reframe しない。
+2. 現在のベストプラクティスに依存するタスクは先にリサーチ。仮説を先に書き、
+   反証を優先して探し、確信度と覆る条件を plan.md に記録する。
+3. プランは planner subagent(Fable 必須)が作る。メインセッションや他モデルで
+   プランを書かない。プランには検証契約(何が通れば完了か)を含める。
+   `plan.md` に `generated_by: fable`、`base-commit` に開始時 HEAD を記録する。
+4. S/M/L はプラン確定後に判定する。物差しは実装の重さではなく残る不確定性の4軸
+   (要求の曖昧さ / 技術的未知 / 影響範囲 / 検証可能性)。1軸でも L 相当なら L、
+   迷ったら上へ倒す(fail-closed)。理由を .hw/plans/<task>/sml-decision.json へ記録。
 
-## Core Rules
+## ルーティング(S/M/L = 不確定性の軸)
 
-1. Build a plan before implementation unless the task is **clearly S**.
-   **S fast-path** — skip full Plan Relay when ALL of these are true:
-   - <= 2 files and <= ~30 lines of product code changed
-   - No new external dependencies
-   - No schema, migration, auth, payment, or PII paths
-   - Implementation path is unambiguous after reading the code
-   - Change can be described in one sentence
-   When S fast-path applies: write a short `plan.md` (intent + approach, <= 10 lines) and `sml-decision.json`. If any criterion is in doubt, run the full relay.
-2. Decide S/M/L after the plan and verification contract exist.
-3. Use GitNexus first when `.gitnexus/` exists.
-4. Run Research Scout before planning when the task depends on current UX
-   patterns, libraries, APIs, regulations, security guidance, AI-tool behavior,
-   or market/user expectations. Store `research-brief.md` and
-   `option-matrix.md`, or record why research was skipped.
-5. Research Scout must not be generic research. It should reframe the request
-   when the literal ask would miss the real outcome, write hypotheses before
-   source checks, search first for disconfirming evidence, and record confidence
-   plus overturning conditions.
-6. Use KPI Backcast when the task needs future-state KPIs, multi-category
-   delivery, scheduling, or stable checkpoints. For contract work where
-   requirements arrive as a feature list rather than KPIs, use
-   `docs/feature-list-backcast-template.md` instead, or record a one-line
-   skip reason in `research-brief.md`.
-7. The planner must record an Agent Coding Best-Practice Check in the plan when
-   Claude Code, Codex, subagents, skills, hooks, MCP, browser/computer-use, or
-   other agent runtime behavior affects the work.
-8. Advisory instructions are not proof. Anything that must happen with zero
-   exceptions belongs in a hook, script, gate, or verification contract.
-9. For L work, create Fable CLI external consultation evidence. For M/L work,
-   call Fable at phase review, repeated-failure, plan-deviation, or final-audit
-   points when the review would reduce risk.
-10. Store plan, gate, evidence, and approval artifacts under `.pipeline/`.
-11. Use `scripts/harness/worktree.sh` and `scripts/harness/build.sh` for non-trivial build work.
-12. Do not treat an implementing agent's self-report or Fable output as proof.
-13. Verify harness residency before PR readiness.
-14. Write every human-facing report or publication in Japanese. This includes
-   user replies, progress/completion reports, plan summaries, delivery reports,
-   GitHub Issue titles/bodies/comments, GitHub PR titles/bodies/comments,
-   review notes, and user-facing clean summaries. Machine-readable JSON/schema
-   fields, file paths, commands, logs, and quoted external source text may stay
-   in their required/original language, but explain them in Japanese.
-15. Do not create br/cm/dcg/ubs workflow artifacts.
-
-## Routing
-
-| Situation | Read |
+| サイズ | レビュー |
 |---|---|
-| Planning | `.ai/HARNESS.md`, `.pipeline/config.json`, existing context pack, research brief, option matrix |
-| KPI Backcast | `docs/kpi-backcast-roadmap-template.md`, `docs/backcast-contracts.md`, verification contract |
-| Agent coding planning | `docs/agent-coding-best-practices.md`, official vendor docs when current behavior matters |
-| Implementation | `AGENTS.md`, approved plan, verification contract |
-| Codex runtime profile | `.pipeline/agents/*.agent.json`, `.pipeline/environments/*.environment.json`, `.pipeline/adapters/*.adapter.json` |
-| Codex session ledger | `.pipeline/sessions/<task-id>/events.jsonl` |
-| Outcome judgment | `.pipeline/outcomes/<task-id>/outcome-card.json`, then `scripts/harness/outcome-judge.sh <task-id>` |
-| Worktree build | `scripts/harness/worktree.sh create <task-id>`, then `scripts/harness/build.sh <task-id> --worktree <path> -- <command>` |
-| Codex build unlock | `scripts/harness/codex-build.sh <task-id> --worktree <path>` |
-| Operational smoke | `scripts/harness/full-loop-smoke.sh` |
-| QA judgment | verification contract + evidence only |
-| High-risk or L review | `.claude/agents/bug-tribunal.md` or `.claude/agents/sidechain-review.md` |
-| Review finding recorded / recurrence | `.claude/skills/hd-log/SKILL.md` |
-| External tool contract | `.claude/skills/adapter-contract/SKILL.md` |
-| Fable consultation | `docs/fable-consultation.md`, then `.claude/hooks/external-consultation-validate.sh` |
-| Harness rule growth | `.claude/skills/feedback-ledger/SKILL.md` |
-| PR readiness check | run `bash .claude/hooks/pr-ready-gate.sh <task-id>` |
-| Documentation update | `.ai/DOCS.md`, `.claude/skills/doc-update/SKILL.md` |
+| S(不確定性ほぼゼロ) | なし。機械検証のみ。plan.md は10行以内で可 |
+| M/L(未知が残る) | Fable 契約レビュー |
 
-## Build And Test
+## 実行基盤(R軸 = 収まるかの軸)
 
-See `.ai/BUILD.md`.
+S/M/L とは独立に判定し .hw/plans/<task>/runtime-decision.json へ記録する。
+物差しは「1つのコンテキストと1セッションに収まるか」の4軸:
+数時間超 / 状態がコンテキストに載らない量 / 並行委譲が必要 / 反復手順の資産化。
+1軸でも該当なら prime。迷ったら inline へ倒す(Prime Agent はサンドボックスでない)。
+
+| 判定 | 実行役 |
+|---|---|
+| inline(既定) | Opus 5 implementer |
+| prime | Prime Agent + Codex。`python3 .hw/prime_run.py <task-id>` |
+
+prime でもプランとレビューは Fable、CI が最終権威。変わるのは実行役だけ。
+prime_run.py は worktree を切り、pr-ready-gate を Prime Agent の停止条件として渡す。
+
+## モデル規律
+
+- プラン設計と M/L レビュー = Fable 必須。
+- 実装と修復 = Opus 5(implementer)。How と検証契約だけを渡し Why を渡さない。
+- Fable のプラン・レビュー層は read-only。Edit・Write・commit・修復を行わない。
+- 実行役は Fable READY を自己申告しない。
+- Codex は主線から外す。救援(codex:rescue)と R軸 prime の実行役としてのみ使う。
+
+## レビュー規律
+
+- commit 済み clean tree で `python3 .hw/fable_review.py <task-id>` を実行する。
+- `claude auth status` は sandbox 内で false になり得る。制限外で再確認する。
+- Fable に渡すのは検証契約と `base-commit..HEAD` の差分だけ。
+- 契約違反(violations)だけが修正義務。契約外は advisory として保存する。
+  人間が明示採用した場合のみ契約かこのファイルを改訂し、次のタスクから基準になる。
+- 違反は実行役へ戻し、修復・commit 後に Fable を再実行する。
+- READY は対象差分 hash・契約 hash に束縛する。修復や契約変更で自動失効する。
+- 契約は最低合格ライン。通ったら止める。要求品質を超えて作り込まない。
+
+## ゲート
+
+- PR 前に `bash .hw/hooks/pr-ready-gate.sh <task-id>` を通す。
+  どのエージェントの `gh pr create` も共通 PreToolUse フックがインターセプトする。
+- 検証とレビューは commit 済みの状態に対して行う(dirty tree を検証しない)。
+- 指摘は .hw/rules/hd-log.tsv に追記(追記専用)。同カテゴリ再発時は
+  .hw/rules/hd-resolutions.jsonl に改訂を記録すれば解除。改訂後に再発したら
+  その改訂は無効と判定し、エージェントの改訂が2回失敗したら人間へ。
+- ビルド/テストは .hw/verify.sh に定義する。CI が最終権威として全て再実行する。
+
+## コンテキスト
+
+- .gitnexus/ があれば planner が優先使用。索引が HEAD から大きく乖離し M/L 相当
+  なら analyze を1回実行。更新しないなら概算扱いにして Grep で裏取りする。
+- 人間向けの報告・PR・Issue はすべて日本語。機械可読キーは原語のまま意味を補足。
+
+## このファイルの上限
+
+80行以内を維持する。ルールを足すときは削るか統合する(prompt mud 防止)。
+下の gitnexus ブロックは自動生成なので行数に数えない。
 
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **generic_tldv** (16878 symbols, 30951 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **generic_tldv** (16940 symbols, 31096 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > Index stale? Run `node .gitnexus/run.cjs analyze` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? `npx gitnexus analyze` (npm 11 crash → `npm i -g gitnexus`; #1939).
 

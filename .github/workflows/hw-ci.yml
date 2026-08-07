@@ -1,0 +1,27 @@
+# hw Layer 3 — 最終権威。エージェントが編集できない場所でローカルゲートと同じ検査を再実行する。
+name: hw-ci
+on:
+  pull_request:
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # base-commit..HEAD の差分検査に全履歴が必要
+      # 依存インストールは不要。.hw/verify.sh は make smoke(tests3 の docs + 静的locks)
+      # だけを呼び、ubuntu-latest 標準の python3 と git で完結する。
+      # ライブ層の検証を verify.sh に足すときは、ここに setup-python / setup-node と
+      # 依存インストールを追加すること。
+      - name: pr-ready gate
+        run: |
+          if [ -f .hw/current/task-id ]; then
+            bash .hw/hooks/pr-ready-gate.sh "$(cat .hw/current/task-id)"
+          elif [ -f .hw/verify.sh ]; then
+            echo "[hw-ci] task-id なし。.hw/verify.sh のみ実行(fail-closed の縮退)"
+            bash .hw/verify.sh
+          else
+            echo "[hw-ci][FAIL] .hw/current/task-id も .hw/verify.sh もない。強制対象が定義されていない(fail-closed)"
+            exit 1
+          fi

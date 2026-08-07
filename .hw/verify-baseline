@@ -1,0 +1,11 @@
+# hw 導入(2026-08-08, HEAD=e4cc7be)の時点で既に失敗している静的 locks。
+# hw が持ち込んだ失敗ではない。ここに載っているIDは verify.sh を block しない。
+#
+# 返済したらその行を消すこと。消し忘れても検査は緩まない —— 解消済みのIDが
+# 残っていると verify.sh が warn を出す。
+#
+# 追加は「既存の負債である」ことを確認してから。新しく壊したものをここに足すのは
+# ゲートの無効化にあたる。
+SECURE_COOKIE_SEND_MAGIC_LINK
+DOCS_ENV_GATED_EVERYWHERE
+BOTS_LIST_ENDPOINT_SLIM
