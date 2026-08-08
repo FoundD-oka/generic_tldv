@@ -193,9 +193,8 @@ tests3/.state-*
 !.pipeline/gates/manual/residency.json
 .ci/tuning-log.tsv
 
-# Local harness symlinks point at the operator's dotfiles checkout.
-.claude/agents
-.claude/hooks
+# hw は .claude/agents と .claude/hooks に実ファイルを置くので追跡する
+# (旧 harness-init はここを operator の dotfiles へのシンボリックリンクにしていた)
 .claude/rules
 .claude/skills
 .pipeline/worktrees/
@@ -203,3 +202,5 @@ tests3/.state-*
 .harness-init/runtime
 .harness-init/state/
 .harness-init/tmp/
+.hw/gates/
+.hw/state/

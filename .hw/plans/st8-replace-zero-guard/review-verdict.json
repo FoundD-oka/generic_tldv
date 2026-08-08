@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "task_id": "st8-replace-zero-guard",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "3964a5e9d464cbe57b8bc14f7f4c1bf7538b3ad1",
+  "reviewed_commit": "d34156a1a5fbb9976cd6ba58d3a2778afdd15a38",
+  "target_sha256": "sha256:39d8ba114c28a5685f53d60334411e790b816dcce1de090bbf497bb6f5c3978d",
+  "contract_sha256": "sha256:91ce6b8b4ae985abbd47e861a97667182adebdb0235ebcf81d1fd6367e3707c0",
+  "prompt_sha256": "sha256:c092b93ce4bd5e25c8a12b6a2fcb4f94748ffda71e609d66633c135bf5207b20",
+  "response_sha256": "sha256:a15b4f8d600e60ac0eb9f9739592f6f9f554f23ca00e6f0c6d30dfe6199861ff",
+  "created_at": "2026-08-08T02:34:36.785765+00:00",
+  "verdict": "READY",
+  "summary": "st8-replace-zero-guard(reviewed commit d34156a)は検証契約に静的に適合。AT-001〜AT-005 に対応する4テストが契約指定の名前・検証方法(Delete インスタンスの call_args_list 型走査、assert_not_awaited 等)で追加され、実装は replace モードのガード(実質セグメント0件かつ既存行>0で delete 前に failed/empty_transcription_result/502 で停止、force でも適用、既存行0件は succeeded 維持)をプランの確定事項どおりに実装。アンチゲーミング条項(既存テスト無変更・ベースライン追加なし・製品コード1ファイル限定・dashboard 無変更)をすべて充足。violations 0件のため READY。本判定は contract hash sha256:91ce6b8b… / target hash sha256:39d8ba11… に束縛され、pytest 実測(最低合格ライン1・2・4)は pr-ready-gate と CI が最終権威として担保する。",
+  "confidence": "medium",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "evidence pack(pytest 実測ログ)は差分に含まれておらず gate/CI 依存",
+      "detail": "レビュー層は read-only かつ本セッションでは pytest を実行できないため、最低合格ライン1(新規 failed ゼロのベースライン突き合わせ)・2(AT-001〜005 の PASSED 行)・4(同一 venv での base/HEAD 比較)は静的確認に留まる。PR 前に NFT-001 の pr-ready-gate 実行と evidence pack(base: 8 failed / 580 passed / 10 skipped との突き合わせ)を必ず取得すること。CI が最終権威。",
+      "file": ".hw/plans/st8-replace-zero-guard/verification-contract.md"
+    },
+    {
+      "title": "AT-002 は mixed 経路のみで、空白セグメント判定のレーン経路カバレッジが薄い",
+      "detail": "test_replace_whitespace_only_segments_preserves_existing_rows は _call_transcription_service(mixed 経路)のモック応答で空白のみセグメントを与えており、_parse_segments が空白テキストを先に落とす場合、ガード自身の has_effective_segments 判定と パーサの寄与を区別できない。プランがガードを delete 実行地点に置いた動機は _transcribe_lanes 経路への適用なので、レーン経路で空白のみセグメントを流すテストを将来追加するとガードの経路非依存性が直接検証できる。契約 AT-002 の要求どおりではあるため違反ではない。",
+      "file": "services/meeting-api/tests/test_final_transcription.py"
+    },
+    {
+      "title": "AT-001 の retryable is True は _is_gemini_requested() の実行環境依存",
+      "detail": "実装は retryable=not _is_gemini_requested() で、テストはこの関数をパッチしていない。テスト実行環境に Gemini 要求フラグ(環境変数等)が立っていると AT-001/AT-002 が失敗し得る。CI 環境では未設定のはずだが、環境非依存にするなら _is_gemini_requested を明示的に False へパッチするのが堅い。",
+      "file": "services/meeting-api/tests/test_final_transcription.py"
+    }
+  ]
+}

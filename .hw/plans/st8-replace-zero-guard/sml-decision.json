@@ -1,0 +1,23 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {
+      "level": "S",
+      "reason": "空の定義・status・retryable・force/webhook/UIの扱いはプランで全て確定済み。実装者の裁量余地なし"
+    },
+    "technical_unknown": {
+      "level": "S",
+      "reason": "単一関数へのガード追加。既存の失敗経路(_set_final_transcription_state + 502 raise)と既存テストのモック様式をそのまま踏襲する"
+    },
+    "impact_scope": {
+      "level": "M",
+      "reason": "変更は1ファイル1関数だが、replace 経路は手動API・sweep(有限リトライループ)・UI status表示・webhook(transcript.finalized)に波及する。呼び出し元2箇所はGrepで裏取り済みだが、failed+retryable=True が sweep の再試行で mode=replace 再実行される相互作用が残る"
+    },
+    "verifiability": {
+      "level": "S",
+      "reason": "既存のモックベース unit テスト様式で決定的に検証可能。CIコマンドも既存 workflow で確定"
+    }
+  },
+  "rule": "1軸でもL相当ならL、迷ったら上へ。impact_scope が M のため総合 M",
+  "review": "M のため Fable 契約レビュー必須"
+}
