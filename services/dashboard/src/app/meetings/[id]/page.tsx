@@ -57,6 +57,7 @@ import type { MeetingStatus, Meeting, RecordingData, CreateBotRequest } from "@/
 import { applyBotCreationDefaults, withPostMeetingAutoStop } from "@/lib/bot-create-defaults";
 import { StatusHistory } from "@/components/meetings/status-history";
 import { cn, parseUTCTimestamp } from "@/lib/utils";
+import { getCustomMeetingTitle, resolveMeetingTitle } from "@/lib/meeting-title";
 import { vexaAPI } from "@/lib/api";
 import { withBasePath } from "@/lib/base-path";
 import { toast } from "sonner";
@@ -608,9 +609,7 @@ export default function MeetingDetailPage() {
         ? withBasePath(`/api/vexa/recordings/${recordingDownloadTarget.recordingId}/master/mp3?type=audio`)
         : recordingDownloadTarget.webmUrl;
     const recordingBaseName =
-      currentMeeting?.data?.name ||
-      currentMeeting?.data?.title ||
-      currentMeeting?.platform_specific_id ||
+      resolveMeetingTitle(currentMeeting?.data, currentMeeting?.platform_specific_id) ||
       "recording";
     const safeRecordingBaseName = String(recordingBaseName)
       .trim()
@@ -679,8 +678,9 @@ export default function MeetingDetailPage() {
   const formatTranscriptForChatGPT = useCallback((meeting: Meeting, segments: typeof transcripts): string => {
     let output = "会議文字起こし\n\n";
     
-    if (meeting.data?.name || meeting.data?.title) {
-      output += `タイトル: ${meeting.data?.name || meeting.data?.title}\n`;
+    const copyTitle = getCustomMeetingTitle(meeting.data);
+    if (copyTitle) {
+      output += `タイトル: ${copyTitle}\n`;
     }
     
     if (meeting.start_time) {
@@ -1220,7 +1220,7 @@ export default function MeetingDetailPage() {
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
-          <span className="text-sm font-medium truncate">{currentMeeting.data?.name || currentMeeting.platform_specific_id}</span>
+          <span className="text-sm font-medium truncate">{resolveMeetingTitle(currentMeeting.data, currentMeeting.platform_specific_id)}</span>
           <Badge className={cn("shrink-0", statusConfig.bgColor, statusConfig.color)}>
             {statusConfig.label}
           </Badge>
@@ -1326,14 +1326,14 @@ export default function MeetingDetailPage() {
             <div className="flex items-center gap-3 min-w-0">
               <div className="flex items-center gap-2 group min-w-0">
                 <h1 className="text-xl font-bold tracking-tight truncate">
-                  {currentMeeting.data?.name || currentMeeting.data?.title || currentMeeting.platform_specific_id}
+                  {resolveMeetingTitle(currentMeeting.data, currentMeeting.platform_specific_id)}
                 </h1>
                 <Button
                   size="icon"
                   variant="ghost"
                   className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
                   onClick={() => {
-                    setEditedTitle(currentMeeting.data?.name || currentMeeting.data?.title || "");
+                    setEditedTitle(getCustomMeetingTitle(currentMeeting.data));
                     setIsEditingTitle(true);
                   }}
                 >
@@ -1644,12 +1644,12 @@ export default function MeetingDetailPage() {
                 <div 
                   className="flex items-center gap-1 group cursor-pointer min-w-0"
                   onClick={() => {
-                    setEditedTitle(currentMeeting.data?.name || currentMeeting.data?.title || "");
+                    setEditedTitle(getCustomMeetingTitle(currentMeeting.data));
                     setIsEditingTitle(true);
                   }}
                 >
                   <span className="text-xs font-semibold truncate">
-                    {currentMeeting.data?.name || currentMeeting.data?.title || currentMeeting.platform_specific_id}
+                    {resolveMeetingTitle(currentMeeting.data, currentMeeting.platform_specific_id)}
                   </span>
                   <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 text-muted-foreground" />
                 </div>

@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { formatDistanceToNow, format } from "date-fns";
 import { ja } from "date-fns/locale";
-import { ChevronRight, Calendar, MessageSquare, Pencil, Check, X, Monitor } from "lucide-react";
+import { ChevronRight, Calendar, Clock, FileText, MessageSquare, Pencil, Check, X, Monitor } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import type { Meeting } from "@/types/vexa";
 import { getDetailedStatus } from "@/types/vexa";
 import { cn, parseUTCTimestamp } from "@/lib/utils";
+import { getCustomMeetingTitle, resolveMeetingTitle } from "@/lib/meeting-title";
 import { useMeetingsStore } from "@/stores/meetings-store";
 import { toast } from "sonner";
 import { withBasePath } from "@/lib/base-path";
@@ -78,9 +79,10 @@ function PlatformIcon({ platform, className }: { platform: string; className?: s
 export function MeetingCard({ meeting }: MeetingCardProps) {
   const statusConfig = getDetailedStatus(meeting.status, meeting.data);
   const updateMeetingData = useMeetingsStore((state) => state.updateMeetingData);
-  const rawTitle = meeting.data?.name || meeting.data?.title;
-  const calendarTitle = meeting.data?.calendar_title || meeting.data?.calendar_event?.title;
-  const displayTitle = rawTitle || calendarTitle || meeting.platform_specific_id || "無題の会議";
+  const customTitle = getCustomMeetingTitle(meeting.data);
+  const hasCustomTitle = customTitle !== "";
+  const displayTitle = resolveMeetingTitle(meeting.data, meeting.platform_specific_id);
+  const participants = meeting.data?.participants ?? [];
   const timeSource = meeting.start_time || meeting.created_at;
   const isActive = meeting.status === "active";
   
@@ -182,7 +184,7 @@ export function MeetingCard({ meeting }: MeetingCardProps) {
   const handleStartEdit = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setEditedTitle(rawTitle || calendarTitle || "");
+    setEditedTitle(customTitle);
     setIsEditingTitle(true);
   };
 
@@ -350,18 +352,36 @@ export function MeetingCard({ meeting }: MeetingCardProps) {
               </div>
             </div>
           ) : (
-            <button
-              type="button"
-              className="group/title -m-1 flex w-[calc(100%+0.5rem)] items-start gap-2 rounded-lg p-1 text-left hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-              title="クリックしてタイトルを編集"
-              aria-label={`「${displayTitle}」のタイトルを編集`}
-              onClick={handleStartEdit}
-            >
-              <h3 className="line-clamp-2 flex-1 text-sm font-semibold leading-snug tracking-tight transition-colors group-hover/title:text-primary">
-                {displayTitle}
-              </h3>
-              <Pencil className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/70 transition-colors group-hover/title:text-primary" />
-            </button>
+            <>
+              <div className="flex items-start gap-2">
+                <h3 className="line-clamp-2 flex-1 text-sm font-semibold leading-snug tracking-tight transition-colors group-hover:text-primary">
+                  {displayTitle}
+                </h3>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="h-6 w-6 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                  aria-label="タイトルを編集"
+                  onClick={handleStartEdit}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+
+              {hasCustomTitle && meeting.platform_specific_id && (
+                <p className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">
+                  {meeting.platform_specific_id}
+                </p>
+              )}
+
+              {participants.length > 0 && (
+                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                  参加者: {participants.slice(0, 3).join(", ")}
+                  {participants.length > 3 && ` ほか${participants.length - 3}名`}
+                </p>
+              )}
+            </>
           )}
 
         </div>
@@ -373,7 +393,7 @@ export function MeetingCard({ meeting }: MeetingCardProps) {
                 <TooltipTrigger asChild>
                   <div className="flex cursor-help items-center gap-1.5 text-muted-foreground">
                     <Calendar className="h-3 w-3" />
-                    <span>{format(parseUTCTimestamp(timeSource), "M月d日", { locale: ja })}</span>
+                    <span>{format(parseUTCTimestamp(timeSource), "yyyy年M月d日", { locale: ja })}</span>
                   </div>
                 </TooltipTrigger>
                 <TooltipContent side="top">
@@ -391,11 +411,36 @@ export function MeetingCard({ meeting }: MeetingCardProps) {
               </Tooltip>
             )}
 
+            {timeSource && (
+              <div className="flex items-center gap-1.5 text-muted-foreground">
+                <Clock className="h-3 w-3" />
+                <span>{formatDistanceToNow(parseUTCTimestamp(timeSource), { addSuffix: true, locale: ja })}</span>
+              </div>
+            )}
+
             {duration !== null && (
               <div className="flex items-center gap-1.5 text-muted-foreground">
                 <MessageSquare className="h-3 w-3" />
                 <span>{formatDuration(duration)}</span>
               </div>
+            )}
+
+            {typeof meeting.data?.notes === "string" && meeting.data.notes.trim() && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex cursor-help items-center gap-1.5 text-muted-foreground">
+                    <FileText className="h-3 w-3" />
+                    <span>メモ</span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-xs">
+                  <div className="text-xs text-muted-foreground">
+                    {meeting.data.notes.length > 100
+                      ? `${meeting.data.notes.substring(0, 100)}...`
+                      : meeting.data.notes}
+                  </div>
+                </TooltipContent>
+              </Tooltip>
             )}
           </div>
 
