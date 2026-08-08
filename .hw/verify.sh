@@ -18,6 +18,12 @@ output="$(make smoke 2>&1)"
 smoke_status=$?
 printf '%s\n' "$output"
 
+# PreToolUse フック自身の退行検査。全 Bash コマンドで走るフックなので、壊すと
+# 全エージェントが止まる。「CI > ローカルゲート > エージェント」の序列にフックを載せる。
+if [ -f .hw/tests/pr-create-intercept.test.sh ]; then
+  bash .hw/tests/pr-create-intercept.test.sh .hw/hooks/pr-create-intercept.sh || exit 1
+fi
+
 # checks/run は失敗を "  <赤>CHECK_ID<リセット>" の行で出す。集計行("3 failed out of
 # 97 checks")は数字始まりなのでこのパターンに合わない。
 failed="$(printf '%s\n' "$output" | python3 -c '

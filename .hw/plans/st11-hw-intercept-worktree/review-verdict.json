@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "task_id": "st11-hw-intercept-worktree",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "5cae3a05550e8679b156e88652b0dfa2193d30f1",
+  "reviewed_commit": "9bc3e888b5ca5fdae9953c8e44856b767b89bb25",
+  "target_sha256": "sha256:2c8f48933487f7bf75ae13c77d400ea69750cae58fbe7113a839a357b9a48e74",
+  "contract_sha256": "sha256:67bb19cdaf9865105af20308856e2926d75ad94011678dcef5f57dac571ecd89",
+  "prompt_sha256": "sha256:613996b3058404f86e2f2c6dfc20ca9e774a878754285c2a912fb87845c09408",
+  "response_sha256": "sha256:96d0269611c67d64043c7b0ff16580e62b0cefa6ae5565a096be852ba42a6a86",
+  "created_at": "2026-08-08T04:27:21.288095+00:00",
+  "verdict": "READY",
+  "summary": "st11-hw-intercept-worktree の差分を検証契約に対して静的に全件トレースした。フックは payload を先読みし python3 で SKIP/DIR/FAIL の3値判定を行い、cd 連鎖・--head worktree 解決・payload cwd・プロセス cwd の優先順位を契約どおり実装している。AT-001〜011 の各 fixture 条件で期待 exit code と stub gate 実行ディレクトリが一致することを机上確認。解決不能経路(AT-007/010/011)は FAIL → exit 2 の fail-closed、非 gh 経路(AT-001/020)は JSON 解析失敗を含め必ず exit 0 の fail-open で、FP-001/FP-002 の非対称を正しく維持。FP-003(pr-ready-gate.sh / hd-gate.sh 無改変)と FP-004(verify.sh はテスト実行ブロック追記のみ)は差分から直接確認。NFT-002(依存 bash/python3/git/coreutils のみ)と RF-001(cwd 欠落フォールバック + AT-006 恒久検査)も充足。契約違反は0件のため READY。ただし本セッションでは実行ツールが使えず、AT-101〜103(リポジトリ外テンプレート同期)・AT-020/NFT-001/NFT-003 の実出力は差分から検証不能のため、evidence pack の実出力確認を gate 側で行うことを前提とする(confidence: medium の理由)。READY は対象差分 hash sha256:2c8f4893…・契約 hash sha256:67bb19cd… に束縛される。",
+  "confidence": "medium",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "AT-101〜103・AT-020・NFT-001・NFT-003 は evidence pack の実出力確認が前提",
+      "detail": "テンプレート(~/.claude/skills/hw-init/template/)は git 管理外のため、AT-101〜103 の同一性・全ケース通過はコミット差分からは原理的に検証できない。AT-020 / NFT-001 / NFT-003 も実行時証拠である。契約の evidence pack required: yes に基づき、pr-ready-gate 通過時にこれらのコマンド実出力が evidence として存在することを確認すること。欠落していればこの READY の前提が崩れる。",
+      "file": ".hw/plans/st11-hw-intercept-worktree/verification-contract.md"
+    },
+    {
+      "title": "python3 実行自体の失敗は gh pr create でも SKIP(fail-open)になる",
+      "detail": "decision の捕捉が `2>/dev/null || true` のため、python3 バイナリ欠落や環境破損で解析プロセス自体が起動失敗すると、`gh pr create` を含むコマンドでも decision が空 → SKIP → exit 0 でゲートを素通りする。これは現行(base)と同等の挙動であり契約 FP-002 の対象外(AT-007/010/011 は python 内 FAIL 経路で担保)だが、理論上のバイパス面として認識しておく価値がある。将来強化するなら「gh pr create の文字列一次判定を bash 側で行い、その後の解析失敗のみ exit 2」の二段構成が候補。",
+      "file": ".hw/hooks/pr-create-intercept.sh"
+    },
+    {
+      "title": "引用符内の 'gh pr create' 文字列・コマンド置換の誤検出は既知の限界として hd-log 追跡を検討",
+      "detail": "コマンド文字列の substring/正規表現による静的解析のため、`echo \"gh pr create\"` のような引用符内文字列でもゲートが起動し、コマンド置換を含む cd は FAIL で block される。plan.md に「誤検出は block 方向に倒れる(緩和ではない)」と明記済みで契約適合だが、実運用でエージェントが不可解な block に遭遇し得るカテゴリなので、発生時は .hw/rules/hd-log.tsv で追跡できるようにしておくとよい。",
+      "file": ".hw/hooks/pr-create-intercept.sh"
+    }
+  ]
+}

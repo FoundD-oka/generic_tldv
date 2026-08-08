@@ -1,0 +1,10 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": "S: 失敗ケース・修正対象・非緩和の要件が引き継ぎ文書で確定しており、クライアント合意済み。",
+    "technical_unknown": "M: Codex 側フック payload に cwd が含まれるか未確認(設計でフォールバック吸収済みだが実挙動は未検証)。コマンド文字列の静的解析には引用符・コマンド置換のエッジケースが残る。",
+    "impact_scope": "M: このフックは全エージェントの全 Bash コマンドで実行される。非 gh 経路に退行を入れると全セッションの Bash が止まるため、変更対象ファイルは3つでも影響面は広い。",
+    "verifiability": "S: stdin に JSON を流し exit code と stub gate の実行ディレクトリを検査する単体テストで全要件が機械検証可能。verify.sh 経由で CI が再実行する。"
+  },
+  "reason": "技術的未知(Codex payload 実挙動)と影響範囲(全 Bash コマンドで走るフック)の2軸が M 相当。L 相当の軸はない。fail-closed 原則に従い M とし、Fable 契約レビューを必須とする。"
+}
