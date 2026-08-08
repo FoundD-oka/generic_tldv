@@ -1,0 +1,23 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {
+      "level": "S",
+      "reason": "監査の『ストリーミング化または署名URL直配信』の選択はplannerが調査に基づき前者に確定済み。window方式・env名・既定値・タイムアウトの掛け方(ヘッダ受信のみ)・変更しない境界まで指定済みで裁量余地は小さい"
+    },
+    "technical_unknown": {
+      "level": "M",
+      "reason": "StreamingResponse+to_threadのwindowed読みは既知パターンだが、ストリーム開始後の切断・例外時のStarlette挙動、既存mockベーステスト群(voiceprint系含む)への波及は実装時に判明する要素が残る。download_file_rangeのend-inclusive契約は3実装ともソース+テストで裏取り済み"
+    },
+    "impact_scope": {
+      "level": "M",
+      "reason": "_build_storage_media_responseは再生(/raw)・mp3ダウンロード・voiceprint master取得が共有する配信経路の共通関数。dashboard proxyは全API中継の共通ルートだが変更はメディア分岐のみに限定。実ブラウザでの長尺再生・Cloud Run実測は機械検証不能"
+    },
+    "verifiability": {
+      "level": "M",
+      "reason": "206/200セマンティクス・window分割・バイト一致・タイムアウトはunitで決定的に検証可能。ただし本質要求『イベントループ非ブロック』はto_thread経由という構造検証による代理確認で、負荷下の実測はローカルでは行えない"
+    }
+  },
+  "rule": "1軸でもL相当ならL、迷ったら上へ。technical_unknown / impact_scope / verifiability が M のため総合 M",
+  "review": "M のため Fable 契約レビュー必須"
+}
