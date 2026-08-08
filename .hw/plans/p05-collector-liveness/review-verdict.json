@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "task_id": "p05-collector-liveness",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "5cae3a05550e8679b156e88652b0dfa2193d30f1",
+  "reviewed_commit": "0e9d3452bebe054c30a904303af371ed30f44e1a",
+  "target_sha256": "sha256:2768aff4cc95bb6a6ffd87ba2a77eb7e283077bf5594bef1b4382fb516eb22ce",
+  "contract_sha256": "sha256:6557251e02e8a7ab22d0c4ca10a9d7aa57a2bb31a7134e66617be15e6e30013e",
+  "prompt_sha256": "sha256:76667628f326b640f9dce31831421cf34365c70b6e58850dc96939c0a5983364",
+  "response_sha256": "sha256:98417cfcdc0190a491a749c99b7ca43f74ba7d1dabbb60f3da8c1ea102ce54e9",
+  "created_at": "2026-08-08T05:39:03.958373+00:00",
+  "verdict": "READY",
+  "summary": "p05-collector-liveness(reviewed commit 0e9d345、base 5cae3a0)を検証契約 sha256:6557251e… と差分のみを根拠に静的照合。AT-001: livenessProbeブロックは契約の逐語期待形(path=/health/collector, port=http, 45/20/3, インデント10/12/14)と完全一致し、旧 `path: /health` 行は除去済み。FP-001: readinessProbe(/readyz, 15/10/3)は差分で不触・逐語不変。FP-002: 変更ファイルはhelmテンプレート1件+.hw/plans/p05-collector-liveness/配下5件のみで禁止リストとの交差なし。FP-003/FP-004: main.py・Chart.yamlは差分に含まれず受け口とversion 0.10.6+3が維持。NFT-001: 追加コメント(lag>100 AND idle>60s、20s×3=60s)はmain.py実装セマンティクスと矛盾なし。AT-002/FP-005はレビューコンテキストに実行ツールがなく未実行だが、差分は純YAML区間のみで新規失敗を生む経路がなく、実行ログの確定はpr-ready-gateとCI(最終権威)に委ねる(advisory化)。violations 0件のためREADY。本判定は対象差分hash sha256:2768aff4…・契約hash sha256:6557251e…に束縛。",
+  "confidence": "high",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "AT-002/FP-005 の実行ログをevidence packで確定させる",
+      "detail": "本レビュー環境では bash 実行が不可のため `deploy/helm/tests/test_helm_lint.sh` と `.hw/verify.sh` は未実行。差分は純YAML区間の書き換えのみで両者を落とす構造的経路はないが、契約のEvidence(exit 0 / 新規失敗0件の実行ログ)はevidence packに収め、pr-ready-gateとCI(最終権威)で確定させること。",
+      "file": ".hw/plans/p05-collector-liveness/verification-contract.md"
+    },
+    {
+      "title": "次回LKEデプロイ時のprobe配線の運用確認",
+      "detail": "契約の既知検証限界どおり、実クラスタでのprobe発火(consumer停滞→pod再起動)はローカル検証不能。次回LKEデプロイ時に `kubectl describe pod` でlivenessProbeのpathが /health/collector であることを確認する(P0-9相当の運用確認)。",
+      "file": "deploy/helm/charts/vexa/templates/deployment-meeting-api.yaml"
+    },
+    {
+      "title": "コメントの「worst case ~60s」は厳密には最大約80s",
+      "detail": "停滞がprobe成功直後に始まった場合、初回失敗まで最大20s+追加2失敗で40s、計~60〜80sが停滞発生から再起動判定までの実時間になり得る。NFT-001が正とする「20s×3=60s」(連続失敗からの検知時間)には合致しており違反ではないが、将来コメントを触る機会があれば「detection within ~60s of first failed probe」等へ精緻化する余地がある。",
+      "file": "deploy/helm/charts/vexa/templates/deployment-meeting-api.yaml"
+    }
+  ]
+}

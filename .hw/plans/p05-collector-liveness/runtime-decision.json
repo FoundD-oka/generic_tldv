@@ -1,0 +1,10 @@
+{
+  "runtime": "inline",
+  "axes": {
+    "duration": false,
+    "state_volume": false,
+    "delegation": false,
+    "recurrence": false
+  },
+  "reason": "helmテンプレート1ファイル・数行の書き換えと逐語契約テストで、想定所要は30分未満。状態は単一コンテキストに収まり、並行委譲・反復資産化も不要。既定どおり inline(Opus 5 implementer)。"
+}

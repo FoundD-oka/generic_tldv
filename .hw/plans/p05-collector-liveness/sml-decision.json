@@ -1,0 +1,23 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {
+      "level": "S",
+      "reason": "監査文書(ST-21)と main.py:203-260 の docstring が変更内容(livenessProbe を /health/collector へ)を一意に指定しており、解釈の余地がない。Chart.yaml 非bump・readiness 不変・compose 非対象もプランで確定済み。"
+    },
+    "technical_unknown": {
+      "level": "S",
+      "reason": "503 発火条件(lag>100 かつ idle>60s、一時エラーは200)と起動時挙動(initialDelaySeconds 45 が redis 未初期化 503 を吸収)をコードで確認済み。フラッピングリスクは分析済み。"
+    },
+    "impact_scope": {
+      "level": "S",
+      "reason": "変更は helm テンプレート1ファイルの純YAML区間のみ。デプロイ経路はローカルチャートパス参照で、chart-release.yml は version 不変のため no-op と確認済み。st9〜st14・p05-detail-wiring・Codex並行変更と非交差。"
+    },
+    "verifiability": {
+      "level": "M",
+      "reason": "ローカル・CIとも helm レンダリング不可、実クラスタでの probe 発火挙動は検証不能。逐語契約+構造チェックまでしか機械検証できず、最終確認は次回デプロイ時の運用確認に残る。"
+    }
+  },
+  "rule": "1軸でもL相当ならL、迷ったら上へ。verifiability が M のため総合 M",
+  "review": "M のため Fable 契約レビュー必須"
+}
