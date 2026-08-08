@@ -18,9 +18,11 @@
    "$V/bin/python" -c "import numpy, cryptography"   # exit 0 必須
    "$V/bin/pytest" services/meeting-api/tests/ \
      --ignore=services/meeting-api/tests/test_integration_live.py \
-     --deselect "services/meeting-api/tests/integration/test_transcription_dictionary_postgres.py::test_real_postgres_advisory_lock_enforces_200_term_cap"
+     --deselect "tests/integration/test_transcription_dictionary_postgres.py::test_real_postgres_advisory_lock_enforces_200_term_cap"
    ```
-   最終 pytest が **exit 0**(deselect した postgres 1件以外の failed ゼロ)。
+   最終 pytest が **exit 0**、かつ summary 行に **`1 deselected` が表示される**
+   こと(deselect の nodeid は pytest rootdir=`services/meeting-api` 相対。
+   deselected が 0 件なら nodeid 不一致で除外が no-op になっているため不合格)。
 
 3. **voiceprint 7件の直接確認**: 同 venv で
    `"$V/bin/pytest" services/meeting-api/tests/test_voiceprint_matching.py -q`
@@ -40,3 +42,6 @@
 上記コマンドの実行ログ(exit code 含む)を .hw/gates/st9-numpy-dep-sync/
 (gitignore領域)へ保存する。push 後の CI は postgres 1件のみ failed
 (`7 failed → 1 failed` 遷移)を確認できれば追加証拠とする。
+
+## 改訂履歴
+| 1 | 2026-08-08 | planner (Fable) | 合格ライン2の deselect nodeid をフルパス表記から rootdir 相対表記へ訂正(pytest rootdir が services/meeting-api/pyproject.toml で決まり前方一致しなかったため)。summary の `1 deselected` 表示要求を追加。テスト集合・合格基準は不変。 |
