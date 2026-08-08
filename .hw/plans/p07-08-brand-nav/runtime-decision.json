@@ -1,0 +1,10 @@
+{
+  "runtime": "inline",
+  "axes": {
+    "duration": false,
+    "state_volume": false,
+    "delegation": false,
+    "recurrence": false
+  },
+  "reason": "8ファイル・数百行未満の表示層変更で所要は1時間以内。状態は1コンテキストに余裕で収まり、並行委譲も反復資産化も不要。既定どおりinline(Opus 5 implementer)で実行する。"
+}

@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "task_id": "p07-08-brand-nav",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "5cae3a05550e8679b156e88652b0dfa2193d30f1",
+  "reviewed_commit": "cd19a80a8a0b8b2b8cf2149ca43e07a4d021f8af",
+  "target_sha256": "sha256:c469fe33ab18160c879f620e07ac86f7543570747eeaa698a8c983221b323142",
+  "contract_sha256": "sha256:ba49c62ac097b0c25f2c3eb45892f42f4649bffe1b696c1ef00b97232a0882b4",
+  "prompt_sha256": "sha256:f30886cf66c4339c8206f2fcb79d92bfe65c243cb5b4f2b436fd405708502787",
+  "response_sha256": "sha256:0b5cd29ed1b4787e7a736cd44a4dc36990281a07bf2cce96d6651ac7ab337fbd",
+  "created_at": "2026-08-08T05:54:12.658361+00:00",
+  "verdict": "READY",
+  "summary": "契約の全項目(AT-001〜AT-006、FP-002/FP-004、NFT-001)を差分ベースで確認し違反なし。vexadark/vexalight参照3箇所のkabosu.svg置換、icon.svg新設+favicon.ico削除、version-chipの外部リンク・全角suffix除去、callback画面の全面日本語化、サイドバー4導線のcopy.nav.*参照追加、契約6点を網羅する新規テスト追加をすべて確認。変更ファイルは許可リスト8件+plan配下のみで保護ファイル非接触。Logo/VersionChipのprops互換とhasConfiguredLogo分岐も維持。FP-001/FP-003の実行証跡はゲート/CIに委ねるが、差分中に既存テストを壊す構造変更は見当たらない。violations 0件のためREADY。",
+  "confidence": "high",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "RF-001 の確認メモが未消化(PR作成時に要対応)",
+      "detail": "file-based metadata(app/icon.svg)が config-based metadata.icons を上書きするという前提の実機確認メモを PR 本文に1行書く義務が契約にある。レビュー時点では PR 未作成のため検証不能。PR 作成時に build 後 HTML の <link rel=\"icon\"> 確認結果を1行記載すること。",
+      "file": ".hw/plans/p07-08-brand-nav/verification-contract.md"
+    },
+    {
+      "title": "version-chip.tsx ヘッダコメントの「Mirror of services/webapp's component」が古くなった",
+      "detail": "dashboard 側だけリンク除去・suffix 廃止したため webapp 側コンポーネントとの mirror 関係は崩れている。このコメントを残すと将来の「同期」作業で外部リンクと全角 suffix が再導入されるリスクがある。Phase 3 の releaseUrl デッドコード整理時にコメントも併せて更新するのが安全。",
+      "file": "services/dashboard/src/components/version-chip.tsx"
+    },
+    {
+      "title": "非リンク化した span に hover スタイルが残存",
+      "detail": "baseClasses に hover:text-foreground / transition-colors が残っており、クリック不能な要素がホバーで反応するためクリック可能に見える。プランは「hover 系 class は残してよい」と明示しているため契約適合だが、UI 一貫性の観点では後続の整理対象候補。",
+      "file": "services/dashboard/src/components/version-chip.tsx"
+    }
+  ]
+}

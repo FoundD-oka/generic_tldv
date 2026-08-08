@@ -30,8 +30,8 @@ function CalendarCallbackContent() {
         setState("error");
         setError(
           oauthError === "access_denied"
-            ? "Google Calendar authorization was cancelled or denied."
-            : `Google Calendar authorization failed: ${oauthError}`
+            ? "Googleカレンダーの連携がキャンセルまたは拒否されました"
+            : `Googleカレンダーの連携に失敗しました: ${oauthError}`
         );
         return;
       }
@@ -39,7 +39,7 @@ function CalendarCallbackContent() {
       if (!code || !stateParam) {
         if (!mounted) return;
         setState("error");
-        setError("Missing OAuth callback parameters");
+        setError("OAuthコールバックのパラメータが不足しています");
         return;
       }
 
@@ -53,7 +53,7 @@ function CalendarCallbackContent() {
       if (!completeResp.ok) {
         if (!mounted) return;
         setState("error");
-        setError(completeData?.error || "Failed to complete Google Calendar OAuth");
+        setError(completeData?.error || "Googleカレンダー連携の完了に失敗しました");
         return;
       }
 
@@ -67,7 +67,7 @@ function CalendarCallbackContent() {
     run().catch((err) => {
       if (!mounted) return;
       setState("error");
-      setError((err as Error).message || "Unexpected error during callback");
+      setError((err as Error).message || "コールバック処理中に予期しないエラーが発生しました");
     });
 
     return () => {
@@ -80,8 +80,8 @@ function CalendarCallbackContent() {
       <CardHeader className="text-center">
         {state === "loading" && (
           <>
-            <CardTitle className="text-xl">Connecting Google Calendar...</CardTitle>
-            <CardDescription>Finalizing your authorization</CardDescription>
+            <CardTitle className="text-xl">Googleカレンダーを接続しています…</CardTitle>
+            <CardDescription>認証を完了しています</CardDescription>
           </>
         )}
 
@@ -92,8 +92,8 @@ function CalendarCallbackContent() {
                 <CheckCircle2 className="h-8 w-8 text-green-600 dark:text-green-400" />
               </div>
             </div>
-            <CardTitle className="text-xl text-green-600 dark:text-green-400">Calendar Connected</CardTitle>
-            <CardDescription>Redirecting...</CardDescription>
+            <CardTitle className="text-xl text-green-600 dark:text-green-400">カレンダーを接続しました</CardTitle>
+            <CardDescription>画面を移動しています…</CardDescription>
           </>
         )}
 
@@ -104,8 +104,8 @@ function CalendarCallbackContent() {
                 <XCircle className="h-8 w-8 text-destructive" />
               </div>
             </div>
-            <CardTitle className="text-xl text-destructive">Calendar Connection Failed</CardTitle>
-            <CardDescription>{error || "Unknown error"}</CardDescription>
+            <CardTitle className="text-xl text-destructive">カレンダー接続に失敗しました</CardTitle>
+            <CardDescription>{error || "不明なエラー"}</CardDescription>
           </>
         )}
       </CardHeader>
@@ -115,7 +115,7 @@ function CalendarCallbackContent() {
         )}
         {state === "error" && (
           <Button onClick={() => router.replace("/meetings")} className="w-full">
-            Back to Meetings
+            会議一覧へ戻る
           </Button>
         )}
       </CardContent>
@@ -127,8 +127,8 @@ function CalendarCallbackLoading() {
   return (
     <Card className="border-0 shadow-xl">
       <CardHeader className="text-center">
-        <CardTitle className="text-xl">Loading...</CardTitle>
-        <CardDescription>Please wait</CardDescription>
+        <CardTitle className="text-xl">読み込み中…</CardTitle>
+        <CardDescription>お待ちください</CardDescription>
       </CardHeader>
       <CardContent className="flex justify-center">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
@@ -143,7 +143,7 @@ export default function GoogleCalendarCallbackPage() {
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center justify-center gap-2 mb-8">
           <Logo size="lg" showText />
-          <p className="text-sm text-muted-foreground">Meeting Transcription</p>
+          <p className="text-sm text-muted-foreground">会議文字起こし</p>
         </div>
         <Suspense fallback={<CalendarCallbackLoading />}>
           <CalendarCallbackContent />
