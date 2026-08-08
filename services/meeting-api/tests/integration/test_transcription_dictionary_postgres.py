@@ -11,6 +11,14 @@ from meeting_api.database import async_session_local
 from meeting_api.models import TranscriptionDictionaryTerm
 from meeting_api.transcription_dictionary import DictionaryTermCreate, create_dictionary_term
 
+pytestmark = pytest.mark.skipif(
+    os.environ.get("RUN_POSTGRES_INTEGRATION_TESTS") != "1",
+    reason=(
+        "実PostgreSQLが必要。RUN_POSTGRES_INTEGRATION_TESTS=1 で有効化"
+        "(tests/run_transcription_dictionary_postgres.sh 経由が正規手順)"
+    ),
+)
+
 
 @pytest.mark.asyncio
 async def test_real_postgres_advisory_lock_enforces_200_term_cap():

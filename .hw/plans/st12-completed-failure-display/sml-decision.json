@@ -1,0 +1,23 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {
+      "level": "S",
+      "reason": "失敗扱いにする completion_reason の集合・label・description の全文・分岐の優先順位・fail-open 方針までプランで確定済み。実装者の裁量余地なし"
+    },
+    "technical_unknown": {
+      "level": "S",
+      "reason": "純粋関数 getDetailedStatus への分岐追加。呼び出し元は meeting-card.tsx と meetings/[id]/page.tsx の2箇所のみで Grep 裏取り済み。テストも既存様式の踏襲"
+    },
+    "impact_scope": {
+      "level": "M",
+      "reason": "変更は表示層1ファイルだが、(a) 既存テストが旧方針(reason 無視で完了表示)を明示的に固定しており方針転換を含む、(b) メインリポジトリの Codex 並行セッションが隣接ファイル meeting-card.tsx に未コミット変更を持つ、(c) バックエンド是正 RF-11 との将来整合という3つの意味的相互作用が残る。迷ったら上へ倒す"
+    },
+    "verifiability": {
+      "level": "S",
+      "reason": "vitest フルスイートは base 5cae3a0 で 28 files / 199 tests 全 pass を planner が実測済み。決定的なユニットテストで完全一致文字列を検証できる"
+    }
+  },
+  "rule": "1軸でもL相当ならL、迷ったら上へ。impact_scope が M のため総合 M",
+  "review": "M のため Fable 契約レビュー必須"
+}

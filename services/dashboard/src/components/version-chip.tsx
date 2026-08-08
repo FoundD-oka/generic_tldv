@@ -1,19 +1,16 @@
 /**
- * <VersionChip /> — small, discoverable label disclosing what OSS version
- * this hosted dashboard pairs with, plus the deploy date. Click → GitHub
- * release notes.
+ * <VersionChip /> — small, non-interactive label disclosing which build of
+ * the dashboard is running, plus the deploy date.
  *
  * Mirror of services/webapp's component, intentionally kept simple so it
  * can stay in sync without sharing a package.
  */
 
-import { RELEASE, releaseUrl } from "@/lib/release-version";
+import { RELEASE } from "@/lib/release-version";
 import { DEFAULT_DASHBOARD_BRAND } from "@/lib/dashboard-brand";
 
 type Variant = "full" | "compact" | "minimal";
 type Look = "pill" | "text";
-
-const VERSION_SUFFIX = "ａ";
 
 export function VersionChip({
   variant = "minimal",
@@ -26,8 +23,7 @@ export function VersionChip({
   className?: string;
   brandName?: string;
 }) {
-  const url = releaseUrl(RELEASE.version);
-  const versionLabel = `${RELEASE.version}${VERSION_SUFFIX}`;
+  const versionLabel = RELEASE.version;
 
   let label: string;
   switch (variant) {
@@ -48,14 +44,11 @@ export function VersionChip({
       : "inline-flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground transition-colors";
 
   return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noopener noreferrer"
-      title={`${brandName} ${versionLabel} · リリース日 ${RELEASE.releaseDate} · リリースノートを開く`}
+    <span
+      title={`${brandName} ${versionLabel} · リリース日 ${RELEASE.releaseDate}`}
       className={baseClasses + " " + className}
     >
       <span>{label}</span>
-    </a>
+    </span>
   );
 }
