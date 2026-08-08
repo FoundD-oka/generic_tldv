@@ -1,0 +1,23 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {
+      "level": "S",
+      "reason": "表示仕様(参加者3名+ほかN名、閾値なし相対日時、コード補助のfont-mono表示、鉛筆ボタンによる編集分離、タイトル優先順位)はプランで全て確定済み。実装者裁量は残っていない"
+    },
+    "technical_unknown": {
+      "level": "S",
+      "reason": "0437195に実在した実装パターンの現行構造への移植であり、依存追加なし。date-fns/lucide-react/Tooltipは全て既存利用実績あり"
+    },
+    "impact_scope": {
+      "level": "M",
+      "reason": "meetings/[id]/page.tsx(1700行超)の7箇所を置換し、既存の文字列契約テスト(test_meeting_cards_ui)を書き換える。p05/st12の本日マージ分と同一ファイルを触るため、置換漏れ・行番号ずれによる意図外変更のリスクが残る"
+    },
+    "verifiability": {
+      "level": "M",
+      "reason": "タイトル解決はヘルパー純関数化で挙動テスト可能だが、カードの表示要素はソース文字列契約による間接検証であり、見た目の正しさ自体は自動検証できない"
+    }
+  },
+  "rule": "1軸でもL相当ならL、迷ったら上へ。impact_scope と verifiability が M のため総合 M",
+  "review": "M のため Fable 契約レビュー必須"
+}

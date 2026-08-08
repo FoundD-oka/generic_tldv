@@ -1,0 +1,10 @@
+{
+  "runtime": "inline",
+  "axes": {
+    "duration": false,
+    "state_volume": false,
+    "delegation": false,
+    "recurrence": false
+  },
+  "reason": "対象6ファイル・置換仕様確定済みで実装は1セッションに収まる(想定1〜2時間)。参照すべき状態は plan.md と base-commit 差分のみでコンテキストに載る。並行委譲は不要、反復手順でもない。よって既定の inline(Opus 5 implementer)"
+}
