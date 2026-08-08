@@ -1,0 +1,10 @@
+{
+  "runtime": "inline",
+  "axes": {
+    "duration": false,
+    "state_volume": false,
+    "delegation": false,
+    "recurrence": false
+  },
+  "reason": "純粋関数への分岐追加とテスト改訂のみで想定所要は1時間未満。作業状態は対象関数1つとテストファイル1つでコンテキストに収まり、並行委譲は不要、反復手順として資産化する性質もない。4軸すべて非該当のため既定どおり inline(Opus 5 implementer)"
+}
