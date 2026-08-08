@@ -1,0 +1,23 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {
+      "level": "S",
+      "reason": "リトライ回数(3)・間隔(1s×2^n+ジッタ、上限10s)・リトライ対象の分類(ConnectError/ConnectTimeout/500/502/503/504のみ)・429即時伝播・ReadTimeout非リトライ・冪等性方針(未処理確定クラスのみ再送で二重起動ゼロ)をプランで全て確定済み。実装者の裁量余地なし"
+    },
+    "technical_unknown": {
+      "level": "S",
+      "reason": "既存の retry.py(webhook_delivery で実績あり)への後方互換な引数追加と、単一関数 _spawn_via_runtime_api の内部再構成のみ。runtime-api 側の 500 時 state クリーンアップ(api.py:274-279)とコンテナ名の毎回 uuid 生成は読解で確認済み"
+    },
+    "impact_scope": {
+      "level": "M",
+      "reason": "変更は2ファイルだが、_spawn_via_runtime_api は meeting bot / agent / browser-session の3経路が共有し、retry.py は webhook_delivery とも共有する横断ポイント。呼び出し元は grep で全数裏取り済み(3箇所+webhook 1箇所)だが、共有部品の変更である点で M 相当"
+    },
+    "verifiability": {
+      "level": "S",
+      "reason": "mock client の side_effect 列で全分岐を決定的に検証可能。sleep も patch で排除。全体はベースライン比較方式(591 passed / 10 skipped / 1 failed 既知)で機械判定できる"
+    }
+  },
+  "rule": "1軸でもL相当ならL、迷ったら上へ。impact_scope が M のため総合 M",
+  "review": "M のため Fable 契約レビュー必須"
+}
