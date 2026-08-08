@@ -32,7 +32,7 @@
 
 | ID | Requirement | Method | Evidence |
 |---|---|---|---|
-| NFT-001 | lint 通過 | command | `cd services/dashboard && npm run lint` exit 0 |
+| NFT-001 | lint 品質を悪化させない(ベースライン比較方式): base-commit 96c0785 と HEAD のそれぞれで `cd services/dashboard && npx eslint . --format json` を実行し、問題集合を file+rule+message 単位の entry で比較して、新規 error 0件 かつ 新規 warning 0件。exit code は base 時点で既に非0(148 problems = 61 errors / 87 warnings、いずれも対象外ファイルの既存負債)のため合格条件に用いない | command | base / HEAD 各 clean checkout での eslint JSON 出力と entry 差分の比較ログ(新規 error 0 / 新規 warning 0 を示すもの) |
 | NFT-002 | 差分スコープ: 変更ファイルは plan.md「対象」の6ファイル(+ `.hw/plans/p06-ui-regression-restore/` 配下)のみ | command | `git diff --name-only <base-commit>..HEAD` が対象一覧と一致 |
 
 ## Gate Requirements
@@ -45,3 +45,7 @@
 - kpi backcast roadmap required: no
 - external consultation required: no
 - external consultation provider: not needed
+
+## 改訂履歴
+
+- 2026-08-08 NFT-001 改訂(planner 承認): base-commit 96c0785 時点で lint が既に exit 1(61 errors / 87 warnings、全て対象外ファイルの既存負債)であり「exit 0」基準は検証不能と判明。合格の実質(本タスクが lint 品質を悪化させないこと)は変えず、ベースライン比較方式(base と HEAD の eslint 問題集合を file+rule+message 単位で比較し新規 error / warning 0件)へ変更。st8(d34156a)の前例に準拠。
