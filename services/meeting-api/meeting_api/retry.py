@@ -33,6 +33,7 @@ async def with_retry(
     max_retries: int = MAX_RETRIES,
     base_delay: float = BASE_DELAY,
     label: str = "",
+    is_retryable: Callable[[Exception], bool] | None = None,
     **kwargs: Any,
 ) -> Any:
     """Call an async function with exponential backoff on transient failures."""
@@ -42,7 +43,7 @@ async def with_retry(
             return await fn(*args, **kwargs)
         except Exception as e:
             last_exc = e
-            if attempt < max_retries and _is_retryable(e):
+            if attempt < max_retries and (is_retryable or _is_retryable)(e):
                 delay = min(base_delay * (2 ** attempt) + random.uniform(0, 0.5), MAX_DELAY)
                 tag = f" [{label}]" if label else ""
                 logger.warning(f"Retry{tag} attempt {attempt + 1}/{max_retries + 1}: {e}. Retrying in {delay:.1f}s...")
