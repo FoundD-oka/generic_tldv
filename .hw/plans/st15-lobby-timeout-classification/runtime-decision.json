@@ -1,0 +1,10 @@
+{
+  "runtime": "inline",
+  "axes": {
+    "duration": false,
+    "state_volume": false,
+    "delegation": false,
+    "recurrence": false
+  },
+  "reason": "変更は vexa-bot 内の4ソースファイル+テスト2件+package.json 1行で、想定所要は1セッション内(1〜2時間未満)。作業状態は plan と対象ファイルだけでコンテキストに収まり、大量ログ分析・並行委譲・反復手順の資産化のいずれも不要。4軸すべて非該当のため既定どおり inline(Opus 5 implementer)"
+}

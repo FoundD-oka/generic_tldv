@@ -3,6 +3,7 @@ import { BotConfig } from "../../types";
 import { log, callStartupCallback } from "../../utils";
 import { hasStopSignalReceived, triggerPostAdmissionCamera, triggerPostAdmissionChat, startVideoRecordingIfNeeded, enterBrowserFullscreen } from "../../index";
 import { enableTeamsLiveCaptions } from "../msteams/captions";
+import { classifyAdmissionError } from "./admission-classifier";
 
 export type AdmissionDecision = {
   admitted: boolean;
@@ -139,13 +140,7 @@ export async function runMeetingFlow(
     const [admissionResult] = await Promise.all([
       strategies
         .waitForAdmission(page, botConfig.automaticLeave.waitingRoomTimeout, botConfig)
-        .catch((error: any) => {
-          const msg: string = error?.message || String(error);
-          if (msg.includes("rejected by meeting admin")) {
-            return { admitted: false, rejected: true, reason: "admission_rejected_by_admin" } as AdmissionDecision;
-          }
-          return { admitted: false, rejected: false, reason: "admission_timeout" } as AdmissionDecision;
-        }),
+        .catch((error: any) => classifyAdmissionError(error) as AdmissionDecision),
       strategies.prepare(page, botConfig),
     ]);
 

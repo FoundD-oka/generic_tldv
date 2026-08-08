@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "task_id": "st15-lobby-timeout-classification",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "525306f8dd29d0e5845f4d9536da5c21edd43f01",
+  "reviewed_commit": "db4e86572d71051c7d5ff531e74e5e74f86e0893",
+  "target_sha256": "sha256:5846ff4c1eb891672c5c1e063eab3247f62a9f056f986038a975eff166418ddd",
+  "contract_sha256": "sha256:0626eef6f8e4abe133ee77b8c45752b53ae127768e3c214fcef6975a810ce2f6",
+  "prompt_sha256": "sha256:e64642767064f37e307b7afa3696be9ef4d50e8991d705b7b17337586868fda3",
+  "response_sha256": "sha256:36d5bc6d13a481c21f27ba1ca0349560024cb03b2710a3821aff558be6727101",
+  "created_at": "2026-08-08T08:55:15.547018+00:00",
+  "verdict": "READY",
+  "summary": "st15-lobby-timeout-classification の差分は検証契約の全項目(AT-001〜AT-005 の構造要件、FP-001〜FP-004、アンチゲーミング条項)に静的照合で適合。admission.ts の lobby_timeout タグ付け、outcome 優先の純関数分類器、meetingFlow.ts の catch 置換、unified-callback.ts の exit-0 join_failure case 追加、テスト2件と package.json のチェーン追加がプラン記載どおりで、既存テスト・needle の弱体化やスコープ外差分はゼロ。違反0件のため READY。ただし本レビューセッションでは実行系ツールが無効のため npm test 実行ログ(AT-005/NFT-001/ベースライン比較)の evidence pack を直接検分できておらず、.hw/gates/ の証跡確認は pr-ready-gate に委ねる。",
+  "confidence": "high",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "evidence pack はゲートでの実在確認が必要",
+      "detail": "本セッションでは Bash/Glob 等が無効で .hw/gates/st15-lobby-timeout-classification/ の base/head npm test ログと diff --name-only 出力を検分できなかった。差分の静的照合ではテストと実装が完全整合しており fail 要因は見当たらないが、AT-005・NFT-001・ベースライン比較の証跡実在は pr-ready-gate.sh で必ず確認すること。証跡が欠落・不整合なら本 READY は運用上無効として扱う。",
+      "file": ".hw/gates/st15-lobby-timeout-classification/"
+    },
+    {
+      "title": "AdmissionErrorDecision と AdmissionDecision の型二重化",
+      "detail": "分類器は shared→googlemeet 依存回避のため独自型 AdmissionErrorDecision を返し、meetingFlow.ts で `as AdmissionDecision` キャストしている。将来 AdmissionDecision の shape が変わるとキャストが乖離を隠す可能性がある。AdmissionDecision 側を classifier の型から合成する等の統一は契約外の改善案(次タスク以降で検討)。",
+      "file": "services/vexa-bot/core/src/platforms/shared/meetingFlow.ts"
+    },
+    {
+      "title": "gracefulLeave 出現回数チェックの脆さ",
+      "detail": "FP-002 の expectFileOccurrences は needle の出現回数を厳密に 2 で固定しているため、将来正当な3箇所目の graceful leave 呼び出しを追加すると誤検知で fail する。その時点で契約改訂とセットでテスト更新が必要になる点を hd-log 的に認識しておくとよい。",
+      "file": "services/vexa-bot/core/src/platforms/shared/admission-classifier.test.ts"
+    }
+  ]
+}

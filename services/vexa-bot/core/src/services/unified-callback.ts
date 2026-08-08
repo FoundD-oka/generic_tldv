@@ -275,6 +275,12 @@ export function mapExitReasonToStatus(
         return { status: "completed", completionReason: "evicted" };
       case "admission_rejected_by_admin":
         return { status: "completed", completionReason: "awaiting_admission_rejected" };
+      case "join_failure":
+        // Google Meet admission phase: bot reached the page but never reached
+        // the lobby and no meeting indicators appeared. Distinct from
+        // admission_timeout (lobby reached, host did not admit). meeting-api's
+        // Pack D canonicalization routes completed+join_failure to FAILED.
+        return { status: "completed", completionReason: "join_failure" };
       default:
         return { status: "completed", completionReason: "stopped" };
     }

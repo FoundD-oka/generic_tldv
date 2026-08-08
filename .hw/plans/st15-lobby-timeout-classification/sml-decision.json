@@ -1,0 +1,23 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {
+      "level": "S",
+      "reason": "監査ST-3の文字通りの指摘はプランでreframe済みで、3区分のマッピング先・exitCode・fallback挙動・対象ファイル7点まで全て確定。実装者の裁量余地なし"
+    },
+    "technical_unknown": {
+      "level": "S",
+      "reason": "純関数の分類ロジックとcase追加のみ。外部API・DOM・タイミング依存なし。下流(meeting-api Pack D canonical化、dashboard st12 COMPLETED_FAILURE_REASONS)がjoin_failureを受理することはソース読解で裏取り済み"
+    },
+    "impact_scope": {
+      "level": "M",
+      "reason": "meetingFlow.tsは3プラットフォーム共有の退出経路。フォールバックでTeams/Zoomの現状挙動を維持する設計だが、その保証は静的読解とユニットテストのみで、実会議でのe2e確認はできない。また真のjoin failureのcompletion_reasonがawaiting_admission_timeout→join_failureへ変わるのは意図した挙動変更だが本番データの分布に影響する"
+    },
+    "verifiability": {
+      "level": "M",
+      "reason": "分類器・mapExitReasonToStatusは決定的にユニットテスト可能だが、vexa-botにCIが無くローカル実行ログが証跡(ベースライン比較方式)。ロビータイムアウトの実挙動(実際のGoogle Meet待機室)は機械検証不能で、構造needleによる固定に留まる"
+    }
+  },
+  "rule": "1軸でもL相当ならL、迷ったら上へ。impact_scope と verifiability が M のため総合 M",
+  "review": "M のため Fable 契約レビュー必須"
+}
