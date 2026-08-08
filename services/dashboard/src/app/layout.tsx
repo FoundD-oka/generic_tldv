@@ -19,7 +19,7 @@ const geistMono = Geist_Mono({
 });
 
 const metadataBrand = resolveDashboardBrand(process.env);
-const metadataIcon = metadataBrand.logoDark || metadataBrand.logoLight || withBasePath("/icons/vexadark.svg");
+const metadataIcon = metadataBrand.logoDark || metadataBrand.logoLight || withBasePath("/icons/kabosu.svg");
 
 export const metadata: Metadata = {
   title: metadataBrand.locale === "ja" ? `${metadataBrand.name} ダッシュボード` : `${metadataBrand.name} Dashboard`,
