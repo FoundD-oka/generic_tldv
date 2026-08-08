@@ -1,0 +1,23 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {
+      "level": "S",
+      "reason": "監査ID(UI-6/7/10/11)で対象・箇所が行番号まで特定済み。ただしfaviconの実現方式とサイドバー配置に軽微な裁量が残る"
+    },
+    "technical_unknown": {
+      "level": "M",
+      "reason": "Next.js file-based metadata(app/favicon.ico)がconfig-based iconsを上書きする挙動への依存。プランで方式を固定しRF-001で実機確認を義務付けたが、静的テストだけでは実挙動を証明できない"
+    },
+    "impact_scope": {
+      "level": "S",
+      "reason": "変更は表示層8ファイルに閉じる。vexadark/vexalight参照は全3箇所をgrepで裏取り済み。Codex dirty 4ファイル・st9〜st14/p05保護ファイルとの非交差を確認済み"
+    },
+    "verifiability": {
+      "level": "M",
+      "reason": "コード側はソース検査テスト+既存スイートで機械検証可能だが、『ブラウザのタブアイコンが実際にカボスになる』最終確認は手動スモーク1回が必要"
+    }
+  },
+  "rule": "1軸でもL相当ならL、迷ったら上へ。technical_unknown / verifiability が M のため総合 M",
+  "review": "M のため Fable 契約レビュー必須"
+}
