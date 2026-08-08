@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "task_id": "p05-detail-wiring",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "5cae3a05550e8679b156e88652b0dfa2193d30f1",
+  "reviewed_commit": "03914829b62cf1e9d3cde662b1e66a4a933601b6",
+  "target_sha256": "sha256:a6d25654f3a47dc7ac0ac3c8c94680a27589585376f07deef05d7c51af4aefae",
+  "contract_sha256": "sha256:112e0493cfba06223438a34387f18a77686547c28887e5f0d7f1283c6d9f7fd9",
+  "prompt_sha256": "sha256:10d310065a21edb7cefe4a7359d69c412b6e7d669017f4340d0bfb08306c6d12",
+  "response_sha256": "sha256:7264d994a6bc353a9edb412b6e202e22ce31fb01276ce8a5c20a9c03efb2fc4c",
+  "created_at": "2026-08-08T05:28:48.966128+00:00",
+  "verdict": "READY",
+  "summary": "契約と base-commit 5cae3a0..HEAD 0391482 の差分を静的照合。AT-001〜AT-004 は page.tsx の実装と新規ソース契約テスト test_meeting_detail_wiring.test.ts の断言が契約文言と一致(SRT/VTT 項目が両ドロップダウンに各2回、onRetry={handleRetryBot} 配線、createBot+defaults 経路、条件付き引き継ぎ、isRetryingBot 早期 return)。FP-002/FP-004 は差分ファイル集合が許可2ファイル+.hw/plans/p05-detail-wiring/ 配下のみで禁止リスト・不変更ファイルとの交差が空であることを差分から確認。NFT-001 の追加UI文字列は全て日本語。FP-001/FP-003/FP-005 は実行証跡が必要な項目であり、差分上に契約違反の兆候はない(ゲート/CIでの証跡取得が前提)。violations 0件のため READY。",
+  "confidence": "high",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "実行系証跡(FP-001/FP-003/FP-005)はゲート・CIで要取得",
+      "detail": "本レビューは契約と差分のみを根拠とする静的判定であり、npm test / tsc ベースライン比較 / .hw/verify.sh の実行ログは差分に含まれない。READY はこれらが pr-ready-gate と CI で取得・全passすることを前提とする。特に FileText アイコンはプランが「既存 import 再利用」と明記しており差分に import 追加がないため、万一 base で未 import なら FP-003(tsc)で検出される。",
+      "file": ".hw/plans/p05-detail-wiring/verification-contract.md"
+    },
+    {
+      "title": "通常/コンパクトヘッダで SRT/VTT の disabled が非対称",
+      "detail": "コンパクトヘッダ側のみ disabled={transcripts.length === 0} が付く(プラン指示どおり隣接項目に合わせた結果)。通常ヘッダ側は handleExport 内の空ガードに依存するため、トランスクリプト0件時に片方は押せて片方は押せない。契約外だが、将来 UI 一貫性の指摘を受けたら両側 disabled へ揃える改訂候補。",
+      "file": "services/dashboard/src/app/meetings/[id]/page.tsx"
+    },
+    {
+      "title": "再試行中の視覚フィードバックがない",
+      "detail": "isRetryingBot による二重発火ガードはあるが、BotFailedIndicator に isRetrying 相当の prop を渡していないため「新しいボットでもう一度試す」ボタンは押下中も通常表示のまま。createBot が遅い場合にユーザーが反応なしと感じ再クリックし得る(ガードで無害だが UX 上のフィードバック欠如)。bot-status-indicator.tsx 不変更契約(FP-004)の範囲内では対応不能のため、必要なら後続タスクで受け口拡張を検討。",
+      "file": "services/dashboard/src/app/meetings/[id]/page.tsx"
+    }
+  ]
+}
