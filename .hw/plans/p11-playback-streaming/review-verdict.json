@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "task_id": "p11-playback-streaming",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "b547429380effc854b6b271e087364a41d771b54",
+  "reviewed_commit": "29aaf968b39c802417635d5faf5b61bc33fb5acd",
+  "target_sha256": "sha256:8020d548824377823ff0d6bec744062146a71340dd4ae76985358f45c4b53b74",
+  "contract_sha256": "sha256:1e67c1979062eaef0ff16a14c502be1e0b4cf3202d6d83077bb636f19534a182",
+  "prompt_sha256": "sha256:5581aa8629480861586a02362653b59ff7b5da21b414c41de1da0960a56e68df",
+  "response_sha256": "sha256:eab85e0f483f3f3b128bdeedde7f1d591cac897355f0f7beb23265b83d5e3041",
+  "created_at": "2026-08-08T13:46:18.937042+00:00",
+  "verdict": "READY",
+  "summary": "/raw の windowed streaming 化(meeting-api)とメディアプロキシのヘッダ受信タイムアウト(dashboard)は、検証契約 AT-001〜006 / NFT-001〜002 / FP-001〜007 のすべてに対して構造・テストの両面で適合。download_file はメディア応答経路から除去され、全読取が asyncio.to_thread 経由の window ループ(end-inclusive、off-by-one なし)になり、dashboard 側は fetch 解決直後の clearTimeout により長尺 body を切らない。_parse_range_header と route.ts の URL 選択・passthrough は無変更。違反 0 件のため READY。テスト実行ログ(FP-001〜004)はレビュー入力に含まれないため、evidence pack と CI での最終確認を前提とする。",
+  "confidence": "medium",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "FP-001〜004 の実行ログ証跡が evidence pack 必須",
+      "detail": "本レビューは差分の構造検証であり、pytest(ベースライン 591 passed/11 skipped)・vitest(240 tests)・lint(61 errors/87 warnings)の実行結果はレビュー入力に含まれない。特に mp3 テスト(test_recordings.py:212, :251)と voiceprint 系は差分で未更新のまま、新コードが Range 有無に関わらず get_file_size を呼ぶ経路を通るため、mock に get_file_size が構成済みで green であることを .hw/gates/p11-playback-streaming/ のログで確認すること。",
+      "file": ".hw/gates/p11-playback-streaming/"
+    },
+    {
+      "title": "ストリーム開始後の storage 例外は truncated body として現れる",
+      "detail": "Content-Length を宣言した後に download_file_range が失敗すると、ログ出力の上でストリームを切断する(プラン指定どおり)。クライアント側では宣言長より短い body / 接続切断として観測されるため、運用時にプロキシ側 5xx と区別しづらい。実害が出た場合は再試行(同一 window の限定リトライ)を別タスクで検討。",
+      "file": "services/meeting-api/meeting_api/recordings.py"
+    },
+    {
+      "title": "AT-004 grep 証跡への注記",
+      "detail": "grep -n \"download_file(\" は _ensure_mp3_media_file(mp3 変換のキャッシュ充填)内の呼び出しにもマッチし得る。その場合は「メディア応答経路外(一度きりの変換元取得)」である旨を evidence に注記しておくと、契約の『応答経路 0 件』との突き合わせが明確になる。",
+      "file": "services/meeting-api/meeting_api/recordings.py"
+    },
+    {
+      "title": "MEDIA_PROXY_HEADERS_TIMEOUT_MS はモジュールロード時に固定",
+      "detail": "定数がモジュール評価時に一度だけ読まれるため、テストは既定 30000ms に依存し、env 変更の単体検証はできない(契約は要求していないので違反ではない)。将来 env 別の検証が必要になったら関数化を検討。",
+      "file": "services/dashboard/src/app/api/vexa/[...path]/route.ts"
+    }
+  ]
+}

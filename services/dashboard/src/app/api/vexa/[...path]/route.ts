@@ -28,6 +28,16 @@ const VOICEPRINT_MAX_ACTIVE_DIRECT_ENROLLMENTS =
   Number.isSafeInteger(parsedDirectEnrollmentLimit) && parsedDirectEnrollmentLimit > 0
     ? parsedDirectEnrollmentLimit
     : 1;
+const parsedMediaProxyHeadersTimeoutMs = Number.parseInt(
+  process.env.MEDIA_PROXY_HEADERS_TIMEOUT_MS || String(30000),
+  10
+);
+// Bounds only the wait for upstream response headers. Once headers arrive the
+// body streams untimed, so long recordings are never cut mid-playback.
+const MEDIA_PROXY_HEADERS_TIMEOUT_MS =
+  Number.isSafeInteger(parsedMediaProxyHeadersTimeoutMs) && parsedMediaProxyHeadersTimeoutMs > 0
+    ? parsedMediaProxyHeadersTimeoutMs
+    : 30000;
 
 export class VoiceprintDirectEnrollmentAdmissionGate {
   private active = 0;
@@ -326,10 +336,23 @@ async function proxyRequest(
       if (rangeHeader) {
         mediaHeaders["Range"] = rangeHeader;
       }
-      const mediaResponse = await fetch(mediaUrl, {
-        headers: mediaHeaders,
-        cache: "no-store",
-      });
+      const mediaController = new AbortController();
+      const mediaTimeoutId = setTimeout(
+        () => mediaController.abort(),
+        MEDIA_PROXY_HEADERS_TIMEOUT_MS
+      );
+      let mediaResponse: Response;
+      try {
+        mediaResponse = await fetch(mediaUrl, {
+          headers: mediaHeaders,
+          cache: "no-store",
+          signal: mediaController.signal,
+        });
+      } finally {
+        // Headers received (or the fetch failed): stop the clock so body
+        // streaming stays unbounded.
+        clearTimeout(mediaTimeoutId);
+      }
 
       const passthroughHeaders = new Headers({ "Cache-Control": "no-store" });
       const mediaContentType = mediaResponse.headers.get("content-type") || data.content_type;
