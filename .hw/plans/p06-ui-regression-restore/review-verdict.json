@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "task_id": "p06-ui-regression-restore",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "96c07857ac68a5eaff538df702563d8d668b4d08",
+  "reviewed_commit": "5452fb5977902dea0177831f155b59fe19399229",
+  "target_sha256": "sha256:92fb58e19d61299fcc0e130dfd6999b76be7975bff81fbdabde3d719aca56755",
+  "contract_sha256": "sha256:94170ee5305d52a7037cad672b76a8be337975006db645bd25bd7655769ce8ac",
+  "prompt_sha256": "sha256:41f36c9713dbe0e85cefe663f9968e4014c6b0b4f2f20f65086624df0c5ea48c",
+  "response_sha256": "sha256:1af3a79fb4b1fa2485c49b8fe5f616929aac433102f4e692ed20dae857e278b8",
+  "created_at": "2026-08-08T06:50:26.923525+00:00",
+  "verdict": "READY",
+  "summary": "p06-ui-regression-restore(M)の契約レビュー。差分から静的に検証可能な全契約項目が適合: AT-001はヘルパー実装と7ケースの挙動テストを全件突合して成立、AT-002〜005/007の要求文字列はmeeting-card.tsxの差分に文字どおり存在し素の<buttonは唯一の該当箇所が<Button>に置換済み、AT-006はpage.tsxでresolveMeetingTitle( x4 / getCustomMeetingTitle( x3 とdata?.name||の7箇所全置換を確認。FP-002〜005とNFT-002(変更ファイル=対象6+plan配下のみ)も差分から適合。テスト数は32 files / 239 testsとなる見込みでAT-008/FP-001の数値条件を満たす。command evidence(npm test実測・verify.sh・eslintベースライン比較)は本レビューコンテキストで実行ツールが無効のため再実行できず、pr-ready-gateとCIによる再実行を最終権威とする前提で、対象差分hash(92fb58e1)・契約hash(94170ee5)に束縛してREADYと判定。差分から立証可能な契約違反は0件。",
+  "confidence": "medium",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "録画ファイル名の \"recording\" フォールバックが到達不能化",
+      "detail": "resolveMeetingTitle は常に非空文字列(最終フォールバック「無題の会議」)を返すため、recordingBaseName の `|| \"recording\"` は到達不能なデッドコードになり、無題会議のダウンロードファイル名が従来の \"recording\" から「無題の会議」(サニタイズ通過分)へ変わる。契約(AT-006/FP-003)には抵触しないが、サニタイズが非ASCII文字を除去する実装だった場合に空ベース名となる可能性があるため、後続タスクでフォールバック位置の見直しを推奨。",
+      "file": "services/dashboard/src/app/meetings/[id]/page.tsx"
+    },
+    {
+      "title": "not.toContain(\"<button\") 断言のファイル全域適用による脆さ",
+      "detail": "test_meeting_cards_ui.test.ts の `not.toContain(\"<button\")` は meeting-card.tsx 全文に適用されるため、将来このファイルへ小文字の素の button 要素を1つ追加しただけでテストが割れる。今回の契約(AT-005)の意図(タイトル編集のクリック衝突防止)より広い禁止になっている。意図を限定したい場合はタイトル領域のコード断片に絞った断言への置換を検討。",
+      "file": "services/dashboard/tests/test_meeting_cards_ui.test.ts"
+    }
+  ]
+}
