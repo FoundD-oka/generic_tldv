@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "task_id": "st12-completed-failure-display",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "5cae3a05550e8679b156e88652b0dfa2193d30f1",
+  "reviewed_commit": "454ce89e94b1fa1fdfc566a084fd5a0a6068d12d",
+  "target_sha256": "sha256:059a3828bb1224137dec0e2f526469a99c943305239b259e1c85d512b5cae739",
+  "contract_sha256": "sha256:8dc852931f4311fe1ede9908fcad21309f1929158a34f2df2815c5329bdd2e9b",
+  "prompt_sha256": "sha256:4d71d50d33d2e037b2ffaf37e589801cb4cc91cfac770b147ac78f157c41c261",
+  "response_sha256": "sha256:7d36dd85d03ad5ad9d15b99883e91fc46f12f0749447a03a757694e81abea1fa",
+  "created_at": "2026-08-08T04:43:38.016279+00:00",
+  "verdict": "READY",
+  "summary": "st12-completed-failure-display の差分は検証契約に適合。変更ファイルはスコープ内の2ファイル+plan配下のみ、既存テスト改変は許可された1件のみ、AT-001〜AT-006 に対応するテストが完全一致文字列の toMatchObject で存在し、分岐順(失敗reason→stopped_before_admission→再文字起こし→completed既定)も契約どおり。COMPLETED_FAILURE_REASONS は4値で export 済み(NFT-002)。新規14テスト−既存1除去で 212 ≥ 205 を満たす見込み。violations 0件のため READY。",
+  "confidence": "high",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "npm test exit 0 / FP-003 はゲート・CIログで最終確認",
+      "detail": "diff からの静的検証では vitest フルスイートの exit 0 と test_meeting_cards_ui.test.ts の pass を実測できない。pr-ready-gate(NFT-001)の evidence pack と CI を最終権威として確認すること。回帰し得るのは COMPLETED_FAILURE_REASONS の reason をフィクスチャに含む UI テストのみで、リスクは低い。",
+      "file": "services/dashboard/tests/test_meeting_cards_ui.test.ts"
+    },
+    {
+      "title": "COMPLETED_FAILURE_DESCRIPTIONS 参照時の as キャストを型ガードで排除可能",
+      "detail": "(COMPLETED_FAILURE_REASONS as readonly string[]).includes(...) の判定を isCompletedFailureReason(r: string): r is ... 形式の型ガード関数に切り出せば、description 参照時の as キャストが不要になり型安全性が上がる。契約外の整理案。",
+      "file": "services/dashboard/src/types/vexa.ts"
+    },
+    {
+      "title": "第1ブロックへの left_alone / evicted 追加(plan の任意項目)は未実施",
+      "detail": "plan は第1ブロック it.each への \"left_alone\", \"evicted\" 追加を許可(任意)していたが実施されていない。AT-006 で両値の fail-open が検証済みのためカバレッジ上の欠落はなく、対応不要。",
+      "file": "services/dashboard/tests/test_meeting_status_display.test.ts"
+    }
+  ]
+}
