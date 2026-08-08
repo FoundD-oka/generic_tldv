@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "task_id": "p11-finalizer-async-job",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "b547429380effc854b6b271e087364a41d771b54",
+  "reviewed_commit": "c803325c1b1d83e4d560e46de78df62d275edfad",
+  "target_sha256": "sha256:2778178ac2bcfe26d7467ae2fcc66399a10a87a07fe3b5882d90d33ac95fa654",
+  "contract_sha256": "sha256:0daf066d73a382cd947ce674377042e87a59d30227b4f6b2f40d56a3c771fadf",
+  "prompt_sha256": "sha256:fb626c4d58717f46be609283c4be4fa9fe604a20e4ed585d61e82588ef3d92fd",
+  "response_sha256": "sha256:bb5d406e6383a088e46158b1753338fd95b661c8259e084919268bc7f7e46ff7",
+  "created_at": "2026-08-08T13:32:49.405676+00:00",
+  "verdict": "READY",
+  "summary": "p11-finalizer-async-job(M)の契約レビュー。AT-001〜AT-006・FP-001〜FP-003・NFT-001 のすべてについて、差分は契約要求と整合しており違反は検出されなかった。callbacks.py の3分岐すべてから同期 `await finalize_recording_master(` が除去され、共通合流点で `finalize_recording_master_job` が `run_all_tasks` より先に background_tasks へ登録される。ジョブラッパーは Redis SET NX EX 900 の冪等ガード(非取得時 return / Redis 不在・エラー時 fail-open / トークン一致時のみ解放)、自前セッション(async_session_local)、例外非伝播を実装し、AT-002〜AT-006 に対応する unit テスト(test_recording_finalizer_job.py 新規 + test_callbacks.py の同等セマンティクス更新)が commit されている。sweeps.py への変更は差分に含まれず FP-003 適合。import が job 関数のみに変更されているため、仮に同期呼び出しが残存すれば NameError で FP-001/FP-002 のテストが検出する構造。応答生成経路(terminal status flip 〜 return)には background_tasks 登録のみで storage I/O・ffmpeg は存在せず NFT-001 適合。テスト実行結果(591 passed ベースライン比較)と grep 出力の evidence pack は .hw/gates/ 側で pr-ready-gate が最終確認する前提であり、本レビューの差分根拠からは矛盾は見られない。READY は target hash sha256:2778178a…・contract hash sha256:0daf066d… に束縛される。",
+  "confidence": "high",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "ロック解放の GET→DELETE が非アトミック",
+      "file": "services/meeting-api/meeting_api/recording_finalizer.py",
+      "detail": "finalize_recording_master_job の finally でのロック解放は GET でトークン照合後に DELETE する2ステップのため、照合と削除の間に TTL 失効+他ランナーの再取得が起きると他者のロックを消す理論上の窓がある。TTL 900s と storage 側の master HEAD チェックで実害は限定的だが、厳密化するなら Lua スクリプト(compare-and-delete)を1回の EVAL にまとめる改善が可能。契約外のため READY を妨げない。"
+    },
+    {
+      "title": "ロック TTL 900s 超の finalize で多重実行窓が再開する",
+      "file": "services/meeting-api/meeting_api/recording_finalizer.py",
+      "detail": "非常に長い会議で finalize(全チャンクDL+ffmpeg+UL)が15分を超えるとロックが失効し、sweep や遅延ジョブとの並行実行が再び可能になる。plan の想定どおり storage 冪等が下段ガードとして働くため二重アップロード止まりだが、実測で 900s に近い会議が観測されたら TTL 延長またはロック更新(watchdog)を検討する価値がある。"
+    },
+    {
+      "title": "sweep 経路もジョブラッパー経由に統一する将来改善",
+      "file": "services/meeting-api/meeting_api/sweeps.py",
+      "detail": "plan 自身が advisory として挙げているとおり、_sweep_unfinalized_recordings は finalize_recording_master を直接呼ぶため Redis ロックの外にある。ジョブ実行中に sweep が同一 meeting を拾う稀な並行は残る(cutoff 年齢条件で低頻度・storage 冪等で実害なし)。将来タスクで sweep も finalize_recording_master_job 経由に揃えると冪等ガードが一元化される。"
+    }
+  ]
+}

@@ -16,16 +16,18 @@ Why this exists (v0.10.6 chunk-leak release):
   master assembly is decoupled from process lifetime.
 
 Integration (Pack U.7, in callbacks.py):
-- Called from `bot_exit_callback` synchronously BEFORE
-  `update_meeting_status`, so by the time `meeting.status` flips to a
-  terminal state, the corresponding `media_files.storage_path` already
-  points at the master.
+- The master is built asynchronously AFTER the terminal status flip:
+  `bot_exit_callback` registers `finalize_recording_master_job` as a
+  background task instead of awaiting the finalizer inline, so the HTTP
+  response never waits on storage/ffmpeg I/O.
+- While the master is not built yet, `/recordings/{id}/master` returns 404
+  and the dashboard renders its "finalizing" state.
 
 No-fallback contract (project owner directive, v0.10.6):
 - If listing returns 0 chunks → log warning + return. Do NOT fabricate
   an empty master file. The audit trail in `meeting.data` is sufficient.
-- If concat fails → raise. Caller (bot_exit_callback) will return
-  non-2xx; runtime-api's idle_loop will retry.
+- If concat fails → raise. The background job logs it and
+  `_sweep_unfinalized_recordings` retries durably.
 - No try/except that swallows.
 
 Idempotency:
@@ -39,6 +41,7 @@ import io
 import logging
 import os
 import struct
+import uuid
 from typing import List, Optional, Tuple
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -546,9 +549,11 @@ def _finalize_one_media_file_sync(
 async def finalize_recording_master(meeting_id: int, db: AsyncSession) -> None:
     """Build master.{webm|wav} from chunks in MinIO. Idempotent.
 
-    Called from bot_exit_callback synchronously BEFORE update_meeting_status,
-    so by the time meeting.status flips to terminal, media_file.storage_path
-    points at the master.
+    Runs asynchronously AFTER bot_exit_callback flipped meeting.status to a
+    terminal state (via finalize_recording_master_job, registered as a
+    background task) or from the unfinalized-recordings sweep. Until the
+    master exists, /recordings/{id}/master returns 404 and the dashboard
+    shows its "finalizing" state.
 
     v0.10.6.1 — JSONB-only. Recordings live in
     meeting.data->'recordings' (array) → recording.media_files (array) →
@@ -725,6 +730,83 @@ async def finalize_recording_master(meeting_id: int, db: AsyncSession) -> None:
             "[FINALIZER] meeting_id=%s — committed master storage_path update(s) to meeting.data",
             meeting_id,
         )
+
+
+async def finalize_recording_master_job(meeting_id: int) -> None:
+    """Background-task wrapper around finalize_recording_master (ST-13).
+
+    bot_exit_callback registers this instead of awaiting the finalizer
+    inline: the exit callback's caller (runtime-api) times out at 10s and
+    re-sends forever until it sees a 2xx, so no storage/ffmpeg I/O may sit
+    in the response path.
+
+    - Idempotency: `finalizer:master:<meeting_id>` SET NX EX 900. If the
+      lock is already held, another run owns this meeting → return.
+    - fail-open: no Redis / Redis error → run without the lock. Being unable
+      to lock must not leave playback permanently unavailable; the master
+      HEAD check in the finalizer itself is the lower guard.
+    - Never raises: BackgroundTasks has no error channel and
+      `_sweep_unfinalized_recordings` is the durable retry path.
+    """
+    from .meetings import get_redis
+
+    lock_key = f"finalizer:master:{meeting_id}"
+    lock_token = uuid.uuid4().hex
+    redis_client = get_redis()
+    lock_held = False
+
+    if redis_client is None:
+        logger.warning(
+            "[FINALIZER] meeting_id=%s — no Redis client; finalizing without "
+            "idempotency lock (fail-open)",
+            meeting_id,
+        )
+    else:
+        try:
+            acquired = await redis_client.set(lock_key, lock_token, nx=True, ex=900)
+        except Exception as lock_err:
+            logger.warning(
+                "[FINALIZER] meeting_id=%s — Redis lock acquisition failed; "
+                "finalizing without lock (fail-open). error_class=%s error=%s",
+                meeting_id, type(lock_err).__name__, str(lock_err)[:200],
+            )
+            redis_client = None
+        else:
+            if not acquired:
+                logger.info(
+                    "[FINALIZER] meeting_id=%s — master finalize already in "
+                    "progress (lock held); skipping duplicate job",
+                    meeting_id,
+                )
+                return
+            lock_held = True
+
+    try:
+        from .database import async_session_local
+
+        async with async_session_local() as db:
+            await finalize_recording_master(meeting_id, db)
+    except Exception as err:
+        logger.error(
+            "[FINALIZER] meeting_id=%s — background master finalize failed; "
+            "the unfinalized-recordings sweep will retry. error_class=%s error=%s",
+            meeting_id, type(err).__name__, str(err)[:200],
+            exc_info=True,
+        )
+    finally:
+        if lock_held and redis_client is not None:
+            try:
+                current = await redis_client.get(lock_key)
+                if isinstance(current, (bytes, bytearray)):
+                    current = current.decode("utf-8", errors="replace")
+                if current == lock_token:
+                    await redis_client.delete(lock_key)
+            except Exception as unlock_err:
+                logger.warning(
+                    "[FINALIZER] meeting_id=%s — lock release failed (TTL will "
+                    "expire it). error_class=%s error=%s",
+                    meeting_id, type(unlock_err).__name__, str(unlock_err)[:200],
+                )
 
 
 def _now_iso() -> str:

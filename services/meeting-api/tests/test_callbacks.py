@@ -5,10 +5,12 @@ These endpoints are the wire protocol between vexa-bot containers and meeting-ap
 """
 
 import json
+from contextlib import contextmanager
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from starlette.background import BackgroundTasks as _StarletteBackgroundTasks
 
 from meeting_api.schemas import MeetingStatus, MeetingCompletionReason, MeetingFailureStage
 
@@ -33,6 +35,24 @@ def _patch_find_meeting(meeting, session=None):
         new_callable=AsyncMock,
         return_value=(ms, meeting),
     )
+
+
+@contextmanager
+def _capture_background_tasks():
+    """Record BackgroundTasks.add_task registrations without executing them.
+
+    ST-13: the exit callback must not await the master finalizer inline — it
+    registers `finalize_recording_master_job` as a background task instead.
+    Swallowing the registrations keeps the tasks from running, so anything
+    that still gets awaited during the request was awaited inline.
+    """
+    registered = []
+
+    def _spy(self, func, *args, **kwargs):
+        registered.append(func)
+
+    with patch.object(_StarletteBackgroundTasks, "add_task", _spy):
+        yield registered
 
 
 def _patch_flag_modified():
@@ -99,14 +119,15 @@ class TestExitCallback:
 
         with _patch_find_meeting(meeting):
             with patch("meeting_api.callbacks.update_meeting_status", new_callable=AsyncMock) as mock_update:
-                with patch("meeting_api.callbacks.finalize_recording_master", new_callable=AsyncMock) as mock_finalize:
+                with patch("meeting_api.callbacks.finalize_recording_master_job", new_callable=AsyncMock) as mock_finalize:
                     with patch("meeting_api.callbacks.publish_meeting_status_change", new_callable=AsyncMock) as mock_pub:
                         with patch("meeting_api.callbacks.run_all_tasks", new_callable=AsyncMock) as mock_tasks:
-                            resp = await client.post("/bots/internal/callback/exited", json={
-                                "connection_id": TEST_SESSION_UID,
-                                "exit_code": 0,
-                                "reason": "self_initiated_leave",
-                            })
+                            with _capture_background_tasks() as registered:
+                                resp = await client.post("/bots/internal/callback/exited", json={
+                                    "connection_id": TEST_SESSION_UID,
+                                    "exit_code": 0,
+                                    "reason": "self_initiated_leave",
+                                })
 
         assert resp.status_code == 200
         data = resp.json()
@@ -115,6 +136,7 @@ class TestExitCallback:
         assert meeting.end_time is completed_at
         mock_update.assert_not_called()
         mock_finalize.assert_not_called()
+        assert mock_finalize not in registered
         mock_pub.assert_not_called()
         mock_tasks.assert_not_called()
 
@@ -130,21 +152,25 @@ class TestExitCallback:
 
         with _patch_find_meeting(meeting):
             with patch("meeting_api.callbacks.update_meeting_status", new_callable=AsyncMock, return_value=True) as mock_update:
-                with patch("meeting_api.callbacks.finalize_recording_master", new_callable=AsyncMock) as mock_finalize:
+                with patch("meeting_api.callbacks.finalize_recording_master_job", new_callable=AsyncMock) as mock_finalize:
                     with patch("meeting_api.callbacks.publish_meeting_status_change", new_callable=AsyncMock):
-                        with patch("meeting_api.callbacks.run_all_tasks", new_callable=AsyncMock):
-                            resp = await client.post("/bots/internal/callback/exited", json={
-                                "connection_id": TEST_SESSION_UID,
-                                "exit_code": 0,
-                                "reason": "self_initiated_leave",
-                            })
+                        with patch("meeting_api.callbacks.run_all_tasks", new_callable=AsyncMock) as mock_tasks:
+                            with _capture_background_tasks() as registered:
+                                resp = await client.post("/bots/internal/callback/exited", json={
+                                    "connection_id": TEST_SESSION_UID,
+                                    "exit_code": 0,
+                                    "reason": "self_initiated_leave",
+                                })
 
         assert resp.status_code == 200
         assert resp.json()["status"] == "callback processed"
         assert meeting.end_time is not completed_at
         assert meeting.data["exit_callback_processed_at"]
         mock_update.assert_called_once()
-        mock_finalize.assert_awaited_once()
+        # ST-13: the finalizer is never awaited inside the handler — it is
+        # registered as a background task, before run_all_tasks.
+        mock_finalize.assert_not_awaited()
+        assert registered.index(mock_finalize) < registered.index(mock_tasks)
 
     @pytest.mark.asyncio
     async def test_exit_code_nonzero_fails_meeting(self, client, mock_db, mock_redis):
