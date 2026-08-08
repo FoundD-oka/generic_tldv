@@ -1,0 +1,23 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {
+      "level": "S",
+      "reason": "監査ST-13の改善方針をコード裏取りした結果そのまま採用。ジョブ化の方式(BackgroundTasks+Redisロック+自前セッション)、登録位置、fail-open方針、sweepを触らない境界まで全て確定済みで実装者の裁量余地は小さい"
+    },
+    "technical_unknown": {
+      "level": "M",
+      "reason": "BackgroundTasksの追加順直列実行・応答後実行はStarlette仕様と既存run_all_tasks実績で裏取り済みだが、FastAPIバージョン差(yield依存のteardownタイミング)と重複コールバック並行時の競合窓の評価は静的推論に依存。Redisロックは既知パターン"
+    },
+    "impact_scope": {
+      "level": "M",
+      "reason": "bot exitコールバックは全会議の終了が通る最重要経路。master構築タイミングがstatus flip後に移ることで文字起こしqueue・webhook・dashboardのfinalizing表示との順序関係が変わる。UI側は404→finalizing表示で処理済みと裏取りしたが、実会議でのe2e確認は機械検証不能"
+    },
+    "verifiability": {
+      "level": "M",
+      "reason": "ジョブ登録・冪等ガード・例外吸収はunitで決定的に検証可能。ただし本質要求である『10秒以内に応答し再送が止まる』は本番runtime-apiとの結合挙動で、ローカルでは構造検証(AT-001/NFT-001)による代理確認に留まる"
+    }
+  },
+  "rule": "1軸でもL相当ならL、迷ったら上へ。technical_unknown / impact_scope / verifiability が M のため総合 M",
+  "review": "M のため Fable 契約レビュー必須"
+}
