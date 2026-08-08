@@ -537,7 +537,7 @@ async def _sweep_unfinalized_recordings(
             meeting = (await db.execute(
                 select(Meeting)
                 .where(Meeting.id == meeting_id)
-                .with_for_update()
+                .with_for_update(skip_locked=True)
                 .execution_options(populate_existing=True)
             )).scalar_one_or_none()
             if meeting is None:
@@ -729,7 +729,7 @@ async def _sweep_final_transcription_jobs(
             meeting = (await db.execute(
                 select(Meeting)
                 .where(Meeting.id == meeting_id)
-                .with_for_update()
+                .with_for_update(skip_locked=True)
                 .execution_options(populate_existing=True)
             )).scalars().first()
             if meeting is None:
@@ -883,7 +883,7 @@ async def _sweep_drive_export_jobs(
             meeting = (await db.execute(
                 select(Meeting)
                 .where(Meeting.id == meeting_id)
-                .with_for_update()
+                .with_for_update(skip_locked=True)
                 .execution_options(populate_existing=True)
             )).scalars().first()
             if meeting is None:
@@ -1017,6 +1017,11 @@ async def _sweep_voiceprint_retention(
     return swept
 
 
+def _sweeps_enabled() -> bool:
+    raw = os.environ.get("MEETING_API_SWEEPS_ENABLED", "true")
+    return raw.strip().lower() not in {"0", "false", "no", "off"}
+
+
 async def start_sweeps(
     db_session_factory: Callable[[], AsyncSession],
 ) -> None:
@@ -1034,6 +1039,14 @@ async def start_sweeps(
     Pattern mirrors webhook_retry_worker.start_retry_worker — same
     shape, different responsibility.
     """
+    if not _sweeps_enabled():
+        logger.warning(
+            "[sweeps] disabled via MEETING_API_SWEEPS_ENABLED=%r — "
+            "this replica will not run idle sweeps",
+            os.environ.get("MEETING_API_SWEEPS_ENABLED"),
+        )
+        return
+
     global _stop_event, sweep_iterations, sweep_last_iteration_at
     _stop_event = asyncio.Event()
 
