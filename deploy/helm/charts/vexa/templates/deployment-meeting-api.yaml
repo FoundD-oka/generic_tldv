@@ -151,13 +151,16 @@ spec:
             initialDelaySeconds: 15
             periodSeconds: 10
             failureThreshold: 3
-          # /health = HTTP-loop liveness (always 200 unless event loop wedges)
+          # v0.10.5 Pack C.3 — lag-aware liveness (main.py /health/collector).
+          # 503 when consumer stalled (lag>100 AND idle>60s); kubelet restarts
+          # the pod within failureThreshold × periodSeconds (worst case ~60s).
           livenessProbe:
             httpGet:
-              path: /health
+              path: /health/collector
               port: http
             initialDelaySeconds: 45
             periodSeconds: 20
+            failureThreshold: 3
           resources:
             {{- toYaml .Values.meetingApi.resources | nindent 12 }}
       {{- with .Values.global.nodeSelector }}

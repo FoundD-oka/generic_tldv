@@ -1,0 +1,10 @@
+{
+  "runtime": "inline",
+  "axes": {
+    "duration": false,
+    "state_volume": false,
+    "delegation": false,
+    "recurrence": false
+  },
+  "reason": "2行の依存追加と fresh venv でのテスト1周のみ。所要は数十分未満、状態は全てコンテキストに収まり、並行委譲も反復資産化も不要。既定どおり inline(Opus 5 implementer)。"
+}

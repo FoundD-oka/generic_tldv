@@ -358,6 +358,24 @@ export const MEETING_STATUS_CONFIG: Record<MeetingStatus, { label: string; color
   failed: { label: "失敗", color: "text-red-600 dark:text-red-400", bgColor: "bg-red-100 dark:bg-red-950/50" },
 };
 
+/**
+ * status=completed のまま記録される「ボットが active に達する前に終わった」理由。
+ * これらの会議には文字起こしが存在し得ないため、表示上は失敗として扱う。
+ */
+export const COMPLETED_FAILURE_REASONS = [
+  "awaiting_admission_timeout",
+  "awaiting_admission_rejected",
+  "join_failure",
+  "validation_error",
+] as const;
+
+const COMPLETED_FAILURE_DESCRIPTIONS: Record<(typeof COMPLETED_FAILURE_REASONS)[number], string> = {
+  awaiting_admission_timeout: "ボットの入室が許可されませんでした。文字起こしはありません",
+  awaiting_admission_rejected: "ボットの入室が拒否されました。文字起こしはありません",
+  join_failure: "会議への接続に失敗しました。文字起こしはありません",
+  validation_error: "会議情報の検証に失敗しました。文字起こしはありません",
+};
+
 // Get detailed status info based on meeting data
 export interface DetailedStatusInfo {
   label: string;
@@ -378,6 +396,31 @@ export function getDetailedStatus(status: MeetingStatus, data?: MeetingData): De
     description: "状態を確認できません"
   };
 
+  const completionReason = data?.completion_reason;
+
+  // 参加できなかった会議には文字起こしが存在しないため、再文字起こしの状態より
+  // 先に判定して「処理中」「再処理失敗」を出さない。
+  if (
+    status === "completed" &&
+    typeof completionReason === "string" &&
+    (COMPLETED_FAILURE_REASONS as readonly string[]).includes(completionReason)
+  ) {
+    return {
+      label: "参加失敗",
+      color: "text-red-600 dark:text-red-400",
+      bgColor: "bg-red-100 dark:bg-red-950/50",
+      description: COMPLETED_FAILURE_DESCRIPTIONS[completionReason as (typeof COMPLETED_FAILURE_REASONS)[number]],
+    };
+  }
+
+  // 入室前のユーザー停止は失敗ではないが、文字起こしは存在しない。
+  if (status === "completed" && completionReason === "stopped_before_admission") {
+    return {
+      ...(baseConfig || fallbackConfig),
+      description: "入室前に停止したため、文字起こしはありません",
+    };
+  }
+
   if (status === "completed" && ["queued", "running"].includes(finalTranscriptionStatus)) {
     return {
       label: "処理中",
@@ -396,9 +439,9 @@ export function getDetailedStatus(status: MeetingStatus, data?: MeetingData): De
     };
   }
 
-  // The status communicates processing state, not how the meeting ended.
-  // Keep completion_reason in the data for audit/history, but render every
-  // successfully finalized meeting consistently as completed.
+  // 文字起こしが存在し得ない completion_reason(上の分岐)を除き、完了扱いの会議は
+  // 一律 completed として描画する。未知の reason は fail-open で「完了」のままにし、
+  // 表示層が成功した会議を誤って失敗と見せないようにする。
   if (status === "completed") {
     return {
       ...(baseConfig || fallbackConfig),
