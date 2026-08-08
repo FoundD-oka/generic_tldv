@@ -1,0 +1,10 @@
+{
+  "runtime": "inline",
+  "axes": {
+    "duration": false,
+    "state_volume": false,
+    "delegation": false,
+    "recurrence": false
+  },
+  "reason": "製品コード変更は sweeps.py の3行+ガード十数行、テストは新規1ファイル5件で、想定所要は1セッション内(1時間未満)。作業状態はプランと対象関数だけでコンテキストに収まり、並行委譲は不要、反復手順として資産化する性質もない。4軸すべて非該当のため既定どおり inline(Opus 5 implementer)"
+}

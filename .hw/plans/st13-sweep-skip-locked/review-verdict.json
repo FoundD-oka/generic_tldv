@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "task_id": "st13-sweep-skip-locked",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "5cae3a05550e8679b156e88652b0dfa2193d30f1",
+  "reviewed_commit": "b37a05dc928514525813285f8604e44cb5ccab03",
+  "target_sha256": "sha256:06569f47d57ccb03f189983bc30efaad1e6f8a68809dd19c1d5e3a5d2907d822",
+  "contract_sha256": "sha256:c0f84046573a514fed1b73911cc5847560bd9e2271d7ec1adcc601af886434c5",
+  "prompt_sha256": "sha256:9ddb9139f8369e7f3e64d8704532f20060bc16b1457f3c809cc91380c16ebd25",
+  "response_sha256": "sha256:e3f019465050497600136feecc37d3f313b1bb0539c56ddc23ca933bf4980318",
+  "created_at": "2026-08-08T04:57:19.005774+00:00",
+  "verdict": "READY",
+  "summary": "st13-sweep-skip-locked の差分は検証契約に静的に検証可能な全条項で適合。sweeps.py の3箇所のみ with_for_update(skip_locked=True) 化(FP-002適合)、_sweeps_enabled() は AT-005 の真理値表どおりで既定有効の fail-open(FP-003/NFT-002適合)、テスト変更は新規 test_sweeps_skip_locked.py の追加のみでアンチゲーミング条項に抵触なし。AT-001〜003 の検証は契約指定どおり「_for_update_arg 付き Select の抽出件数≥1 + 全件の postgresql dialect コンパイル文字列検査」で実装されている。違反0件のため READY。テスト実行証跡(ベースライン比較・NFT-001 ゲート)は本レビュー環境で実行手段が無効のため、pr-ready-gate / CI での実測確認に委ねる。",
+  "confidence": "medium",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "テスト実行証跡はゲート/CIで実測確認が必要",
+      "detail": "本レビューコンテキストでは Bash が無効化されており、最低合格ライン(591+新規5件以上 passed / 既知失敗1件と完全一致)と NFT-001(pr-ready-gate)の実行証跡を直接確認できなかった。差分の静的適合性は確認済みだが、evidence pack(pytest フルスイートログとベースライン突き合わせ)は pr-ready-gate 実行時および CI で担保すること。",
+      "file": ".hw/plans/st13-sweep-skip-locked/verification-contract.md"
+    },
+    {
+      "title": "_sweeps_enabled の未知値は True 扱い(fail-open)",
+      "detail": "\"disabled\" 等のタイポや未知の値は有効(True)と解釈される。契約どおりの設計だが、起動時に MEETING_API_SWEEPS_ENABLED の実効値と判定結果を常に1行ログ出力すると、運用時の誤設定検知が容易になる。現状は無効時のみ warning を出す。",
+      "file": "services/meeting-api/meeting_api/sweeps.py"
+    },
+    {
+      "title": "ガード早期 return 時の sweep_iterations はヘルス観測で区別不能",
+      "detail": "無効化されたレプリカでは sweep_iterations / sweep_last_iteration_at が初期値のまま。main.py が未参照であることは plan で裏取り済みのため現時点で問題ないが、将来のメトリクス導入(ST-18)時に「env で無効化されたレプリカ」と「停止・故障した sweep」を区別できる状態値の追加を検討すること。",
+      "file": "services/meeting-api/meeting_api/sweeps.py"
+    }
+  ]
+}
