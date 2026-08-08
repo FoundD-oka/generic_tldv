@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -46,6 +47,10 @@ router = APIRouter()
 # can reason about retention without reading bucket config.
 RECORDING_STORAGE_CLASS_POLICY = "standard_14d_nearline_until_60d"
 RECORDING_DELETE_AFTER_DAYS = 60
+
+# Media responses stream in fixed-size windows so peak memory stays bounded
+# regardless of recording length. Override with RECORDING_STREAM_WINDOW_BYTES.
+RECORDING_STREAM_WINDOW_DEFAULT_BYTES = 8388608  # 8MiB
 
 
 def _compute_delete_after(anchor_iso: Optional[str]) -> Optional[str]:
@@ -261,19 +266,70 @@ def _ensure_mp3_media_file(storage, source_storage_path: str, source_format: str
     return mp3_storage_path
 
 
-def _build_storage_media_response(storage, storage_path: str, content_type: str, filename: str, request: Request) -> Response:
+def _stream_window_bytes() -> int:
+    """Window size for media streaming reads (env-tunable, invalid -> default)."""
+    raw = os.environ.get("RECORDING_STREAM_WINDOW_BYTES")
+    if raw is None:
+        return RECORDING_STREAM_WINDOW_DEFAULT_BYTES
+    try:
+        window = int(str(raw).strip())
+    except (TypeError, ValueError):
+        return RECORDING_STREAM_WINDOW_DEFAULT_BYTES
+    if window <= 0:
+        return RECORDING_STREAM_WINDOW_DEFAULT_BYTES
+    return window
+
+
+async def _build_storage_media_response(storage, storage_path: str, content_type: str, filename: str, request: Request) -> Response:
+    """Stream a stored media object in bounded windows.
+
+    The whole object is never held in memory: bytes are read window by window
+    (RECORDING_STREAM_WINDOW_BYTES, default 8MiB) through asyncio.to_thread so
+    the blocking storage SDK calls never run on the event loop.
+    """
     headers = {"Content-Disposition": f'inline; filename="{filename}"', "Accept-Ranges": "bytes"}
     range_header = request.headers.get("range")
-    if range_header and range_header.startswith("bytes="):
-        total = storage.get_file_size(storage_path)
-        start, end = _parse_range_header(range_header, total)
-        chunk = storage.download_file_range(storage_path, start, end)
-        headers["Content-Range"] = f"bytes {start}-{end}/{total}"
-        headers["Content-Length"] = str(len(chunk))
-        return Response(content=chunk, media_type=content_type, status_code=206, headers=headers)
 
-    data = storage.download_file(storage_path)
-    return Response(content=data, media_type=content_type, headers=headers)
+    # Read before returning the response so storage errors (e.g. missing
+    # object) still map to the caller's 404/500 handling.
+    total = await asyncio.to_thread(storage.get_file_size, storage_path)
+
+    if range_header and range_header.startswith("bytes="):
+        start, end = _parse_range_header(range_header, total)
+        status_code = 206
+        headers["Content-Range"] = f"bytes {start}-{end}/{total}"
+        headers["Content-Length"] = str(end - start + 1)
+    else:
+        start, end = 0, total - 1
+        status_code = 200
+        headers["Content-Length"] = str(total)
+
+    window = _stream_window_bytes()
+
+    async def _iter_windows():
+        pos = start
+        while pos <= end:
+            window_end = min(pos + window - 1, end)
+            try:
+                chunk = await asyncio.to_thread(storage.download_file_range, storage_path, pos, window_end)
+            except Exception as e:
+                # Headers are already on the wire, so there is no status code
+                # left to send: log and cut the stream.
+                logger.error(
+                    "Media stream read failed for %s at bytes %s-%s: %s",
+                    storage_path, pos, window_end, e, exc_info=True,
+                )
+                return
+            if chunk:
+                yield chunk
+            pos = window_end + 1
+
+    return StreamingResponse(
+        _iter_windows(),
+        status_code=status_code,
+        media_type=content_type,
+        headers=headers,
+    )
 
 
 def _public_recording_view(rec: Dict[str, Any]) -> Dict[str, Any]:
@@ -857,7 +913,7 @@ async def download_media_file_raw(
 
     storage = get_storage_client_for(storage_backend)
     try:
-        return _build_storage_media_response(storage, storage_path, ct, filename, request)
+        return await _build_storage_media_response(storage, storage_path, ct, filename, request)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Media file content not found in storage")
     except HTTPException:
@@ -897,7 +953,7 @@ async def download_media_file_mp3(
             storage_path,
             str(mf.get("format", "bin")).lower(),
         )
-        return _build_storage_media_response(
+        return await _build_storage_media_response(
             storage,
             mp3_storage_path,
             "audio/mpeg",
