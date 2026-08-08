@@ -1439,9 +1439,46 @@ async def run_deferred_transcription(
 
     replaced_count = 0
     if mode == "replace":
-        replaced_count = (await db.execute(
+        existing_final_count = (await db.execute(
             select(func.count(Transcription.id)).where(Transcription.meeting_id == meeting_id)
         )).scalar() or 0
+        # ST-8 — replace may only delete existing rows when at least one
+        # segment will actually be stored. The check mirrors the save loop
+        # below (non-blank text) and runs at the delete site so it holds for
+        # every producer path (mixed and lanes alike).
+        has_effective_segments = any(
+            str(seg.get("text", "")).strip() for seg in segments
+        )
+        if not has_effective_segments and existing_final_count > 0:
+            _set_final_transcription_state(
+                meeting,
+                status="failed",
+                failed_at=_utcnow_iso(),
+                updated_at=_utcnow_iso(),
+                last_error=(
+                    "transcription provider returned no non-empty segments; "
+                    f"existing {existing_final_count} transcription row(s) preserved"
+                ),
+                error_code="empty_transcription_result",
+                retryable=not _is_gemini_requested(),
+                segment_count=0,
+                lease_expires_at=None,
+                source_recording_path=source.storage_path,
+                source_recording_backend=source.storage_backend,
+                language=resolved_language,
+                triggered_by=triggered_by,
+            )
+            await db.commit()
+            logger.warning(
+                "Deferred transcription for meeting %s returned zero effective "
+                "segments in replace mode — existing %d row(s) preserved, marked failed",
+                meeting_id, existing_final_count,
+            )
+            raise HTTPException(
+                status_code=502,
+                detail="Transcription provider returned an empty transcript; existing transcription preserved",
+            )
+        replaced_count = existing_final_count
         await db.execute(delete(Transcription).where(Transcription.meeting_id == meeting_id))
 
     # Re-apply saved manual cluster corrections so replace never silently
