@@ -53,7 +53,8 @@ import { useMeetingsStore } from "@/stores/meetings-store";
 import { useAuthStore } from "@/stores/auth-store";
 import { useLiveTranscripts } from "@/hooks/use-live-transcripts";
 import { PLATFORM_CONFIG, getDetailedStatus } from "@/types/vexa";
-import type { MeetingStatus, Meeting, RecordingData } from "@/types/vexa";
+import type { MeetingStatus, Meeting, RecordingData, CreateBotRequest } from "@/types/vexa";
+import { applyBotCreationDefaults, withPostMeetingAutoStop } from "@/lib/bot-create-defaults";
 import { StatusHistory } from "@/components/meetings/status-history";
 import { cn, parseUTCTimestamp } from "@/lib/utils";
 import { vexaAPI } from "@/lib/api";
@@ -170,6 +171,7 @@ export default function MeetingDetailPage() {
 
   // Bot control state
   const [isStoppingBot, setIsStoppingBot] = useState(false);
+  const [isRetryingBot, setIsRetryingBot] = useState(false);
   const [isDeletingMeeting, setIsDeletingMeeting] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [forcePostMeetingMode, setForcePostMeetingMode] = useState(false);
@@ -502,6 +504,37 @@ export default function MeetingDetailPage() {
     }
   }, [currentMeeting, updateMeetingData]);
 
+  const handleRetryBot = useCallback(async () => {
+    if (!currentMeeting || isRetryingBot) return;
+    setIsRetryingBot(true);
+    try {
+      const data = currentMeeting.data ?? {};
+      const request: CreateBotRequest = {
+        platform: currentMeeting.platform,
+        native_meeting_id: currentMeeting.platform_specific_id,
+      };
+      if (typeof data.passcode === "string" && data.passcode) {
+        request.passcode = data.passcode;
+      }
+      if (typeof data.meeting_url === "string" && data.meeting_url) {
+        request.meeting_url = data.meeting_url;
+      }
+      if (data.transcribe_enabled === false) {
+        request.transcribe_enabled = false;
+      }
+      const meeting = await vexaAPI.createBot(
+        applyBotCreationDefaults(withPostMeetingAutoStop(request))
+      );
+      toast.success("新しいボットをリクエストしました");
+      router.push(`/meetings/${meeting.id}`);
+    } catch (error) {
+      toast.error("ボットの再リクエストに失敗しました", {
+        description: (error as Error).message,
+      });
+    } finally {
+      setIsRetryingBot(false);
+    }
+  }, [currentMeeting, isRetryingBot, router]);
 
   const handleDeleteMeeting = useCallback(async () => {
     if (!currentMeeting) return;
@@ -1381,6 +1414,14 @@ export default function MeetingDetailPage() {
                       <FileJson className="h-4 w-4 mr-2" />
                       .jsonをダウンロード
                     </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleExport("srt")}>
+                      <FileText className="h-4 w-4 mr-2" />
+                      .srtをダウンロード
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleExport("vtt")}>
+                      <FileText className="h-4 w-4 mr-2" />
+                      .vttをダウンロード
+                    </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       onClick={() => {
@@ -1688,6 +1729,14 @@ export default function MeetingDetailPage() {
                       <FileJson className="h-4 w-4 mr-2" />
                       .jsonをダウンロード
                     </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleExport("srt")} disabled={transcripts.length === 0}>
+                      <FileText className="h-4 w-4 mr-2" />
+                      .srtをダウンロード
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleExport("vtt")} disabled={transcripts.length === 0}>
+                      <FileText className="h-4 w-4 mr-2" />
+                      .vttをダウンロード
+                    </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       onClick={() => {
@@ -1987,6 +2036,7 @@ export default function MeetingDetailPage() {
                   ? currentMeeting.data.failure_stage
                   : undefined)
               }
+              onRetry={handleRetryBot}
             />
           )}
 
