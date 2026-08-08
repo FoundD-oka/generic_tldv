@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "task_id": "st14-bot-spawn-retry",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "5cae3a05550e8679b156e88652b0dfa2193d30f1",
+  "reviewed_commit": "be7567d6abbeb353838f13990723cccc541f4f53",
+  "target_sha256": "sha256:38d011cf34fac658c9274639c0964c68e235ece2c383764542ade345b8dbe16c",
+  "contract_sha256": "sha256:e6554542488787b889ea6450b9d6a38702de50ddc9c768d11c259108fafa5a63",
+  "prompt_sha256": "sha256:3b4c672c4bde352c6c4994fc35b89e95f8c6e459d11662e660101ba3152eac06",
+  "response_sha256": "sha256:8ba276dcfc62f68106961dfff434c1640efbe3b0e93acd4c909bdb037397e6f2",
+  "created_at": "2026-08-08T05:13:21.987520+00:00",
+  "verdict": "READY",
+  "summary": "st14-bot-spawn-retry の差分は検証契約に適合。AT-001〜AT-009 は新規 tests/test_bot_spawn_retry.py に1対1で実装され、実装(meetings.py の _post_once + _spawn_is_retryable、retry.py の後方互換な is_retryable 引数)と静的に整合。非リトライ分類(429 即時伝播 / ReadTimeout・400 は1回で終了)と定数(max_retries=3, base_delay=1.0, 倍率2, ジッタ≤0.5, MAX_DELAY=10.0)は NFT-001 に一致。変更ファイルは許可された3ファイル+.hw/plans 配下のみで NFT-002 とアンチゲーミング条項を満たし、既存テストへの変更なし。全テストが sleep を patch し NFT-003 も満たす。本レビューは実行環境なしの静的判定のため、FP-002 のベースライン比較(591+N passed / 10 skipped / 1 failed 既知)はゲートの evidence pack で実測ログを確定させること。violations 0件のため READY。",
+  "confidence": "medium",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "既存 runtime_failure テストに実スリープが混入し得る",
+      "file": "services/meeting-api/tests/test_meetings.py",
+      "detail": "FP-001 対象の test_create_meeting_runtime_failure がスポーン失敗を 500 応答や ConnectError のモックで再現している場合、当該テストは asyncio.sleep を patch していないため、リトライ導入により実スリープ約7〜8.5秒がフルスイートに加算される。合否は不変(最終的に None → 500)だが、FP-002 実行時間の増加として現れる。気になる場合は当該テストのモックを非リトライ系(400 等)に寄せるか sleep を patch する後続タスクで対処。"
+    },
+    {
+      "title": "枯渇時ログの試行回数ハードコード",
+      "file": "services/meeting-api/meeting_api/meetings.py",
+      "detail": "「after up to 4 attempts (1 + 3 retries)」の回数が文字列にハードコードされており、将来 max_retries を変更するとログと実態が乖離する。定数から導出するのが望ましい。"
+    },
+    {
+      "title": "retry.py の Callable import は差分外依存",
+      "file": "services/meeting-api/meeting_api/retry.py",
+      "detail": "新引数の注釈 Callable[[Exception], bool] | None は既存の Callable import(fn 引数の注釈で使用と推定)に依存する。差分外のため import 行は未確認だが、欠落していれば retry.py の import 時に NameError となり FP-002 のフルスイートが全滅するため、ゲートの FP-002 実測ログが通っていれば自動的に否定される。evidence pack 確認時にサマリ行だけでなく import エラーの不在も見ること。"
+    }
+  ]
+}
