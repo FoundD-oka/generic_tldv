@@ -1,0 +1,23 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {
+      "level": "M",
+      "reason": "監査文書は「onRetryを渡していない」としか言っておらず、再実行のUX仕様(引き継ぐ設定・成功後の遷移先・Zoom OAuthの扱い)は未定義だった。プランで確定させたが、この確定がユーザー期待と一致するかは契約レビューで確認したい残余がある。"
+    },
+    "technical_unknown": {
+      "level": "S",
+      "reason": "backend の409ガードが failed を除外することをコードで確認済み(meetings.py:965-982)。createBot / bot-create-defaults / handleExport のsrt・vtt対応も実装済みを確認。未知はほぼない。"
+    },
+    "impact_scope": {
+      "level": "S",
+      "reason": "変更は page.tsx 1ファイル+新規テスト1ファイル。BotFailedIndicator使用箇所は詳細ページのみで、Codex並行変更・st9〜st14対象ファイルと非交差であることを確認済み。"
+    },
+    "verifiability": {
+      "level": "S",
+      "reason": "vitest ソース契約テスト+実測ベースライン(199 tests)比較+tsc差分比較で機械検証可能。"
+    }
+  },
+  "rule": "1軸でもL相当ならL、迷ったら上へ。requirement_ambiguity が M のため総合 M",
+  "review": "M のため Fable 契約レビュー必須"
+}

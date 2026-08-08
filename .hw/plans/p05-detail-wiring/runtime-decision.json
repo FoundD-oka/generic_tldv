@@ -1,0 +1,10 @@
+{
+  "runtime": "inline",
+  "axes": {
+    "duration": false,
+    "state_volume": false,
+    "delegation": false,
+    "recurrence": false
+  },
+  "reason": "1ファイルのUI配線+契約テスト追加で、想定所要は1時間未満。作業状態は単一コンテキストに収まり、並行委譲も反復資産化も不要。既定どおり inline(Opus 5 implementer)。"
+}
