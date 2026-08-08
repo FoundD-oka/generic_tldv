@@ -31,6 +31,23 @@ function expectFileContains(
   failed++;
 }
 
+function expectFileNotContains(
+  name: string,
+  filePath: string,
+  needle: string,
+) {
+  const body = fs.readFileSync(filePath, 'utf-8');
+  if (!body.includes(needle)) {
+    console.log(`  \x1b[32mPASS\x1b[0m  ${name}`);
+    passed++;
+    return;
+  }
+  console.log(`  \x1b[31mFAIL\x1b[0m  ${name}`);
+  console.log(`        unexpected needle: ${needle}`);
+  console.log(`        in:                ${filePath}`);
+  failed++;
+}
+
 function expectOrder(
   name: string,
   body: string,
@@ -86,6 +103,18 @@ expectFileContains(
   'selectors include retry affordance after denial',
   SELECTORS_TS,
   'Ask to join again',
+);
+
+expectFileContains(
+  'waiting-room timeout throws AdmissionError with lobby_timeout outcome',
+  ADMISSION_TS,
+  'new AdmissionError("lobby_timeout", "Bot is still in the Google Meet waiting room after timeout',
+);
+
+expectFileNotContains(
+  'waiting-room timeout no longer throws an untagged Error',
+  ADMISSION_TS,
+  'throw new Error("Bot is still in the Google Meet waiting room',
 );
 
 console.log(`\n=== googlemeet admission summary: ${passed} passed, ${failed} failed ===`);
