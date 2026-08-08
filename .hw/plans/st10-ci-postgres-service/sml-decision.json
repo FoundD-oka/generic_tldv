@@ -1,0 +1,23 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {
+      "level": "S",
+      "reason": "ゴールは明確(CI完全green+実DB検証の維持)。方針裁量はプラン内で確定済みで実装者に曖昧さは残らない。"
+    },
+    "technical_unknown": {
+      "level": "M",
+      "reason": "GitHub Actions の postgres service と asyncpg の SSL 挙動(DB_SSL_MODE=prefer が SSL 無効サーバに接続できない問題)の組み合わせはローカルで完全再現できず、CI 実走で初めて確定する。"
+    },
+    "impact_scope": {
+      "level": "S",
+      "reason": "差分は3ファイル(workflow/テスト/run script)。実装コード・他 workflow・st9 の pyproject.toml に波及しない。gitnexus 索引でも当該テストの依存は閉じている。"
+    },
+    "verifiability": {
+      "level": "M",
+      "reason": "最終証拠(AT-004)が push 後の CI に依存する。workflow ファイル変更 push が token の workflow スコープで拒否されるリスクもあり、検証完了までの経路に不確定性が残る。"
+    }
+  },
+  "rule": "1軸でもL相当ならL、迷ったら上へ。M軸が2つのため総合M",
+  "review": "M のため Fable 契約レビュー必須"
+}

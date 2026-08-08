@@ -21,6 +21,7 @@ done
 port="$(docker port "$name" 5432/tcp | awk -F: '{print $NF}')"
 export DATABASE_URL="postgresql://test_user:test_pass@127.0.0.1:${port}/test_db"
 export DB_HOST=127.0.0.1 DB_PORT="$port" DB_NAME=test_db DB_USER=test_user DB_PASSWORD=test_pass DB_SSL_MODE=disable
+export RUN_POSTGRES_INTEGRATION_TESTS=1
 
 python_bin="${PYTHON_BIN:-$root/.pipeline/tmp/gemini-venv/bin/python}"
 ready=0

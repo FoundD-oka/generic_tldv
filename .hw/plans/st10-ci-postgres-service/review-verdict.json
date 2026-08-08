@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "task_id": "st10-ci-postgres-service",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "5cae3a05550e8679b156e88652b0dfa2193d30f1",
+  "reviewed_commit": "792f18247bb5c7efe3ccd54575ceb42753ffcfc7",
+  "target_sha256": "sha256:0b584be11835dff1b33793ff296432e92d9cc3fd632ecf928d2be67853920a88",
+  "contract_sha256": "sha256:9bb969b82677a2cbfca65304d8e676a11cbc7f295167d91c485ac4c889205851",
+  "prompt_sha256": "sha256:56ef4003a418fd1eb9bcceb28ac8e65ad5caa3e846645399bb93e8aeeebfec85",
+  "response_sha256": "sha256:5ed4fc6cb01a9b7ecca85de7187cc190c50fb4736346c9092beaf52d22de9f44",
+  "created_at": "2026-08-08T03:56:56.870228+00:00",
+  "verdict": "READY",
+  "summary": "st10-ci-postgres-service(M)の差分は検証契約に適合。AT-001のskipifゲート、AT-003の必須4要素(postgres service/migration/DB_SSL_MODE: disable/grepガード)、FP-001の unit ステップ無変更、FP-002の差分範囲(3ファイル+.hw/plans配下)、FP-003のpipefail+grepガードをすべて差分上で確認。AT-004(PR上のCI実走で統合テストがPASSEDかつ1 passed)は契約が定めるマージ前ゲートとして残存し、AT-002の実行証拠はCIログ代替に依拠する。レビュー環境はread-only(Bash無効)のため判定は契約と差分の静的検証に基づく。violations 0件のためREADY。本判定は差分hash 0b584be…と契約hash 9bb969b…に束縛される。",
+  "confidence": "high",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "grepガードのテスト件数ハードコード",
+      "detail": "grep -E \"1 passed\" は件数1に固定されており、将来このファイルにテストを追加すると全passでも \"2 passed\" となりガードが誤failする。次にテストを追加するタスクで grep -E \"[0-9]+ passed\" + skipped不在チェックなど件数非依存のfail-closedパターンへの改訂を検討。",
+      "file": ".github/workflows/test-meeting-api.yml"
+    },
+    {
+      "title": "AT-001/AT-002/NFT-001の実行証拠はevidence pack側で確認要",
+      "detail": "レビュー環境がread-only(Bash無効)のため実行証拠を直接採取していない。pr-ready-gateのpreflight/evidence pack(いずれもrequired: yes)に実行ログが揃っていることをゲート通過時に確認すること。AT-002はdocker不能時の契約許容どおりAT-004のCIログで代替可。",
+      "file": ".hw/plans/st10-ci-postgres-service/verification-contract.md"
+    },
+    {
+      "title": "AT-004はマージ前の残存条件",
+      "detail": "READYは現差分に対する契約適合の判定であり、AT-004(Run postgres integration testsステップのログに test_real_postgres_advisory_lock_enforces_200_term_cap の PASSED と 1 passed)はマージ前に必ず確認する。workflowファイルを含むpushがtokenのworkflowスコープ不足で拒否される既知リスクにも注意。",
+      "file": ".github/workflows/test-meeting-api.yml"
+    }
+  ]
+}
