@@ -1,0 +1,23 @@
+{
+  "size": "S",
+  "axes": {
+    "requirement_ambiguity": {
+      "level": "S",
+      "reason": "要求は引き継ぎ文書で確定済み(依存宣言2行の追加)。reframe 余地なし。st8既知失敗リストの扱いという唯一の判断点もプラン時点で『改訂しない』と確定済み。"
+    },
+    "technical_unknown": {
+      "level": "S",
+      "reason": "根本原因(pip install -e が requirements.txt を見ない)と失敗経路(voiceprint_matching.py:742 の関数内 import)を CI ログ実測(run 31236545693)で確認済み。未知なし。"
+    },
+    "impact_scope": {
+      "level": "S",
+      "reason": "変更は pyproject.toml の dependencies 2行のみ。requirements.txt には両依存が既にあるため実運用イメージの依存集合は不変。コード変更ゼロ。"
+    },
+    "verifiability": {
+      "level": "S",
+      "reason": "fresh venv + CI 同一手順の pytest exit code で完全機械検証可能。ベースライン(8 failed)と目標(postgres 1件のみ)が実測で固定済み。"
+    }
+  },
+  "rule": "1軸でもL相当ならL、迷ったら上へ。全軸Sのため総合S",
+  "review": "S のため機械検証のみ。Fable レビュー不要"
+}
