@@ -1,0 +1,23 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {
+      "level": "S",
+      "reason": "変更箇所3行+envガード仕様(変数名・既定値・判定関数・挿入位置)はプランで全て確定済み。計画文書がリーダー選出を『envガードで可』と明記しており解釈余地なし"
+    },
+    "technical_unknown": {
+      "level": "S",
+      "reason": "with_for_update(skip_locked=True) は SQLAlchemy の標準機能で、3箇所とも直後の `if meeting is None: continue` がスキップ結果を既に吸収する構造。新規制御フローはenvガードの早期returnのみで、stop_sweeps の None 防御も裏取り済み"
+    },
+    "impact_scope": {
+      "level": "M",
+      "reason": "diff は sweeps.py 1ファイルだが、変更するのは複数レプリカ実行時のロック競合意味論であり、ユニットテストで検証できるのは『SKIP LOCKED を含むSQLが発行されること』まで。実際の2レプリカ相互作用(ロック中の行のスキップと次イテレーション回収)は本番系でしか観測できず、final transcription / drive export / recording finalizer の3経路に波及する"
+    },
+    "verifiability": {
+      "level": "S",
+      "reason": "モックでキャプチャした statement の postgresql dialect コンパイル検査と env 真理値表テストで決定的に検証可能。フルスイートのベースライン比較(既知失敗1件)も st9 実測で確定済み"
+    }
+  },
+  "rule": "1軸でもL相当ならL、迷ったら上へ。impact_scope が M のため総合 M",
+  "review": "M のため Fable 契約レビュー必須"
+}
