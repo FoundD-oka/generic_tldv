@@ -51,6 +51,7 @@ from .config import (
     BOT_STOP_DELAY_SECONDS,
 )
 from .post_meeting import run_all_tasks, run_status_webhook_task
+from .retry import with_retry
 
 logger = logging.getLogger("meeting_api.meetings")
 
@@ -400,6 +401,19 @@ async def _cancel_bot_timeout(job_id: str, meeting_id: int) -> None:
         logger.error(f"Failed to cancel bot timeout for meeting {meeting_id}: {e}")
 
 
+class _SpawnRetryableError(Exception):
+    """Runtime API spawn failure that is provably safe to resend."""
+
+
+def _spawn_is_retryable(exc: Exception) -> bool:
+    """Only resend when the request is known not to have created a container.
+
+    Response-loss failures (ReadTimeout etc.) are excluded: the container may
+    already exist and resending would put a second bot into the meeting.
+    """
+    return isinstance(exc, (_SpawnRetryableError, httpx.ConnectError, httpx.ConnectTimeout))
+
+
 async def _spawn_via_runtime_api(
     profile: str,
     config: Dict[str, Any],
@@ -408,8 +422,13 @@ async def _spawn_via_runtime_api(
     metadata: Dict[str, Any],
     callback_headers: Optional[Dict[str, str]] = None,
 ) -> Optional[Dict[str, Any]]:
-    """Create a container via Runtime API POST /containers."""
-    try:
+    """Create a container via Runtime API POST /containers.
+
+    Transient failures (connect errors, 500/502/503/504) are retried with
+    exponential backoff; 429 propagates immediately and every other failure
+    returns None without a resend.
+    """
+    async def _post_once() -> Optional[Dict[str, Any]]:
         client = _get_httpx_client()
         resp = await client.post(
             f"{RUNTIME_API_URL}/containers",
@@ -427,11 +446,24 @@ async def _spawn_via_runtime_api(
             return resp.json()
         elif resp.status_code == 429:
             raise HTTPException(status_code=429, detail=resp.json().get("detail", "Concurrency limit reached"))
+        elif resp.status_code in (500, 502, 503, 504):
+            raise _SpawnRetryableError(f"Runtime API returned {resp.status_code}: {resp.text}")
         else:
             logger.error(f"Runtime API returned {resp.status_code}: {resp.text}")
             return None
-    except httpx.RequestError as e:
-        logger.error(f"Runtime API request failed: {e}")
+
+    try:
+        return await with_retry(
+            _post_once,
+            max_retries=3,
+            base_delay=1.0,
+            label=f"spawn meeting={metadata.get('meeting_id')}",
+            is_retryable=_spawn_is_retryable,
+        )
+    except HTTPException:
+        raise
+    except (_SpawnRetryableError, httpx.RequestError) as e:
+        logger.error(f"Runtime API request failed after up to 4 attempts (1 + 3 retries): {e}")
         return None
 
 
