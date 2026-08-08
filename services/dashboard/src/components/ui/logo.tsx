@@ -43,10 +43,10 @@ export function Logo({ className, size = "md", showText = false, brand: brandPro
   const { config } = useRuntimeConfig();
   const brand = brandProp || config?.brand || DEFAULT_DASHBOARD_BRAND;
 
-  // Render the same markup on the server and first client pass. CSS handles
-  // light/dark switching so the logo src cannot drift during hydration.
-  const defaultLightLogoSrc = withBasePath("/icons/vexadark.svg");
-  const defaultDarkLogoSrc = withBasePath("/icons/vexalight.svg");
+  // Render the same markup on the server and first client pass. The default
+  // brand logo is identical in light and dark, so the logo src cannot drift
+  // during hydration.
+  const defaultLogoSrc = withBasePath("/icons/kabosu.svg");
   const configuredLightLogo = brand.logoDark || brand.logoLight;
   const configuredDarkLogo = brand.logoLight || brand.logoDark;
   const hasConfiguredLogo = Boolean(configuredLightLogo);
@@ -57,24 +57,14 @@ export function Logo({ className, size = "md", showText = false, brand: brandPro
   return (
     <div className={cn("flex items-center gap-2", className)}>
       {shouldUseDefaultLogo ? (
-        <>
-          <Image
-            src={defaultLightLogoSrc}
-            alt={`${brand.name} ロゴ`}
-            width={imageSize}
-            height={imageSize}
-            className={cn(sizeClasses[size], "object-contain dark:hidden")}
-            priority
-          />
-          <Image
-            src={defaultDarkLogoSrc}
-            alt={`${brand.name} ロゴ`}
-            width={imageSize}
-            height={imageSize}
-            className={cn(sizeClasses[size], "hidden object-contain dark:block")}
-            priority
-          />
-        </>
+        <Image
+          src={defaultLogoSrc}
+          alt={`${brand.name} ロゴ`}
+          width={imageSize}
+          height={imageSize}
+          className={cn(sizeClasses[size], "object-contain")}
+          priority
+        />
       ) : hasConfiguredLogo ? (
         configuredLightLogo === configuredDarkLogo ? (
           // eslint-disable-next-line @next/next/no-img-element
