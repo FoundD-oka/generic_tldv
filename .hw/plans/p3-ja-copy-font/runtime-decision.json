@@ -1,0 +1,1 @@
+{"runtime": "inline", "axes": {"duration": false, "state_volume": false, "delegation": false, "recurrence": false}, "reason": "duration: 反転1箇所+コピー数件+フォント設定で数時間以内。state_volume: 棚卸し結果は一覧化してコンテキストに収まる規模(監査時点で数件)。delegation: 不要。recurrence: 一回限り。全軸非該当のため inline(Opus 5)。"}

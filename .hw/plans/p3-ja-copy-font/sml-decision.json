@@ -1,0 +1,10 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {"level": "M", "reason": "英語残存の全量が未列挙で、着手時実測で対象が確定する。「ユーザー可視」の境界判断も一部残る。"},
+    "technical_unknown": {"level": "M", "reason": "next/font の Google Fonts 取得が CI/Docker ビルドで成功するか未実測。第二候補への切替条件で fail-closed にしてある。"},
+    "blast_radius": {"level": "M", "reason": "フォントは全画面の視覚に影響する。コピー修正は複数ファイルに散る。"},
+    "verifiability": {"level": "S", "reason": "フォールバックは unit test、フォントは font-family の grep とビルド成功、コピーは列挙表と diff で機械確認できる。"}
+  },
+  "verdict_reason": "3軸が M。Fable 契約レビューを行う。"
+}

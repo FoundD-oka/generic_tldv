@@ -1,0 +1,1 @@
+{"runtime": "inline", "axes": {"duration": false, "state_volume": false, "delegation": false, "recurrence": false}, "reason": "duration: button 化+ラベル付与+CSS で数時間以内。state_volume: 列挙一覧は数十行でコンテキストに収まる。delegation: 不要。recurrence: 一回限り。全軸非該当のため inline(Opus 5)。"}

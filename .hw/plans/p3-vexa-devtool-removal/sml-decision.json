@@ -1,0 +1,10 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {"level": "S", "reason": "除去対象(機構・ファイル・行)を列挙済み。文言・レイアウト不変の境界も定義済み。"},
+    "technical_unknown": {"level": "M", "reason": "docs 配下からの import 有無が未実測で、webapp-url.ts の削除可否が着手時実測に依存する。"},
+    "blast_radius": {"level": "M", "reason": "使用側8ファイル+2502行の page.tsx を触る。DocsLink 除去時に周辺 JSX を巻き込む危険があり、grep だけでは閉じない。"},
+    "verifiability": {"level": "S", "reason": "vexa.ai 参照0 grep・参照0・tsc/lint/test で機械判定できる。"}
+  },
+  "verdict_reason": "技術的未知と影響範囲が M。Fable 契約レビューを行う。"
+}

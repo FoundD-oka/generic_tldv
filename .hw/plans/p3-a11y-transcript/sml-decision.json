@@ -1,0 +1,10 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {"level": "M", "reason": "アイコンのみボタンの全量が未列挙(監査は概数46箇所)。着手時実測で対象が確定する。"},
+    "technical_unknown": {"level": "M", "reason": "span→button 化のイベント伝播(行クリックとの二重発火)と、pointer-coarse variant / tw-animate-css への reduced-motion 適用可否が未実測。"},
+    "blast_radius": {"level": "M", "reason": "aria-label 付与が多数ファイルへ散る。DOM 構造変更は1ファイルに限定してあるが、対象列挙が済むまで面は確定しない。"},
+    "verifiability": {"level": "S", "reason": "イベント挙動は vitest、aria-label は列挙表と grep、reduced-motion は CSS ブロックの存在で機械確認できる。"}
+  },
+  "verdict_reason": "3軸が M。Fable 契約レビューを行う。"
+}

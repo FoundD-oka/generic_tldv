@@ -1,0 +1,10 @@
+{
+  "size": "S",
+  "axes": {
+    "requirement_ambiguity": {"level": "S", "reason": "記録のみでコード変更なし。採否と理由は全項目確定済み。"},
+    "technical_unknown": {"level": "S", "reason": "全項目を 2026-08-10 に HEAD 8bfb447 で実測済み。推測に基づく判断なし。"},
+    "blast_radius": {"level": "S", "reason": "変更は .hw/plans/p3-triage/ のみ。製品コードに触れない。"},
+    "verifiability": {"level": "S", "reason": "成果物はこのファイル群の存在そのもの。pr-ready-gate の plan 検査で機械確認。"}
+  },
+  "verdict_reason": "全軸 S。実装なしの選別記録。"
+}
