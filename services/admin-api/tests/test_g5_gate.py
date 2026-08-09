@@ -21,6 +21,15 @@ import pytest
 # installed (CI runs unit tests only; there's no live stack to hit).
 requests = pytest.importorskip("requests")
 
+# `requests` alone is not a reliable signal — it arrives transitively via other
+# services' dependencies, so CI installed it and these tests ran against a
+# gateway that does not exist. Gate on an explicit opt-in instead (same shape as
+# meeting-api's RUN_POSTGRES_INTEGRATION_TESTS).
+pytestmark = pytest.mark.skipif(
+    os.environ.get("RUN_LIVE_STACK_TESTS") != "1",
+    reason="実スタック(gateway localhost:8056)が必要。RUN_LIVE_STACK_TESTS=1 で有効化",
+)
+
 GATEWAY = os.getenv("GATEWAY_URL", "http://localhost:8056")
 ADMIN_TOKEN = os.getenv("ADMIN_API_TOKEN", "changeme")
 ADMIN_HEADERS = {"X-Admin-API-Key": ADMIN_TOKEN, "Content-Type": "application/json"}
