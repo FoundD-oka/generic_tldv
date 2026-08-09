@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "task_id": "p12-startup-env-validation",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "0900ad8c5424322369e2676de2148c44c334b49d",
+  "reviewed_commit": "90818d73bfac05d446277f81e5a19507b4a6065e",
+  "target_sha256": "sha256:22202d835778f62b3c913c87a6c0e78ad82448bf6574d869330fe6a881ecd43a",
+  "contract_sha256": "sha256:69bb2964c7da11dbeafafcd4d66d316069d8bb252eedc31793dd2dff23f898f4",
+  "prompt_sha256": "sha256:9ffa3aa111f1472e2d63e5ea64e8b0aac9b1891ba3e8bd962ece3bc62f88d1e0",
+  "response_sha256": "sha256:1eac61345eb50d92f6f7ee1fc579899aa8b3dcd7abe07672f54fb8370c18c4f6",
+  "created_at": "2026-08-09T03:17:29.215799+00:00",
+  "verdict": "READY",
+  "summary": "p12-startup-env-validation(M)の base 0900ad8..HEAD 90818d7 差分を検証契約と照合し、契約違反 0 件で READY。AT-001〜007 は test_env_validation.py と env_validation.py の実装で全て充足: 必須 env(TRANSCRIPTION_SERVICE_URL、STORAGE_BACKEND 妥当性、gcs 時 GCS_BUCKET)の fail-fast、違反の全件集約 RuntimeError、STARTUP_ENV_VALIDATION=warn の逃げ道と不正値の strict フォールバック、オプション env の warning 降格(機能名付き)、DEFERRED URL の非報告、startup() 内 validate_startup_env < init_db の静的ガード、呼び出し時 os.environ 読み取り(monkeypatch 成立)。FP-003(startup() ハンクは検証呼び出し追加のみ)、FP-004(REDIS_URL/DB_* の重複チェックなし)、FP-005(deploy 無変更)、NFT-001(violation 行に env 名+壊れる機能+Example: 付き)、NFT-002(logging/os/typing のみ import、ネットワークなし)も適合。FP-001 のベースライン比較 evidence はこのレビュー文脈(シェル・ファイルツール不可)から実在確認できないため、pr-ready-gate 側での evidence pack 検証に委ねる(advisory)。",
+  "confidence": "high",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "FP-002 の許可ファイルリストに .hw/plans/ ハーネス成果物が含まれない",
+      "detail": "base..HEAD 差分には .hw/plans/p12-startup-env-validation/ 配下 5 ファイル(plan.md・base-commit・runtime-decision.json・sml-decision.json・verification-contract.md)が含まれるが、FP-002 の許可リストは services/meeting-api 配下 3 パスのみ。これらは契約前文が前提とするコーディネータ/プランナーのワークフロー成果物(base-commit は着手時に plan.md frontmatter へ書く、と契約自身が規定)であり、禁止対象として明記された config.py/database.py/deploy/runtime-api には該当しないため違反とはしない。今後の契約テンプレートでは FP-002 相当の許可リストに .hw/plans/<task>/ を明示すると字義上の曖昧さが消える。",
+      "file": ".hw/plans/p12-startup-env-validation/"
+    },
+    {
+      "title": "FP-001 ベースライン比較と evidence pack はゲート側で実在確認が必要",
+      "detail": "本レビュー文脈では Bash/ファイル読み取りツールが無効で、.hw/gates/p12-startup-env-validation/ の pytest-baseline-<commit>.txt と変更後サマリの実在・内容(新規 fail 0・passed 増が新規テスト分のみ・skipped 増なし)を検証できなかった。差分上のテストは startup を実行せず純関数+静的ガードのみで既存テストへの干渉経路は見当たらないが、FP-001 の最終確認は pr-ready-gate.sh の evidence pack チェックと CI に委ねる。",
+      "file": ".hw/gates/p12-startup-env-validation/"
+    },
+    {
+      "title": "STORAGE_BACKEND が空文字のとき violation になる(未設定とは非対称)",
+      "detail": "env_validation.py は os.environ.get(\"STORAGE_BACKEND\", \"minio\") を verbatim 比較するため、未設定は minio 扱いで violation なしだが、STORAGE_BACKEND=\"\"(compose の `${VAR:-}` 型の空既定)や前後空白付き・大文字の値は未知 backend として violation になる。storage.py の使用時挙動をミラーする設計意図(コメント明記)であり契約 AT-002 は未設定ケースのみ規定するため適合だが、compose 側に空既定が追加された場合はデプロイが起動失敗する非対称性として運用者が把握しておくとよい。",
+      "file": "services/meeting-api/meeting_api/env_validation.py"
+    },
+    {
+      "title": "INTERNAL_API_SECRET の warning は契約 AT-005 非列挙(plan 由来の追加)",
+      "detail": "INTERNAL_API_SECRET 空の warning は契約の AT-005 に列挙されていないが plan.md のオプション分類表には含まれる。warning は起動を妨げず AT-005 の「オプション分類が起動を妨げない」要件と整合するため違反ではない。契約とテスト(test_optional_envs_warn_without_blocking_startup が assert している)の実態を一致させたい場合、次版の契約で AT-005 に追記するとよい。",
+      "file": "services/meeting-api/meeting_api/env_validation.py"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {
+      "level": "M",
+      "reason": "依頼自身が「何を必須とするかの線引きが要点」と明示する判断タスク。プランで分類表(必須3条件/オプション4種)と判断基準を確定させたが、線引きは価値判断を含み、レビューで覆り得る余地が M 相当残る。"
+    },
+    "technical_unknown": {
+      "level": "S",
+      "reason": "os.environ 読み取り・startup フック・RuntimeError raise のみで技術的未知はほぼない。config.py/database.py の既存 raise 方式という確立された前例に揃える。"
+    },
+    "blast_radius": {
+      "level": "M",
+      "reason": "変更自体は新モジュール+startup() 冒頭1行だが、strict 既定は本番デプロイの起動可否そのものを変える(TRANSCRIPTION_SERVICE_URL 未設定環境は次回デプロイで起動失敗する)。これは意図した挙動だが運用影響として M。既存テストが env 状態に依存して落ちる可能性はベースライン比較で捕捉する。"
+    },
+    "verifiability": {
+      "level": "S",
+      "reason": "検証対象は純関数+静的ガードで、monkeypatch と caplog により全要件がローカル pytest で完全に機械検証可能。実環境依存の残余なし。"
+    }
+  },
+  "verdict_reason": "L 相当の軸なし。要求の曖昧さ(線引きの価値判断)と影響範囲(本番起動可否の変更)に M 相当が残るため M。Fable 契約レビュー必須。"
+}
