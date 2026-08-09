@@ -333,6 +333,12 @@ async def startup():
     asyncio.create_task(start_sweeps(async_session_local))
     logger.info("Meeting-api sweeps loop started (Pack E.3.2 stale-stopping)")
 
+    # ST-6: final-transcription は1件あたり最大28分待つため、sweeps ループから
+    # 分離した専用ワーカーで回す(他 sweep の周期を止めないため)。
+    from .sweeps import start_final_transcription_worker
+    asyncio.create_task(start_final_transcription_worker(async_session_local))
+    logger.info("Final-transcription worker loop started (ST-6: sweeps から分離)")
+
     # --- Collector startup ---
     if True:  # redis_client is guaranteed non-None per Pack C.4
         # Ensure consumer groups exist for transcription stream

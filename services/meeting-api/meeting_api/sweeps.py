@@ -54,12 +54,27 @@ STALE_STOPPING_POLL_INTERVAL = 60  # check every 60 s
 UNFINALIZED_RECORDINGS_MIN_AGE_SECONDS = 5
 UNFINALIZED_RECORDINGS_LIMIT = 100
 
+# ST-6: final-transcription 専用ワーカーループのポーリング間隔。
+# 既定 60 秒は分離前の実効周期(start_sweeps の STALE_STOPPING_POLL_INTERVAL)と
+# 同じ値で、新規必須 env なしに挙動を据え置く。
+FINAL_TRANSCRIPTION_POLL_INTERVAL = int(
+    os.getenv("FINAL_TRANSCRIPTION_POLL_INTERVAL_SECONDS", "60")
+)
+
 # v0.10.5 Pack K.5 (meeting-api side analog).
 # Module-level state for /health probe / Pack M metrics.
 sweep_iterations: int = 0
 sweep_last_iteration_at: float = 0.0
 
+# ST-6: 独立ワーカーの可観測性カウンタ(sweep_iterations とは別系統)。
+final_transcription_worker_iterations: int = 0
+final_transcription_worker_last_iteration_at: float = 0.0
+
 _stop_event: Optional[asyncio.Event] = None
+
+# ST-6: 新ワーカー専用の stop イベント。_stop_event と共有すると片方の
+# 再代入・set が他方へ漏れるため、必ず別変数にする。
+_ft_stop_event: Optional[asyncio.Event] = None
 
 
 def _get_default_storage_client():
@@ -1033,6 +1048,7 @@ async def start_sweeps(
       - Pack D.2: container-stop outbox consumer (durable retry + DLQ)
       - Pack E.1-sibling: unfinalized recordings repair/finalize
       - Issue #2: final transcription replacement
+        → ST-6 で start_final_transcription_worker(独立ループ)へ分離
       - Calendar-origin Drive export after final transcription
       - Issue #27 Phase 4: voiceprint retention (day-guarded)
 
@@ -1087,15 +1103,9 @@ async def start_sweeps(
         except Exception as e:
             logger.error(f"[sweeps] iteration {sweep_iterations} unfinalized-recordings error: {e}", exc_info=True)
 
-        try:
-            final_transcribed = await _sweep_final_transcription_jobs(db_session_factory)
-            if final_transcribed > 0:
-                logger.info(
-                    f"[sweeps] iteration {sweep_iterations}: "
-                    f"generated {final_transcribed} final transcript(s)"
-                )
-        except Exception as e:
-            logger.error(f"[sweeps] iteration {sweep_iterations} final-transcription error: {e}", exc_info=True)
+        # ST-6: final-transcription はこのループから除去済み。
+        # 1件あたり最大 DEFERRED_TRANSCRIPTION_TIMEOUT_SECONDS 待つ処理が
+        # 他 sweep を直列に止めていたため、start_final_transcription_worker へ分離した。
 
         try:
             drive_exported = await _sweep_drive_export_jobs(db_session_factory)
@@ -1153,3 +1163,77 @@ async def stop_sweeps() -> None:
     global _stop_event
     if _stop_event is not None:
         _stop_event.set()
+
+
+async def start_final_transcription_worker(
+    db_session_factory: Callable[[], AsyncSession],
+) -> None:
+    """Run the final-transcription sweep in its own periodic loop (ST-6).
+
+    Separated from start_sweeps because one iteration can await a single
+    STT call for up to DEFERRED_TRANSCRIPTION_TIMEOUT_SECONDS, which used
+    to stall every other sweep (stale-stopping rescue, aggregation retry,
+    unfinalized repair, Drive export, voiceprint retention, container-stops).
+
+    Concurrency safety is unchanged: row selection uses
+    with_for_update(skip_locked=True) and each run is guarded by
+    run_id + lease + heartbeat in final_transcription.py.
+
+    Shares the MEETING_API_SWEEPS_ENABLED guard with start_sweeps: the knob
+    means "this replica runs no idle background work".
+    """
+    if not _sweeps_enabled():
+        logger.warning(
+            "[final-transcription worker] disabled via MEETING_API_SWEEPS_ENABLED=%r — "
+            "this replica will not run final-transcription jobs",
+            os.environ.get("MEETING_API_SWEEPS_ENABLED"),
+        )
+        return
+
+    global _ft_stop_event, final_transcription_worker_iterations
+    global final_transcription_worker_last_iteration_at
+    _ft_stop_event = asyncio.Event()
+
+    logger.info(
+        "[final-transcription worker] Starting dedicated loop (ST-6: separated from sweeps)"
+    )
+
+    while not _ft_stop_event.is_set():
+        final_transcription_worker_iterations += 1
+        final_transcription_worker_last_iteration_at = time.time()
+
+        try:
+            final_transcribed = await _sweep_final_transcription_jobs(db_session_factory)
+            if final_transcribed > 0:
+                logger.info(
+                    f"[final-transcription worker] iteration "
+                    f"{final_transcription_worker_iterations}: "
+                    f"generated {final_transcribed} final transcript(s)"
+                )
+        except Exception as e:
+            logger.error(
+                f"[final-transcription worker] iteration "
+                f"{final_transcription_worker_iterations} error: {e}",
+                exc_info=True,
+            )
+
+        # Wait for POLL_INTERVAL or until stopped.
+        try:
+            await asyncio.wait_for(
+                _ft_stop_event.wait(), timeout=FINAL_TRANSCRIPTION_POLL_INTERVAL
+            )
+            break  # stop_event was set
+        except asyncio.TimeoutError:
+            pass  # normal — poll again
+
+    logger.info(
+        f"[final-transcription worker] Stopped after "
+        f"{final_transcription_worker_iterations} iterations"
+    )
+
+
+async def stop_final_transcription_worker() -> None:
+    """Signal the final-transcription worker loop to stop."""
+    global _ft_stop_event
+    if _ft_stop_event is not None:
+        _ft_stop_event.set()
