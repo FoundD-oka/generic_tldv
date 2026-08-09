@@ -17,6 +17,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .database import init_db, async_session_local
+from .env_validation import validate_startup_env
 from .webhook_delivery import set_redis_client as set_webhook_redis
 from .webhook_retry_worker import (
     start_retry_worker,
@@ -265,6 +266,11 @@ async def health_collector():
 @app.on_event("startup")
 async def startup():
     logger.info("Starting Meeting API...")
+
+    # Environment — fail fast before waiting on DB/Redis. Missing required env
+    # never heals on retry, so surface all of it at once (Pack C.4 shape:
+    # raise → process exits → restart policy makes the misconfiguration loud).
+    validate_startup_env(logger)
 
     # Database
     await init_db()
