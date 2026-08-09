@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "task_id": "p2x-advisory-cleanup-docker-events-robustness",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "03436054d2e1d8a2e0d918bf53ea704cdb4612c0",
+  "reviewed_commit": "c983f76237e3cd13f350c5d289fad9b4cb8d9938",
+  "target_sha256": "sha256:b7239ce29d94f977bf082dd7d09aa18c268c63eac897b8c9d0780bcc92555c8a",
+  "contract_sha256": "sha256:b0b8422376ac6ac499a4894568c4c6d1d29f52b9a5d7feacabc74c8320e4c8fa",
+  "prompt_sha256": "sha256:ecd5bbd2b7d516a09c8f9534170dcd7412667129e37fd1c391275c8b278f715f",
+  "response_sha256": "sha256:a2dbf3e71f2b4dad1d5f3a07181feba6d6bd9406b8205c8e68ea659359b8ec43",
+  "created_at": "2026-08-09T15:46:26.678394+00:00",
+  "verdict": "READY",
+  "summary": "契約の全項目(AT-601〜605、FP-601〜605、NFT-601〜602、RF-601〜602)を差分と改訂履歴に対して照合し、違反なしと判定。アンカー代入の get 成功後への移動(採取は get 前)、try/finally + contextlib.suppress による close 保証、ConnectTimeout の Timeout 分岐からの除外、isinstance 第一判定+名前フォールバックがすべて実装され、fake session/fake resp のみを使う新規テスト11件で固定されている。変更ファイルは docker.py とテストのみで、FP-601/604 の不変条件(filters・on_exit・since 書式・debug 静粛性・他ファイル無変更)に差分なし。RF-601/602 の実測は改訂履歴に記入済みで、FP-603 のベースライン比較(前後とも 18 failed で集合一致、新規 fail 0)とも整合する。",
+  "confidence": "high",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "ベースライン venv のパスが契約記載と不一致",
+      "detail": "契約のベースライン取得手順は `~/.cache/hw-venvs/p2x-advisory-cleanup-docker-events-robustness` を指定しているが、改訂履歴の実測は `~/.cache/hw-venvs/p2x-docker-events` で行われている。python3.11 fresh venv + editable install という実質要件は満たされており合格ラインに影響しないが、ゲート実行者が evidence pack を照合する際にパス不一致で照合を誤らないよう注記する。",
+      "file": ".hw/plans/p2x-advisory-cleanup-docker-events-robustness/verification-contract.md"
+    }
+  ]
+}

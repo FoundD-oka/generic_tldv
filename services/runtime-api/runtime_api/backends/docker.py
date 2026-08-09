@@ -7,6 +7,7 @@ for exit detection (no polling).
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import time
@@ -18,6 +19,14 @@ import requests_unixsocket
 from runtime_api import config
 from runtime_api.backends import Backend, ContainerInfo, ContainerSpec
 from runtime_api.utils import parse_memory
+
+try:
+    # urllib3 is a transitive dependency of requests, not a new one. When a
+    # vendored/absent urllib3 makes the import fail we fall back to matching
+    # the exception type name (see _is_urllib3_read_timeout).
+    from urllib3.exceptions import ReadTimeoutError as _Urllib3ReadTimeoutError
+except ImportError:
+    _Urllib3ReadTimeoutError = None
 
 logger = logging.getLogger("runtime_api.backends.docker")
 
@@ -154,8 +163,9 @@ class DockerBackend(Backend):
         since = self._next_since()
         if since:
             params["since"] = since
-        self._last_event_nano = 0
-        self._stream_started_nano = time.time_ns()
+        # Taken before the request so that events happening between connect and
+        # the arrival of the response headers stay inside the replay window.
+        attempt_started = time.time_ns()
 
         try:
             resp = session.get(
@@ -164,23 +174,35 @@ class DockerBackend(Backend):
                 stream=True,
                 timeout=(EVENTS_CONNECT_TIMEOUT, config.DOCKER_EVENTS_READ_TIMEOUT),
             )
-            for line in resp.iter_lines():
-                if not line:
-                    continue
-                try:
-                    event = json.loads(line)
-                    time_nano = event.get("timeNano")
-                    if isinstance(time_nano, int):
-                        self._last_event_nano = time_nano
-                    actor = event.get("Actor", {})
-                    attrs = actor.get("Attributes", {})
-                    name = attrs.get("name", "")
-                    exit_code_str = attrs.get("exitCode", "0")
-                    exit_code = int(exit_code_str) if exit_code_str else 0
-                    if name:
-                        asyncio.run_coroutine_threadsafe(on_exit(name, exit_code), loop)
-                except Exception:
-                    logger.warning("Failed to parse Docker event", exc_info=True)
+            # Only a connection that actually opened may move the replay anchor:
+            # a failed attempt must leave the previous `since` untouched.
+            self._last_event_nano = 0
+            self._stream_started_nano = attempt_started
+            try:
+                for line in resp.iter_lines():
+                    if not line:
+                        continue
+                    try:
+                        event = json.loads(line)
+                        time_nano = event.get("timeNano")
+                        if isinstance(time_nano, int):
+                            self._last_event_nano = time_nano
+                        actor = event.get("Actor", {})
+                        attrs = actor.get("Attributes", {})
+                        name = attrs.get("name", "")
+                        exit_code_str = attrs.get("exitCode", "0")
+                        exit_code = int(exit_code_str) if exit_code_str else 0
+                        if name:
+                            asyncio.run_coroutine_threadsafe(on_exit(name, exit_code), loop)
+                    except Exception:
+                        logger.warning("Failed to parse Docker event", exc_info=True)
+            finally:
+                # Release the socket on both the read-timeout and the normal
+                # path. contextlib.closing() would let a failing close() replace
+                # the streaming exception and break the timeout classification
+                # below, so close failures are swallowed instead.
+                with contextlib.suppress(Exception):
+                    resp.close()
         except Exception as exc:
             if not _is_read_timeout(exc):
                 raise
@@ -357,6 +379,15 @@ def _exception_chain(exc: BaseException) -> Iterator[BaseException]:
             pending.append(current.args[0])
 
 
+def _is_urllib3_read_timeout(exc: BaseException) -> bool:
+    """True when `exc` is urllib3's ReadTimeoutError (or a look-alike)."""
+    if _Urllib3ReadTimeoutError is not None and isinstance(exc, _Urllib3ReadTimeoutError):
+        return True
+    # Fallback for vendored urllib3 copies whose classes are not identical to
+    # the ones imported above.
+    return type(exc).__name__ in ("ReadTimeoutError", "ReadTimeout")
+
+
 def _is_read_timeout(exc: BaseException) -> bool:
     """True when `exc` is a stream read timeout rather than a real failure.
 
@@ -367,14 +398,17 @@ def _is_read_timeout(exc: BaseException) -> bool:
     arrive surfaces as `requests.exceptions.ReadTimeout` (a
     `requests.exceptions.Timeout` subclass). Both are the expected periodic
     expiry of an idle event stream.
+
+    `requests.exceptions.ConnectTimeout` is also a `Timeout` subclass but is a
+    real failure (the daemon never answered), so it is excluded here and left
+    to the reconnect loop's warning + backoff path.
     """
-    if isinstance(exc, requests.exceptions.Timeout):
+    if isinstance(exc, requests.exceptions.Timeout) and not isinstance(
+        exc, requests.exceptions.ConnectTimeout
+    ):
         return True
     if isinstance(exc, requests.exceptions.ConnectionError):
-        return any(
-            type(inner).__name__ in ("ReadTimeoutError", "ReadTimeout")
-            for inner in _exception_chain(exc)
-        )
+        return any(_is_urllib3_read_timeout(inner) for inner in _exception_chain(exc))
     return False
 
 
