@@ -1,7 +1,7 @@
 ---
 generated_by: fable
 task_id: p2x-advisory-cleanup-ci-runtime-api
-base-commit: 0fe5ea5a4473312412d4ab5c5f48c605668d0949
+base-commit: 09375ac204bc1173496546dd63830d2128a7b7c8
 size: M
 ---
 

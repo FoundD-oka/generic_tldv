@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "task_id": "p2x-advisory-cleanup-ci-runtime-api",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "09375ac204bc1173496546dd63830d2128a7b7c8",
+  "reviewed_commit": "d6858e43ad243f6574a66deb297d3c6c1bfdf863",
+  "target_sha256": "sha256:25f9fd7448e9a1f6ea816b3eeafd1d325234ac7ea324471a034d9f4d4da02964",
+  "contract_sha256": "sha256:69246bb98c931a81d46fa19da93f59322c063a4f15dab2bd808ba3588941f84e",
+  "prompt_sha256": "sha256:a2466049887d2be79fccf949ff765a375f8477933d5e64eaf1e9d54154826344",
+  "response_sha256": "sha256:f5efa33ae4b0453d235e9b5c51a0611ac30bc86f0c3fbce1cf7cb55fd0d2f8f8",
+  "created_at": "2026-08-09T15:32:37.526654+00:00",
+  "verdict": "READY",
+  "summary": "Fable判定項目(AT-501, AT-503〜505のテストソース, FP-501〜504, NFT-501)をすべて充足。変更ファイルは契約許可範囲(workflow + tests/ci/ + .hw/plans)のみで、テスト対象本体への差分なし。比較スクリプトはstdlibのみ・fail-closed設計(レポート破損/baseline不正/collection error/収集0件/null codeすべて非0)で、合成レポートによる両方向のユニットテスト17件が揃っている。改訂履歴の実測ベースライン(CI相当環境で pytest 0 failed → known_failures=[]、ruff 117件を rule 別に固定)は契約のベースライン取得手順と整合し、handoffの「18件fail」転記を回避している。AT-502(PR実走緑)・AT-506証跡・RF-501/502のCI実測確定は判定主体がCI/ゲートのため、pr-ready-gate側の確認事項として残る。violations 0件のためREADY。",
+  "confidence": "high",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "push トリガーの branches フィルタが hw/* 作業ブランチを覆っていない",
+      "file": ".github/workflows/test-runtime-api.yml",
+      "detail": "push は branches: [main, feature/*] に限定されており、本リポで実際に使われている hw/* ブランチ(現ブランチ hw/p2x-advisory-cleanup-ci-runtime-api 含む)への push では workflow が発火しない。pull_request トリガーには branch フィルタがないため PR を開けば実走するので AT-502 は満たせるが、PR 作成前の push 段階で CI フィードバックを得たい運用なら hw/* を追加するか branches フィルタ自体を外すことを検討。PR #69 で是正した「CI トリガーの盲点」と同系統の残余。"
+    },
+    {
+      "title": "ruff のバージョン固定が workflow 側のみで dev 依存に反映されていない",
+      "file": ".github/workflows/test-runtime-api.yml",
+      "detail": "CI は ruff==0.16.2 を明示 install してベースラインの意味を固定しているが、ローカルの pip install -e \"services/runtime-api/[dev]\" では別バージョンの ruff が入り得るため、ローカル実行の ruff ラチェット結果が CI と食い違う可能性がある。FP-502 で本タスクでは pyproject.toml を触れないため現状の設計は妥当だが、次に pyproject.toml を触るタスクで dev 依存に ruff==0.16.2 をピンするとローカル/CI の一致が取れる。"
+    },
+    {
+      "title": "rule 別件数ラチェットは同一 rule 内の入れ替わりを検出できない",
+      "file": "services/runtime-api/tests/ci/check_ruff_baseline.py",
+      "detail": "件数ベースのラチェットの既知の限界として、既存の F401 を1件直しつつ新規コードで F401 を1件増やすと合計が同数のため素通りする。dashboard lint ラチェット(#63)と同じ設計であり契約(AT-505 は rule 別件数の超過判定)には適合しているが、負債返済が進んで件数が小さくなった段階で file+rule 粒度や node-id 粒度への移行を検討する価値がある。"
+    }
+  ]
+}
