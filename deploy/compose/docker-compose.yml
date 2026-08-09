@@ -89,8 +89,18 @@ services:
   # and stays exited, so a healthcheck would have nothing to report on.
   minio-init:
     image: minio/mc:latest
+    # ST-25 design rule for every depends_on condition in this file: promote to
+    # `service_healthy` only when the target owns a real infrastructure
+    # healthcheck that always becomes healthy on its own. A condition pointed at
+    # a service that can legitimately stay un-healthy (an app waiting on an
+    # optional backend) stops the whole stack from ever starting, so application
+    # dependencies stay on `service_started`.
     depends_on:
-      - minio
+      minio:
+        # MinIO is healthy after ~40s worst case (start_period 10s + interval
+        # 30s). Without this, `mc mb` can run against a not-yet-serving MinIO
+        # and the unconditional `exit 0` below hides the failure.
+        condition: service_healthy
     entrypoint:
       - /bin/sh
       - -c
@@ -145,6 +155,11 @@ services:
       context: ../../services/runtime-api
       dockerfile: Dockerfile
     image: vexaai/runtime-api:${IMAGE_TAG}
+    # ST-24: value mirrors the load-tested helm shape (values.yaml:186,
+    # deploy/helm/charts/vexa/values.yaml runtimeApi.resources.limits.memory:
+    # 512Mi). Do not raise without new measurements — a silently raised cap
+    # hides memory regressions (#55).
+    mem_limit: 512m
     group_add:
       - "${DOCKER_GID:-998}"
     ports:
@@ -200,8 +215,13 @@ services:
     init: true
     logging: *default-logging
     depends_on:
-      - redis
-      - postgres
+      redis:
+        # Startup calls redis.ping() immediately, so `service_started` can put
+        # this service into a restart loop. Redis is healthy in ~10s.
+        condition: service_healthy
+      postgres:
+        # Healthy in ~10s (interval 5s x 5 retries).
+        condition: service_healthy
     networks:
       - vexa
     restart: unless-stopped
@@ -282,9 +302,14 @@ services:
       admin-api:
         condition: service_healthy
       meeting-api:
+        # Deliberately NOT promoted: meeting-api's /readyz can legitimately take
+        # up to ~90s (60s start_period + retries). The gateway only returns 502
+        # on meeting-api routes meanwhile, and the other routes (admin-api etc.)
+        # are better served early than not at all.
         condition: service_started
       redis:
-        condition: service_started
+        # The rate limiter is backed by Redis; healthy in ~10s.
+        condition: service_healthy
     networks:
       - vexa
     restart: unless-stopped
@@ -430,9 +455,23 @@ services:
     init: true
     logging: *default-logging
     depends_on:
-      - redis
-      - postgres
-      - runtime-api
+      redis:
+        # Absorbs the bounded Redis retry at startup (worst case ~60s) in the
+        # dependency condition instead of in the container's own restart loop.
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      minio-init:
+        # Closes the first-deploy race where a recording upload runs before the
+        # bucket exists. minio-init ends with an unconditional `exit 0`, so this
+        # condition cannot stay unmet (~8s after MinIO is healthy).
+        condition: service_completed_successfully
+      runtime-api:
+        # Deliberately NOT promoted: runtime-api's /health covers its Redis
+        # dependency, so a bot-subsystem failure would otherwise also stop
+        # meeting-api (transcript browsing and API). The startup bot-dispatch
+        # race is absorbed by the 3-attempt exponential backoff from #46.
+        condition: service_started
     networks:
       - vexa
     restart: unless-stopped
@@ -481,6 +520,10 @@ services:
       start_period: 10s
     init: true
     logging: *default-logging
+    # Deliberately NOT promoted (ST-25): api-gateway is an application service
+    # whose own health depends on admin-api/meeting-api, so a condition here
+    # would chain this service's startup to the whole stack. Its HTTP clients
+    # retry, so `service_started` is enough.
     depends_on:
       - api-gateway
     networks:
@@ -533,6 +576,8 @@ services:
       start_period: 30s
     init: true
     logging: *default-logging
+    # Deliberately NOT promoted (ST-25): same reason as mcp — the dashboard
+    # renders and retries its api-gateway calls on its own.
     depends_on:
       - api-gateway
     networks:
@@ -586,6 +631,7 @@ services:
       start_period: 30s
     init: true
     logging: *default-logging
+    # Deliberately NOT promoted (ST-25): same reason as dashboard.
     depends_on:
       - api-gateway
     networks:
@@ -735,6 +781,9 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     init: true
     logging: *default-logging
+    # Promotion FORBIDDEN here (ST-25), not merely declined: this service runs
+    # with `restart: "no"`, so a dependency condition that is not met at start
+    # leaves it permanently down with no retry.
     depends_on:
       - api-gateway
     networks:
@@ -816,8 +865,13 @@ services:
       start_period: 10s
     logging: *default-logging
     depends_on:
-      - postgres
-      - meeting-api
+      postgres:
+        # Healthy in ~10s.
+        condition: service_healthy
+      meeting-api:
+        # Deliberately NOT promoted, same reason as api-gateway above: the sync
+        # loop retries, so it must not be blocked by meeting-api's ~90s /readyz.
+        condition: service_started
     networks:
       - vexa
     restart: unless-stopped
