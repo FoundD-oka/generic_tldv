@@ -1,0 +1,10 @@
+{
+  "runtime": "inline",
+  "axes": {
+    "duration": false,
+    "state_volume": false,
+    "delegation": false,
+    "recurrence": false
+  },
+  "reason": "duration: 変更は1ファイル+テスト群で数時間以内の1セッションに収まる。state_volume: 参照コンテキストは final_transcription.py と関連テストのみで、メモリ実測もローカル pytest で完結し大量ログ分析は不要。delegation: 単一実装者の直列作業で並行委譲は不要。recurrence: 一回限りの構造修正で反復手順の資産化対象ではない。全軸非該当のため inline(Opus 5 implementer)。"
+}

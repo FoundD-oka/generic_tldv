@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "task_id": "p12-audio-disk-streaming",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "5561cb9ec3c9f994fb5f74a3802bcacec8d08665",
+  "reviewed_commit": "4186f3b87f59e61ed059665f609ba64209d0529e",
+  "target_sha256": "sha256:84087c410000cfbad590225c6c5a38853ad586dc0ce96460e37b80b6eca4380c",
+  "contract_sha256": "sha256:06ec1474f102aef3d03c6dff79bf17300d17c7b0043654670ce704685bd33457",
+  "prompt_sha256": "sha256:d45c2689eb112dfbabac0caebeb36d995679fab0ee0e9032ba0e8b362bbcb5d2",
+  "response_sha256": "sha256:3f060bba0423b0d582601e702c259dad3d1b649dd97c8af6186c75d78b7a279d",
+  "created_at": "2026-08-09T02:39:34.510506+00:00",
+  "verdict": "READY",
+  "summary": "p12-audio-disk-streaming(base 5561c b9..4186f3b)は検証契約に適合。AT-001〜007 は新規 test_final_transcription_memory.py で契約の方法論どおり(実 httpx+DrainTransport+tracemalloc 実測、閾値 64MiB/16MiB、静的ガード、サイズ比例タイムアウトの floor/線形/cap/env/誤設定ケース、subprocess.run timeout kwarg、3経路の temp 掃除、変換セマンティクス維持)に実装。FP-005 の Fable 担当ハンクレビューでは、_transcribe_lanes の bytes→path 置換が budget/cancel/all-or-nothing/BUG-018/BUG-006 を保存し、エラーマッピング(409/502/422、detail 文言)は再インデントのみで不変であることを確認。FP-002 のテスト修正は許可済み1件+実測 fail 必至の lanes stub シグネチャ追随2箇所のみで assertion 意図不変。FP-003/FP-004 適合(サービス側変更は final_transcription.py と tests/ のみ、deploy 差分空。.hw/plans/ の4ファイルは契約自身が前提とする harness 成果物であり違反と扱わない)。violations 0件のため READY。ただし runtime evidence(FP-001 ベースライン比較、pytest ログ、NFT-001 の3回 green、FP-002 修正一覧)は .hw/gates/ 側成果物で本差分に含まれず、実在確認は pr-ready-gate と CI が担う。本 READY は contract hash sha256:06ec1474… / target hash sha256:84087c41… に束縛され、修復や契約変更で自動失効する。",
+  "confidence": "medium",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "runtime evidence の実在確認はゲート側で必須",
+      "file": ".hw/gates/p12-audio-disk-streaming/",
+      "detail": "FP-001 のベースライン/変更後 pytest サマリ全文、AT 群のピーク実測値を含む pytest ログ、NFT-001 の3回連続 green ログ、FP-002 の修正一覧メモは committed diff に含まれない(契約上 .hw/gates/ 配置)。本レビューは差分の契約適合性のみを判定しており、evidence pack の存在・内容整合は pr-ready-gate.sh と CI で確認すること。"
+    },
+    {
+      "title": "_call_transcription_service の open() 失敗がプロバイダエラーマッピング外を通る",
+      "file": "services/meeting-api/meeting_api/final_transcription.py",
+      "detail": "open(audio_path) を try の外に置く設計は意図的(ローカルファイルエラーをプロバイダ結果と混同しない)だが、万一 FileNotFoundError が発生した場合の run_deferred_transcription 側での分類(retryable 判定)はテストされていない。temp dir 内で download→convert 直後に呼ぶため実運用では到達困難であり契約違反ではないが、将来経路を分岐させる際は分類テストの追加が望ましい。"
+    },
+    {
+      "title": "lanes テストの bytes 戻り値が実体 _convert_audio_to_wav / _audio_duration_seconds に流れる脆い結合",
+      "file": "services/meeting-api/tests/test_final_transcription_lanes.py",
+      "detail": "download stub が bytes を返し、path 前提になった実体関数へそのまま流れる。現状は passthrough 判定・wave.open 例外→None・_unlink_quietly の防御(TypeError/ValueError 吸収)で fallback テストの意図どおり通るが、防御を外す変更で黙って挙動が変わり得る。将来のタスクで stub を path 返却へ揃えると結合が明示的になる。"
+    },
+    {
+      "title": "プラン由来のスコープ外改善(別タスク候補)",
+      "file": "services/meeting-api/meeting_api/storage.py",
+      "detail": "(1) LocalStorageClient の download_file_to_path は基底の read-all フォールバックのまま(テストは monkeypatch stub で代理)。storage.py を触る将来タスクで shutil.copyfile ベースの streaming override を足すのが望ましい。(2) transcription-service 側 Soniox 分岐の await file.read()(main.py:328)は受信側の全量メモリ化として残存しており、必要なら別タスク化する。いずれもプランが advisory として明示したスコープ外項目。"
+    }
+  ]
+}
