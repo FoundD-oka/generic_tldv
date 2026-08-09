@@ -1,7 +1,7 @@
 ---
 generated_by: fable
 task_id: p23-transcript-search-ui
-base-commit: 7c3c6555f63950eaf5a496da07b6a84da62fd0e8
+base-commit: 7febd39e78e0b468fb5e1fa707f2f88d4a129f41
 size: M
 parent: p23-transcript-fulltext-search
 ---
@@ -11,9 +11,9 @@ parent: p23-transcript-fulltext-search
 親プラン `.hw/plans/p23-transcript-fulltext-search/plan.md` の Stage 2 を独立レビュー
 可能な形で切り出したもの。Why・スコープの線引きは親プランを正とする。
 
-**base-commit は暫定値**(親プラン作成時の HEAD)。Stage 1
-(`p23-transcript-search-api`)の PR マージ後、着手時にコーディネータが
-`git rev-parse HEAD` で frontmatter と `base-commit` ファイルの両方を更新すること。
+base-commit は着手時(Stage 1 マージ後)の実測 HEAD
+`7febd39e78e0b468fb5e1fa707f2f88d4a129f41` へ更新済み(2026-08-09、実装者実施。
+暫定値 `7c3c6555f63950eaf5a496da07b6a84da62fd0e8` は親プラン作成時の HEAD だった)。
 Fable レビューはその commit から実装 HEAD までを対象にする。
 着手前提: Stage 1 の `GET /transcripts/search` が main にマージ済みであること。
 

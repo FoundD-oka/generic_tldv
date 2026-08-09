@@ -77,4 +77,56 @@ FP-311〜313)を項目 ID・合格ライン不変のまま抽出。追加は RF-
 プロキシの新パス転送の現物確認。プラン時未検証の前提を Research Freshness へ
 明示化したもので、合格ラインの緩和ではない)のみ。
 
-(着手時のベースライン実測をここへ追記して commit すること)
+### 着手時ベースラインと実測結果(2026-08-09、実装者実施)
+
+**base-commit 更新**: 暫定値 `7c3c6555f63950eaf5a496da07b6a84da62fd0e8` を
+着手時 HEAD の実測値 `7febd39e78e0b468fb5e1fa707f2f88d4a129f41`(Stage 1
+マージ後の main)へ更新。plan.md frontmatter と `base-commit` ファイルの両方。
+
+**ベースライン実測**(base-commit の clean tree、`cd services/dashboard &&
+npm install --no-audit --no-fund && npm test`。Node v22.23.0 / eslint v9.39.1)
+
+- vitest: **32 files / 243 tests passed**(証跡
+  `.hw/gates/p23-transcript-search-ui/vitest-baseline-7febd39.txt`)。
+- lint ベースライン比較: `npx eslint . --format json` の実測が
+  **errors=61 / warnings=87 / fatalErrors=0**。`lint-baseline.json` の値
+  (errors 61 / warnings 87)と一致し `lint-ratchet: OK`(証跡
+  `lint-ratchet-baseline-7febd39.txt`)。
+
+**実装後の実測**(同コマンド、同環境)
+
+- vitest: **33 files / 263 tests passed**(既存 243 は全て維持し、新規
+  `tests/test_transcript_search_ui.test.ts` の 20 件を追加。証跡
+  `vitest-after.txt`)。FP-311(既存タイトル検索・status/platform
+  フィルタ・一覧表示の非退行)/ FP-312(テスト非退行)に対応。
+- lint: **errors=61 / warnings=87 / fatalErrors=0** で不変、
+  `lint-ratchet: OK (新規増加なし)`。`lint-baseline.json` は変更していない
+  (上げていない)。証跡 `lint-ratchet-after.txt`。
+- FP-313: `git diff --name-only 7febd39..HEAD -- ':(exclude).hw/plans'` は
+  `services/dashboard/` 配下の5ファイルのみ(page.tsx / dashboard-copy.ts /
+  transcript-search.ts / transcript-search-results.tsx / テスト1本)。
+
+**Research Freshness 実測結果**
+
+- **RF-311(PASS)**: dashboard の汎用プロキシ
+  `src/app/api/vexa/[...path]/route.ts` は、`meetings` の GET 特例を除く全パスを
+  `${VEXA_API_URL}/${path.join("/")}` へそのまま転送し、`request.nextUrl.searchParams`
+  を(`proxy` パラメータのみ除去して)クエリ文字列として引き継ぎ、認証クッキー
+  (`vexa-token`)の値を `X-API-Key` ヘッダに載せる。新パス用の分岐追加は不要。
+  実スタックで実測(現行 main のソースからビルドした meeting-api / api-gateway を
+  同一 docker ネットワークへ一時起動し、dashboard を `VEXA_API_URL` 経由で接続):
+  - `GET /api/vexa/transcripts/search?q=エージェント&limit=2` +
+    認証クッキー → **200**、`{"query":"エージェント","results":[...]}` を取得
+    (`limit` も転送されている)。
+  - 認証クッキーなし → プロキシが **401**(上流へ出さない)。
+  - `q=あ`(1文字)→ meeting-api の 422
+    `{"detail":"検索キーワードは2文字以上で指定してください"}` が透過。
+    クエリ文字列がそのまま届いている証拠。
+  - 証跡: `.hw/gates/p23-transcript-search-ui/rf-311-proxy-live.txt`。
+- **AT-311 手動確認(PASS)**: 同スタックの会議一覧で日本語クエリ
+  「エージェント」を1回検索し、「文字起こしに一致」セクションに会議タイトル
+  (`/meetings/{id}` への既存導線)+ 会議あたり最大3件のスニペット + 総マッチ数
+  (「5件一致」等)が表示されることを確認。`<mark>` 強調が18箇所。
+  証跡: `at-311-transcript-search-section.png`。
+- **AT-313 手動確認(PASS)**: 0件クエリで
+  「文字起こしに一致する会議はありません」を表示。証跡: `at-313-empty-state.png`。
