@@ -67,7 +67,6 @@ def _meeting_title(data: Optional[dict]) -> Optional[str]:
 @router.get(
     "/transcripts/search",
     summary="Search transcript text across the authenticated user's meetings",
-    dependencies=[Depends(get_user_and_token)],
 )
 async def search_transcripts(
     q: str = Query(..., description="検索キーワード(リテラル一致)"),

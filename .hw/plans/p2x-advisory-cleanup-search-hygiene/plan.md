@@ -1,7 +1,7 @@
 ---
 generated_by: fable
 task_id: p2x-advisory-cleanup-search-hygiene
-base-commit: 0fe5ea5a4473312412d4ab5c5f48c605668d0949
+base-commit: 05d97b7569db50732d154732c58f7d44de6671dd
 size: S
 ---
 
