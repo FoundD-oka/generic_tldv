@@ -1,0 +1,22 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {
+      "level": "S",
+      "reason": "要求は明確(ログ回転+healthcheck 全数)。ST-20 の「意味のある endpoint」も #57 advisory と現物確認で meeting-api=/readyz に一意に定まり、対象サービスと除外(one-shot / HTTP なし)もプランで全数列挙済み。"
+    },
+    "technical_unknown": {
+      "level": "M",
+      "reason": "minio image の curl 搭載有無(リリースで変動歴あり)、tts/wake-stt image 内の到達手段など、実装時の実測確認に委ねた未知が数点残る。いずれもフォールバック(見送り+advisory)を定義済みだが未知は未知。"
+    },
+    "blast_radius": {
+      "level": "M",
+      "reason": "compose 全サービスの定義に触れる(logging は全数、healthcheck は9サービス追加)。logging 変更は次回 up 時に全コンテナ再作成を伴い、誤った healthcheck は unhealthy 表示で運用判断を誤らせる。depends_on を触らないことで起動ブロックの副作用は遮断したが、面の広さは M 相当。"
+    },
+    "verifiability": {
+      "level": "M",
+      "reason": "配備ファイル変更はテストで固定しにくい。docker compose config の展開結果を検査するスクリプト+healthcheck/logging 以外のキー同一性比較で静的検証を設計したが、「実際にコンテナが healthy になる」の完全検証は実起動が必要で、契約の最低ラインは静的検証+endpoint 実在確認に留まる。"
+    }
+  },
+  "verdict_reason": "L 相当の軸なし。技術的未知(image 内ツールの実測依存)・影響範囲(compose 全面)・検証可能性(静的検証が上限)に M 相当が残るため M。Fable 契約レビュー必須。"
+}

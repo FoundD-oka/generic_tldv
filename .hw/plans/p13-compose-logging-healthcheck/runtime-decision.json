@@ -1,0 +1,10 @@
+{
+  "runtime": "inline",
+  "axes": {
+    "duration": false,
+    "state_volume": false,
+    "delegation": false,
+    "recurrence": false
+  },
+  "reason": "duration: compose 1ファイル+検証スクリプト1本+mcp 3行+テスト1本で数時間以内の1セッションに収まる。state_volume: 参照は docker-compose.yml と各サービスの health endpoint 定義のみで、コンテキストに載る量。delegation: 単一ファイル中心の直列作業で並行委譲は不要。recurrence: verify スクリプトは資産になるが本タスク内で作る一回限りの成果物であり、繰り返し手順のオーケストレーションではない。全軸非該当のため inline(Opus 5 implementer)。"
+}
