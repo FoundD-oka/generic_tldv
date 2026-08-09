@@ -1,0 +1,10 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {"level": "M", "reason": "「統一」の到達点は対象4画面に限定して固定したが、EmptyState への置換で許容される視覚差の判断が残る。"},
+    "technical_unknown": {"level": "S", "reason": "EmptyState は既存コンポーネントで、置換・エラー状態追加は既知パターン。"},
+    "blast_radius": {"level": "M", "reason": "4画面の表示分岐を触る。p3-search-ux の変更との整合が前提で、順序依存がある。"},
+    "verifiability": {"level": "S", "reason": "エラー状態・再試行・EmptyState 描画は vitest で機械検証できる。"}
+  },
+  "verdict_reason": "2軸が M。Fable 契約レビューを行う。"
+}

@@ -1,0 +1,1 @@
+{"runtime": "inline", "axes": {"duration": false, "state_volume": false, "delegation": false, "recurrence": false}, "reason": "duration: 記録のみで作業なし。state_volume: 本ファイル群のみ。delegation: 不要。recurrence: 一回限りの選別記録。全軸非該当のため inline。"}

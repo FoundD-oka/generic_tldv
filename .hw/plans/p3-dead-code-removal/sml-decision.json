@@ -1,0 +1,10 @@
+{
+  "size": "S",
+  "axes": {
+    "requirement_ambiguity": {"level": "S", "reason": "削除対象13ファイルを列挙済み。判断の余地は「参照が見つかったら削除しない」の一方向のみ。"},
+    "technical_unknown": {"level": "S", "reason": "全対象の参照0を 2026-08-10 に実測済み。着手時再実測+差し戻し条件で fail-closed。"},
+    "blast_radius": {"level": "S", "reason": "純削除のみ。他ファイル編集禁止を FP で固定。import 0 のため tsc/vitest が退行を機械検知する。"},
+    "verifiability": {"level": "S", "reason": "ファイル不存在・参照0・tsc/lint/test 緑がすべて機械検証。"}
+  },
+  "verdict_reason": "全軸 S。機械検証のみで Fable レビュー不要。"
+}
