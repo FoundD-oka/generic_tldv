@@ -13,10 +13,11 @@ size: S
    `test-meeting-api.yml` / `test-packages.yml`: **`pull_request.paths` に自
    workflow ファイルのパスを追加**(push 側は既に含まれている。触らない)。
 2. `verify-compose-config.yml`: `push.branches` に `hw/**` を追加。
-3. `deploy-dashboard-gcp.yml`: `push` に `paths` を追加 —
-   `services/dashboard/**`、`packages/transcript-rendering/**`(dashboard は
-   `file:../../packages/transcript-rendering` 依存)、
-   `.github/workflows/deploy-dashboard-gcp.yml` の3つ。`branches: [main]`・
+3. `deploy-dashboard-gcp.yml`: `push` に `paths` を追加 — 契約 AT-403 の
+   8エントリちょうど(`services/dashboard/**`、`packages/transcript-rendering/**`、
+   `.github/workflows/deploy-dashboard-gcp.yml`、`deploy/gcp/**`、`VERSION`、
+   `deploy/helm/charts/vexa/Chart.yaml`、`.dockerignore`、`.gcloudignore`。
+   根拠は契約の改訂履歴 2026-08-09 AT-403 節)。`branches: [main]`・
    `concurrency`・jobs は一切変更しない。
 4. 差分はトリガー節(`on:`)のみ。jobs / steps / permissions に触れない。
 5. 検証は verification-contract.md のとおり(静的検査 + PR 上での実走確認)。
