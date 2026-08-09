@@ -79,11 +79,14 @@ describe("voiceprint pre-enrollment recording", () => {
   });
 
   it("renders a modal gate whose background is inert to pointer and keyboard focus", () => {
-    const markup = renderToStaticMarkup(createElement(
-      VoiceprintPreparationGate,
-      { active: true, overlayRef: { current: null } },
-      createElement("button", { type: "button" }, "背景操作")
-    ));
+    // このファイルは .ts のため JSX を書けず、createElement の可変長 children は
+    // 必須 prop `children` を型として満たさない。コンポーネントを直接呼び出して
+    // 同じ要素ツリーを生成する。
+    const markup = renderToStaticMarkup(VoiceprintPreparationGate({
+      active: true,
+      overlayRef: { current: null },
+      children: createElement("button", { type: "button" }, "背景操作"),
+    }));
     expect(markup).toContain('role="dialog"');
     expect(markup).toContain('aria-modal="true"');
     expect(markup).toContain('tabindex="-1"');

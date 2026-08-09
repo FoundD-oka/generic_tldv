@@ -36,6 +36,8 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Run tests
         run: npm test
+      - name: Typecheck
+        run: npx tsc --noEmit
       - name: Lint ratchet
         run: |
           set +e
