@@ -9,6 +9,7 @@ import json
 import logging
 import math
 import os
+import random
 import re
 import tempfile
 import threading
@@ -28,8 +29,10 @@ MAX_AUDIO_BYTES = int(os.getenv("GEMINI_MAX_AUDIO_BYTES", str(400 * 1024 * 1024)
 MAX_AUDIO_DURATION_SECONDS = int(os.getenv("GEMINI_MAX_AUDIO_DURATION_SECONDS", "10800"))
 OPERATION_TIMEOUT_SECONDS = int(os.getenv("GEMINI_OPERATION_TIMEOUT_SECONDS", "1500"))
 HTTP_TIMEOUT_SECONDS = int(os.getenv("GEMINI_HTTP_TIMEOUT_SECONDS", "300"))
-MAX_CONCURRENCY = int(os.getenv("GEMINI_MAX_CONCURRENCY", "1"))
+MAX_CONCURRENCY = int(os.getenv("GEMINI_MAX_CONCURRENCY", "3"))
 FILE_RETRY_ATTEMPTS = int(os.getenv("GEMINI_FILE_RETRY_ATTEMPTS", "3"))
+RATE_LIMIT_RETRY_ATTEMPTS = int(os.getenv("GEMINI_RATE_LIMIT_RETRY_ATTEMPTS", "6"))
+RATE_LIMIT_BACKOFF_MAX_SECONDS = 60.0
 FILE_POLL_INTERVAL_SECONDS = float(os.getenv("GEMINI_FILE_POLL_INTERVAL_SECONDS", "2"))
 CHUNK_DURATION_SECONDS = float(os.getenv("GEMINI_CHUNK_DURATION_SECONDS", "300"))
 CHUNK_OVERLAP_SECONDS = float(os.getenv("GEMINI_CHUNK_OVERLAP_SECONDS", "5"))
@@ -3415,6 +3418,83 @@ def _ensure_operation_active(
         )
 
 
+def _generate_content_with_rate_limit_retry(
+    call: Callable[[], Any],
+    *,
+    chunk_label: str,
+    stop_event: Optional[threading.Event],
+    deadline_monotonic: Optional[float],
+) -> Any:
+    """Run GenerateContent, retrying only provider rate limits (429).
+
+    A 429 means the provider rejected the request without processing it, so a
+    retry is safe. Every other outcome keeps its existing classification.
+    """
+    attempts = max(1, RATE_LIMIT_RETRY_ATTEMPTS)
+    for attempt in range(attempts):
+        try:
+            return call()
+        except ValueError as exc:
+            # google-genai raises ValueError while translating an unsupported
+            # local config before any GenerateContent request is sent. Keep
+            # that deterministic operator error distinct from an ambiguous
+            # network/provider outcome that requires manual reconciliation.
+            raise GeminiError(
+                "config_invalid",
+                "Gemini request configuration is invalid",
+                status_code=503,
+            ) from exc
+        except Exception as exc:
+            status = _status_code(exc)
+            if status in {401, 403}:
+                raise GeminiError("auth_failed", "Gemini authentication failed", status_code=422) from exc
+            if status == 404:
+                raise GeminiError("model_not_found", "Gemini model was not found", status_code=422) from exc
+            if status != 429:
+                # Never retry GenerateContent: the provider may have accepted and billed it.
+                raise GeminiError(
+                    "unknown_manual_reconcile",
+                    "Gemini result is unknown; automatic retry is disabled",
+                    status_code=422,
+                ) from exc
+            if attempt >= attempts - 1:
+                logger.warning(
+                    "gemini_rate_limited chunk_label=%s attempt=%s/%s retry_budget_exhausted=1",
+                    chunk_label,
+                    attempt + 1,
+                    attempts,
+                )
+                raise GeminiError(
+                    "admission_timeout",
+                    "Gemini provider rate limit persisted beyond the retry budget",
+                    status_code=503,
+                ) from exc
+            _ensure_operation_active(stop_event, deadline_monotonic)
+            sleep_seconds = random.uniform(
+                0.0,
+                min(float(2 ** attempt), RATE_LIMIT_BACKOFF_MAX_SECONDS),
+            )
+            if deadline_monotonic is not None:
+                sleep_seconds = min(
+                    sleep_seconds,
+                    max(0.0, deadline_monotonic - time.monotonic()),
+                )
+            logger.warning(
+                "gemini_rate_limited chunk_label=%s attempt=%s/%s sleep_seconds=%.3f",
+                chunk_label,
+                attempt + 1,
+                attempts,
+                sleep_seconds,
+            )
+            time.sleep(sleep_seconds)
+            _ensure_operation_active(stop_event, deadline_monotonic)
+    raise GeminiError(
+        "admission_timeout",
+        "Gemini provider rate limit persisted beyond the retry budget",
+        status_code=503,
+    )
+
+
 def _transcribe_chunk_sync(
     client: Any,
     types: Any,
@@ -3490,34 +3570,16 @@ def _transcribe_chunk_sync(
         if model.lower().startswith("gemini-3"):
             config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_level=THINKING_LEVEL)
         _ensure_operation_active(stop_event, deadline_monotonic)
-        try:
-            response = client.models.generate_content(
+        response = _generate_content_with_rate_limit_retry(
+            lambda: client.models.generate_content(
                 model=model,
                 contents=[lexical_hints, uploaded],
                 config=types.GenerateContentConfig(**config_kwargs),
-            )
-        except ValueError as exc:
-            # google-genai raises ValueError while translating an unsupported
-            # local config before any GenerateContent request is sent. Keep
-            # that deterministic operator error distinct from an ambiguous
-            # network/provider outcome that requires manual reconciliation.
-            raise GeminiError(
-                "config_invalid",
-                "Gemini request configuration is invalid",
-                status_code=503,
-            ) from exc
-        except Exception as exc:
-            status = _status_code(exc)
-            if status in {401, 403}:
-                raise GeminiError("auth_failed", "Gemini authentication failed", status_code=422) from exc
-            if status == 404:
-                raise GeminiError("model_not_found", "Gemini model was not found", status_code=422) from exc
-            # Never retry GenerateContent: the provider may have accepted and billed it.
-            raise GeminiError(
-                "unknown_manual_reconcile",
-                "Gemini result is unknown; automatic retry is disabled",
-                status_code=422,
-            ) from exc
+            ),
+            chunk_label=chunk_label or str(chunk_index + 1),
+            stop_event=stop_event,
+            deadline_monotonic=deadline_monotonic,
+        )
         _ensure_operation_active(stop_event, deadline_monotonic)
         finish_reason = _finish_reason(response)
         usage = getattr(response, "usage_metadata", None)

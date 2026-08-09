@@ -1,7 +1,10 @@
 import asyncio
+import contextlib
 import hashlib
+import importlib
 import io
 import logging
+import os
 import re
 import threading
 import time
@@ -3939,3 +3942,266 @@ async def test_upload_body_is_read_only_after_slot_is_acquired(monkeypatch):
     await asyncio.wait_for(first, timeout=1)
     await asyncio.wait_for(second, timeout=1)
     assert second_read_started.is_set()
+
+
+@contextlib.contextmanager
+def _reloaded_gemini_adapter(**env: "str | None"):
+    """Reload gemini_adapter under the given env, then always restore it.
+
+    Module-level state (MAX_CONCURRENCY, _semaphore) is shared with every other
+    test, so the original module state is rebuilt on the way out.
+    """
+    previous = {name: os.environ.get(name) for name in env}
+    try:
+        for name, value in env.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+        yield importlib.reload(gemini_adapter)
+    finally:
+        for name, value in previous.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+        importlib.reload(gemini_adapter)
+
+
+def _rate_limit_error(message: str = "429 RESOURCE_EXHAUSTED") -> Exception:
+    error = RuntimeError(message)
+    error.status_code = 429
+    return error
+
+
+def _status_error(status: int) -> Exception:
+    error = RuntimeError(f"provider returned {status}")
+    error.status_code = status
+    return error
+
+
+def _always_raising(factory):
+    def _call(*_args, **_kwargs):
+        raise factory()
+
+    return _call
+
+
+@pytest.mark.parametrize(
+    ("env_value", "expected_concurrency", "expected_slots"),
+    [(None, 3, 3), ("5", 5, 5), ("0", 0, 1), ("-2", -2, 1)],
+)
+def test_gemini_concurrency_default_and_env_override(env_value, expected_concurrency, expected_slots):
+    with _reloaded_gemini_adapter(GEMINI_MAX_CONCURRENCY=env_value) as module:
+        assert module.MAX_CONCURRENCY == expected_concurrency
+        assert module._semaphore._value == expected_slots
+
+
+@pytest.mark.asyncio
+async def test_gemini_concurrency_semaphore_caps_parallel_requests():
+    with _reloaded_gemini_adapter(GEMINI_MAX_CONCURRENCY="2") as module:
+        lock = threading.Lock()
+        state = {"active": 0, "max_active": 0, "calls": 0}
+        limit_reached = threading.Event()
+        original_transcribe = module._transcribe_sync
+
+        def fake_transcribe(*_args, **_kwargs):
+            with lock:
+                state["active"] += 1
+                state["calls"] += 1
+                state["max_active"] = max(state["max_active"], state["active"])
+                if state["active"] >= 2:
+                    limit_reached.set()
+            try:
+                limit_reached.wait(timeout=2)
+            finally:
+                with lock:
+                    state["active"] -= 1
+            return {"text": "ok", "language": "ja", "duration": 0, "segments": []}
+
+        module._transcribe_sync = fake_transcribe
+        try:
+            results = await asyncio.wait_for(
+                asyncio.gather(*[
+                    module.transcribe_via_gemini(
+                        b"x",
+                        filename=f"{index}.wav",
+                        model="gemini-3.5-flash",
+                        language=None,
+                        prompt=None,
+                    )
+                    for index in range(3)
+                ]),
+                timeout=5,
+            )
+        finally:
+            module._transcribe_sync = original_transcribe
+
+        assert len(results) == 3
+        assert state["calls"] == 3
+        assert state["max_active"] == 2
+
+
+def test_rate_limited_generate_content_retries_with_exponential_backoff(monkeypatch, caplog):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.setattr(gemini_adapter, "RATE_LIMIT_RETRY_ATTEMPTS", 6)
+    monkeypatch.setattr(gemini_adapter.random, "uniform", lambda _low, high: high)
+    sleeps: list[float] = []
+    monkeypatch.setattr(gemini_adapter.time, "sleep", lambda seconds: sleeps.append(seconds))
+    uploaded = SimpleNamespace(name="files/rate-limited", state=SimpleNamespace(name="ACTIVE"))
+    fake_client = SimpleNamespace(
+        files=SimpleNamespace(
+            upload=MagicMock(return_value=uploaded),
+            get=MagicMock(),
+            delete=MagicMock(),
+        ),
+        models=SimpleNamespace(generate_content=MagicMock(side_effect=[
+            _rate_limit_error(),
+            _rate_limit_error(),
+            _response([{"start": 0, "end": 1, "text": "発話", "speaker": "Speaker 1"}]),
+        ])),
+    )
+    from google import genai
+    monkeypatch.setattr(genai, "Client", lambda **_: fake_client)
+
+    with caplog.at_level(logging.WARNING, logger="gemini_adapter"):
+        result = gemini_adapter._transcribe_sync(
+            _wav_bytes(2),
+            filename="meeting.wav",
+            model="gemini-3.5-flash",
+            language="ja",
+            prompt=None,
+        )
+
+    assert [segment["text"] for segment in result["segments"]] == ["発話"]
+    assert fake_client.models.generate_content.call_count == 3
+    assert sleeps == [1.0, 2.0]
+    fake_client.files.delete.assert_called_once_with(name="files/rate-limited")
+
+    messages = [
+        record.getMessage()
+        for record in caplog.records
+        if record.getMessage().startswith("gemini_rate_limited")
+    ]
+    assert len(messages) == 2
+    assert "attempt=1/6" in messages[0] and "sleep_seconds=1.000" in messages[0]
+    assert "attempt=2/6" in messages[1] and "sleep_seconds=2.000" in messages[1]
+
+
+def test_rate_limit_budget_exhaustion_is_a_retryable_admission_timeout(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.setattr(gemini_adapter, "RATE_LIMIT_RETRY_ATTEMPTS", 10)
+    monkeypatch.setattr(gemini_adapter.random, "uniform", lambda _low, high: high)
+    sleeps: list[float] = []
+    monkeypatch.setattr(gemini_adapter.time, "sleep", lambda seconds: sleeps.append(seconds))
+    uploaded = SimpleNamespace(name="files/always-429", state=SimpleNamespace(name="ACTIVE"))
+    fake_client = SimpleNamespace(
+        files=SimpleNamespace(
+            upload=MagicMock(return_value=uploaded),
+            get=MagicMock(),
+            delete=MagicMock(),
+        ),
+        models=SimpleNamespace(generate_content=MagicMock(side_effect=_always_raising(_rate_limit_error))),
+    )
+    from google import genai
+    monkeypatch.setattr(genai, "Client", lambda **_: fake_client)
+
+    with pytest.raises(gemini_adapter.GeminiError) as exc:
+        gemini_adapter._transcribe_sync(
+            b"not-a-real-wav",
+            filename="meeting.wav",
+            model="gemini-3.5-flash",
+            language="ja",
+            prompt=None,
+        )
+
+    assert exc.value.code == "admission_timeout"
+    assert exc.value.status_code == 503
+    assert fake_client.models.generate_content.call_count == 10
+    assert sleeps == [1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 60.0, 60.0, 60.0]
+
+
+def test_rate_limit_retry_stops_at_the_operation_deadline(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.setattr(gemini_adapter, "RATE_LIMIT_RETRY_ATTEMPTS", 6)
+    monkeypatch.setattr(gemini_adapter.random, "uniform", lambda _low, high: high)
+    sleeps: list[float] = []
+    real_sleep = time.sleep
+
+    def recorded_sleep(seconds):
+        sleeps.append(seconds)
+        real_sleep(max(0.0, seconds))
+
+    monkeypatch.setattr(gemini_adapter.time, "sleep", recorded_sleep)
+    uploaded = SimpleNamespace(name="files/deadline-429", state=SimpleNamespace(name="ACTIVE"))
+    fake_client = SimpleNamespace(
+        files=SimpleNamespace(
+            upload=MagicMock(return_value=uploaded),
+            get=MagicMock(),
+            delete=MagicMock(),
+        ),
+        models=SimpleNamespace(generate_content=MagicMock(side_effect=_always_raising(_rate_limit_error))),
+    )
+    from google import genai
+    monkeypatch.setattr(genai, "Client", lambda **_: fake_client)
+
+    with pytest.raises(gemini_adapter.GeminiError) as exc:
+        gemini_adapter._transcribe_sync(
+            b"not-a-real-wav",
+            filename="meeting.wav",
+            model="gemini-3.5-flash",
+            language="ja",
+            prompt=None,
+            stop_event=threading.Event(),
+            deadline_monotonic=time.monotonic() + 0.2,
+        )
+
+    assert exc.value.code == "unknown_manual_reconcile"
+    assert fake_client.models.generate_content.call_count == 1
+    assert len(sleeps) == 1
+    assert sleeps[0] <= 0.2
+
+
+@pytest.mark.parametrize(
+    ("failure", "expected_code", "expected_status"),
+    [
+        (lambda: ValueError("unsupported local request field"), "config_invalid", 503),
+        (lambda: _status_error(401), "auth_failed", 422),
+        (lambda: _status_error(403), "auth_failed", 422),
+        (lambda: _status_error(404), "model_not_found", 422),
+        (lambda: _status_error(500), "unknown_manual_reconcile", 422),
+        (lambda: RuntimeError("connection reset"), "unknown_manual_reconcile", 422),
+    ],
+)
+def test_non_rate_limit_generate_failures_keep_their_classification(
+    monkeypatch, failure, expected_code, expected_status
+):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    sleeps: list[float] = []
+    monkeypatch.setattr(gemini_adapter.time, "sleep", lambda seconds: sleeps.append(seconds))
+    uploaded = SimpleNamespace(name="files/failed", state=SimpleNamespace(name="ACTIVE"))
+    fake_client = SimpleNamespace(
+        files=SimpleNamespace(
+            upload=MagicMock(return_value=uploaded),
+            get=MagicMock(),
+            delete=MagicMock(),
+        ),
+        models=SimpleNamespace(generate_content=MagicMock(side_effect=_always_raising(failure))),
+    )
+    from google import genai
+    monkeypatch.setattr(genai, "Client", lambda **_: fake_client)
+
+    with pytest.raises(gemini_adapter.GeminiError) as exc:
+        gemini_adapter._transcribe_sync(
+            b"not-a-real-wav",
+            filename="meeting.wav",
+            model="gemini-3.5-flash",
+            language="ja",
+            prompt=None,
+        )
+
+    assert exc.value.code == expected_code
+    assert exc.value.status_code == expected_status
+    assert fake_client.models.generate_content.call_count == 1
+    assert sleeps == []
+    fake_client.files.delete.assert_called_once_with(name="files/failed")
