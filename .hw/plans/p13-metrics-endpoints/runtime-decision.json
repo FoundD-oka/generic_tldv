@@ -1,0 +1,10 @@
+{
+  "runtime": "inline",
+  "axes": {
+    "duration": false,
+    "state_volume": false,
+    "delegation": false,
+    "recurrence": false
+  },
+  "reason": "duration: 新モジュール1つ+エンドポイント2本+テスト2ファイル+README 1節で数時間以内の1セッションに収まる。state_volume: 参照コンテキストは sweeps.py のカウンタ/SQL と main.py のルート周辺のみで大量ログ・資料分析は不要。delegation: meeting-api と runtime-api は同一実装者の直列作業で足り並行委譲は不要。recurrence: 一回限りの構造追加で反復手順の資産化対象ではない。全軸非該当のため inline(Opus 5 implementer)。"
+}

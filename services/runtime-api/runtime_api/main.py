@@ -17,7 +17,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 
 from runtime_api import config
 from runtime_api.api import router
@@ -31,6 +31,117 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 logger = logging.getLogger("runtime_api")
+
+
+# ---------------------------------------------------------------------------
+# ST-18 — Prometheus text format (0.0.4) exposition.
+#
+# runtime-api ships as an independent package, so the renderer is a local
+# copy rather than a shared import from meeting-api. Only counters and gauges
+# are exposed, so no `prometheus_client` dependency is needed.
+# ---------------------------------------------------------------------------
+
+METRICS_CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8"
+
+
+def _escape_label_value(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+
+
+def _format_metric_value(value) -> str:
+    number = float(value)
+    if number.is_integer() and abs(number) < 1e15:
+        return str(int(number))
+    return repr(number)
+
+
+def render_prometheus_text(samples) -> str:
+    """Render `(name, type, help, value, labels)` tuples as text format 0.0.4.
+
+    `# HELP` / `# TYPE` are emitted once per metric name; output ends with a
+    newline.
+    """
+    grouped: dict = {}
+    order: list = []
+    for name, mtype, mhelp, value, labels in samples:
+        if name not in grouped:
+            grouped[name] = []
+            order.append(name)
+        grouped[name].append((mtype, mhelp, value, labels))
+
+    lines: list = []
+    for name in order:
+        series = grouped[name]
+        lines.append(f"# HELP {name} {series[0][1]}")
+        lines.append(f"# TYPE {name} {series[0][0]}")
+        for _mtype, _mhelp, value, labels in series:
+            if labels:
+                rendered = ",".join(
+                    f'{key}="{_escape_label_value(str(val))}"' for key, val in labels
+                )
+                lines.append(f"{name}{{{rendered}}} {_format_metric_value(value)}")
+            else:
+                lines.append(f"{name} {_format_metric_value(value)}")
+    return "".join(line + "\n" for line in lines)
+
+
+async def collect_metrics_samples(app: FastAPI) -> list:
+    """Collect samples at scrape time. Never raises for a partial outage."""
+    # Imported here so the live module attribute is read on every scrape
+    # (import-time binding would freeze the counter at its startup value).
+    from runtime_api import lifecycle
+
+    samples = [
+        (
+            "runtime_api_idle_loop_iterations_total",
+            "counter",
+            "Iterations of the idle-management loop since process start.",
+            getattr(lifecycle, "idle_loop_iterations", 0),
+            (),
+        ),
+        (
+            "runtime_api_idle_loop_last_iteration_timestamp_seconds",
+            "gauge",
+            "Unix timestamp of the last idle-management loop iteration (0 if none yet).",
+            getattr(lifecycle, "idle_loop_last_iteration_at", 0.0),
+            (),
+        ),
+    ]
+
+    try:
+        from runtime_api import state
+
+        redis = getattr(app.state, "redis", None)
+        if redis is None:
+            raise RuntimeError("redis not initialized")
+        containers = await state.list_containers(redis)
+        counts: dict = {}
+        for container in containers:
+            status = str(container.get("status") or "unknown")
+            counts[status] = counts.get(status, 0) + 1
+        for status in sorted(counts):
+            samples.append((
+                "runtime_api_containers",
+                "gauge",
+                "Tracked containers by status.",
+                counts[status],
+                (("status", status),),
+            ))
+    except Exception as exc:
+        # A monitoring endpoint must not die before what it monitors: drop the
+        # Redis-derived series and still serve the in-process counters.
+        logger.debug(f"/metrics container gauges unavailable: {exc}")
+
+    return samples
+
+
+def register_metrics_route(app: FastAPI) -> None:
+    """Mount `GET /metrics` on `app` (unauthenticated; runtime-api binds to 127.0.0.1)."""
+
+    @app.get("/metrics")
+    async def metrics(request: Request):
+        body = render_prometheus_text(await collect_metrics_samples(request.app))
+        return Response(content=body, media_type=METRICS_CONTENT_TYPE)
 
 
 def create_app() -> FastAPI:
@@ -60,6 +171,7 @@ def create_app() -> FastAPI:
 
     app.include_router(router)
     app.include_router(scheduler_router)
+    register_metrics_route(app)
 
     @app.on_event("startup")
     async def startup():
@@ -146,8 +258,8 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
     """Simple API key validation from X-API-Key header."""
 
     async def dispatch(self, request: Request, call_next):
-        # Skip auth for health endpoint
-        if request.url.path in ("/health", "/docs", "/openapi.json"):
+        # Skip auth for health and metrics endpoints
+        if request.url.path in ("/health", "/metrics", "/docs", "/openapi.json"):
             return await call_next(request)
 
         # Skip auth if no API keys configured (dev mode)

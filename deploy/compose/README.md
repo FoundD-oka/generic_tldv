@@ -268,6 +268,36 @@ LOCAL_TRANSCRIPTION=true
 | MinIO                             | 9000  | Bucket `vexa-recordings`      |
 
 
+### メトリクス取得(/metrics)
+
+meeting-api と runtime-api は Prometheus text format(0.0.4)の `/metrics` を
+持つ。どちらもホストへは公開していないので、コンテナ内から取得する。
+
+イメージに curl は入っていないので、HEALTHCHECK と同じ python 経由で叩く。
+
+```bash
+docker compose exec meeting-api python -c \
+  "import urllib.request; print(urllib.request.urlopen('http://localhost:8080/metrics').read().decode())"
+docker compose exec runtime-api python -c \
+  "import urllib.request; print(urllib.request.urlopen('http://localhost:8090/metrics').read().decode())"
+```
+
+runtime-api は 127.0.0.1 に publish しているのでホストから直接でもよい:
+`curl -s http://127.0.0.1:${RUNTIME_API_PORT:-8090}/metrics`
+
+読み方(監査 ST-18 の3指標):
+
+
+| 見たいもの         | メトリクス                                                                                      |
+| ------------------ | ----------------------------------------------------------------------------------------------- |
+| 参加成功率         | `meeting_api_meetings_24h{status=...}` が直近24hの分母分子(率は自分で割る)。失敗内訳は `meeting_api_meetings_by_reason_24h{reason="join_failure"}` など |
+| 文字起こし遅延     | `meeting_api_final_transcription_latency_seconds{quantile="0.5"/"0.95"}`(queued_at→completed_at の秒)。件数は `meeting_api_final_transcription_jobs_24h{result=...}` |
+| sweep 滞留         | `meeting_api_final_transcription_backlog{status="queued"/"running"/"failed_retryable"}`。ワーカー生存は `meeting_api_sweep_iterations_total` と `*_last_iteration_timestamp_seconds`(値が進まない=ループ停止) |
+
+
+`meeting_api_collector_stream_lag` が -1 のときは Redis へ到達できていない。
+DB 到達不可のときは DB 由来のゲージが出力から消えるが、`/metrics` 自体は 200 を返す。
+
 ### Startup dependency order
 
 Services should start in this order due to dependencies:
