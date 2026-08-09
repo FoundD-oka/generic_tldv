@@ -27,6 +27,28 @@ import { getDashboardCopy } from "@/lib/dashboard-copy";
 import { useRuntimeConfig } from "@/hooks/use-runtime-config";
 import { isRetranscriptionInProgress } from "@/lib/retranscription-status";
 import { startSingleFlightPolling } from "@/lib/single-flight-polling";
+import {
+  TranscriptSearchResults,
+  type TranscriptSearchStatus,
+} from "@/components/meetings/transcript-search-results";
+import {
+  fetchTranscriptSearch,
+  normalizeTranscriptSearchQuery,
+  shouldSearchTranscripts,
+  type TranscriptSearchHit,
+} from "@/lib/transcript-search";
+
+interface TranscriptSearchState {
+  status: TranscriptSearchStatus | "idle";
+  query: string;
+  hits: TranscriptSearchHit[];
+}
+
+const IDLE_TRANSCRIPT_SEARCH: TranscriptSearchState = {
+  status: "idle",
+  query: "",
+  hits: [],
+};
 
 export default function MeetingsPage() {
   usePendingMeeting();
@@ -45,6 +67,30 @@ export default function MeetingsPage() {
   // Debounced server-side search
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
   const filtersRef = useRef({ search: "", status: "" as string, platform: "" as string });
+
+  // 文字起こし横断検索(タイトル検索とは独立。一覧の絞り込みには影響しない)
+  const [transcriptSearch, setTranscriptSearch] = useState<TranscriptSearchState>(
+    IDLE_TRANSCRIPT_SEARCH
+  );
+  const transcriptSearchGenerationRef = useRef(0);
+
+  const runTranscriptSearch = useCallback(async (value: string) => {
+    const generation = ++transcriptSearchGenerationRef.current;
+    if (!shouldSearchTranscripts(value)) {
+      setTranscriptSearch(IDLE_TRANSCRIPT_SEARCH);
+      return;
+    }
+    const query = normalizeTranscriptSearchQuery(value);
+    setTranscriptSearch({ status: "loading", query, hits: [] });
+    try {
+      const hits = await fetchTranscriptSearch(query);
+      if (generation !== transcriptSearchGenerationRef.current) return;
+      setTranscriptSearch({ status: "ready", query, hits });
+    } catch {
+      if (generation !== transcriptSearchGenerationRef.current) return;
+      setTranscriptSearch({ status: "error", query, hits: [] });
+    }
+  }, []);
 
   const applyFilters = useCallback((search: string, status: string, platform: string) => {
     filtersRef.current = { search, status, platform };
@@ -103,8 +149,9 @@ export default function MeetingsPage() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       applyFilters(value, statusFilter, platformFilter);
+      runTranscriptSearch(value);
     }, 300);
-  }, [applyFilters, statusFilter, platformFilter]);
+  }, [applyFilters, statusFilter, platformFilter, runTranscriptSearch]);
 
   const filteredMeetings = meetings;
   const hasRetranscriptionInProgress = meetings.some((meeting) =>
@@ -231,6 +278,16 @@ export default function MeetingsPage() {
           </div>
         </div>
       </div>
+
+      {/* 文字起こしに一致した会議(2文字未満のクエリでは status が idle のまま非表示) */}
+      {transcriptSearch.status !== "idle" && (
+        <TranscriptSearchResults
+          query={transcriptSearch.query}
+          status={transcriptSearch.status}
+          hits={transcriptSearch.hits}
+          copy={copy.transcriptSearch}
+        />
+      )}
 
       {/* Meetings cards */}
       {error ? (

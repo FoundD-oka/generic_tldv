@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "task_id": "p23-transcript-search-ui",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "7febd39e78e0b468fb5e1fa707f2f88d4a129f41",
+  "reviewed_commit": "4851e7a8198ba59f47ff3d7b1305800910cf50b6",
+  "target_sha256": "sha256:65f29d0f264f75b29362f13857d1f15d1100822d55771e2cb6921354d12660ab",
+  "contract_sha256": "sha256:f6273cb38da07d112fe5fe196490b5f17c3be6a63a94191c0fb49058557d74c3",
+  "prompt_sha256": "sha256:217291ae0dc84636cc2fa9bd03e23389f188686c59939f2d73b7db43de335d95",
+  "response_sha256": "sha256:c99c69a25953380cff0f3810e73dbad96a89ceed4e6b056391f84b00b4e8de60",
+  "created_at": "2026-08-09T14:12:59.502450+00:00",
+  "verdict": "READY",
+  "summary": "p23-transcript-search-ui(Stage 2)の差分は契約の全項目に適合。AT-312 のメタ文字安全なリテラル強調はエスケープ実装とテスト(不正正規表現になる単独 `[` 含む)で確認、AT-313 の新設文言は dashboard-copy.ts 経由で ja/en 両ロケールとも日本語かつ機械検証あり。FP-311 は既存フィルタ経路に無変更、FP-313 は変更ファイルが services/dashboard/ 配下5件+許容される .hw/plans/ のみ。AT-311 の手動確認と RF-311 のプロキシ実測は契約改訂履歴に記録済み(最終権威は CI/ゲート)。violations は0件。",
+  "confidence": "high",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "配線テストがソース文字列の完全一致に依存",
+      "detail": "tests/test_transcript_search_ui.test.ts の「会議一覧ページの配線」「セクションの表示」ブロックは readFileSync したソースへの toContain で検証しており、インデントや改行の整形変更(prettier 等)だけで偽陽性の失敗を起こす。将来的には testing-library 等によるレンダリングベースの検証へ置き換えると保守性が上がる。",
+      "file": "services/dashboard/tests/test_transcript_search_ui.test.ts"
+    },
+    {
+      "title": "進行中リクエストのキャンセル未配線",
+      "detail": "fetchTranscriptSearch は AbortSignal を受け取れるが page.tsx からは渡しておらず、古い応答は世代カウンタで破棄されるだけで HTTP リクエスト自体は継続する。連続入力時の無駄なネットワーク負荷を抑えたければ AbortController を配線するとよい(契約要件ではない)。",
+      "file": "services/dashboard/src/app/meetings/page.tsx"
+    }
+  ]
+}
