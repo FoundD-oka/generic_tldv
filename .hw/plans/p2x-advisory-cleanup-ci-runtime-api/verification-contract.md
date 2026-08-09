@@ -61,5 +61,90 @@
 
 ## 改訂履歴
 
-- (実装者が着手時に実測ベースラインをここへ記入する。合格ラインは「新規 fail 0 /
-  ruff 増加 0」で不変)
+### 2026-08-10 base-commit 更新
+
+プラン作成後に PR #69/#70 が main へマージされたため、base-commit を
+`0fe5ea5a4473312412d4ab5c5f48c605668d0949` → `09375ac204bc1173496546dd63830d2128a7b7c8`
+へ更新した(`plan.md` frontmatter と `base-commit` の両方)。
+
+### 2026-08-10 実測ベースライン(base-commit 09375ac、clean tree)
+
+測定コマンド(共通): `pip install -e "services/runtime-api/[dev]"` の後
+`python -m pytest services/runtime-api/tests` / `ruff check services/runtime-api --output-format json`。
+証跡は `.hw/gates/p2x-advisory-cleanup-ci-runtime-api/`(gitignore のため非コミット)。
+
+**pytest — 環境別に結果が割れた。これが本タスクの要点。**
+
+| 環境 | 結果 |
+|---|---|
+| macOS arm64 / python3.11 fresh venv(`~/.cache/hw-venvs/p2x-advisory-cleanup-ci-runtime-api`) | **18 failed, 107 passed, 7 skipped** |
+| linux/arm64 `python:3.11-slim` コンテナ(runner 相当) | **0 failed, 105 passed, 27 skipped** |
+| linux/amd64 `python:3.11-slim` コンテナ(ubuntu-latest と同アーキ) | **0 failed, 105 passed, 27 skipped** |
+| linux/arm64 + redis 7 サービスコンテナ(`REDIS_URL` 指定) | **0 failed, 105 passed, 27 skipped** |
+
+macOS で失敗した 18 件の内訳と原因:
+
+- `tests/test_integration.py` 12 件(`TestHealth::test_profiles_loaded`,
+  `TestContainerLifecycle::test_01_create_container`〜`test_07_list_after_stop`,
+  `TestErrors::test_unknown_profile` / `test_inspect_nonexistent` / `test_delete_nonexistent`,
+  `TestCallback::test_callback_url_accepted`)
+- `tests/test_integration_process.py` 5 件(`TestProcessLifecycle::test_01_create_process`〜`test_05_process_stopped`)
+- `tests/test_backends.py::test_process_backend_inspect` 1 件
+
+原因は**開発機固有**。前者 17 件は開発機で稼働中の runtime-api が `localhost:8090` を
+listen しているため `check_service` の skip 分岐(`httpx.ConnectError` 捕捉)に入らず、
+API キー未設定で 403 を返して落ちる。runner では何も listen していないので
+`ConnectError` → skip になる(linux 実測の skipped 27 = macOS の 7 +
+`test_integration.py` 13 + `test_integration_process.py` 7。この 20 件は macOS では
+17 failed / 3 passed だった)。後者 1 件は macOS で `sleep 100` の子プロセスが inspect
+時点で `exited` と判定されるプラットフォーム差で、linux では pass する。
+
+したがって **CI(ubuntu-latest)で凍結すべき既知 fail は 0 件**であり、
+`services/runtime-api/tests/ci/pytest-baseline.json` の `known_failures` は `[]` で commit した。
+handoff の「18件 fail」を転記していたら、runner では起きない失敗を恒久的に免罪する
+過大ベースラインになっていた(RF-501)。
+
+**ruff — 環境非依存。macOS / linux とも完全一致で total 117 件(ruff 0.16.2)。**
+
+rule 別: ASYNC220 1 / ASYNC222 1 / ASYNC230 1 / B023 1 / BLE001 17 / F401 20 / F841 1 /
+G201 4 / I001 12 / PLW0602 1 / PLW1509 1 / RUF013 4 / S110 7 / SIM102 1 / SIM115 2 /
+UP017 1 / UP035 5 / UP041 1 / UP045 36。これを `ruff-baseline.json` に固定した。
+ruff の既定 rule セットはバージョンで変わるため、workflow では `ruff==0.16.2` を
+install してベースラインの意味を固定している。
+
+### 2026-08-10 RF-502(redis サービスコンテナで解消する fail 集合)
+
+**実測結果: 0 件**。linux コンテナ + redis 7 サービス(`REDIS_URL` を注入)で
+`0 failed, 105 passed, 27 skipped` となり、redis なしの実測と完全に一致した。
+runtime-api のユニットテストは fakeredis / 自前 FakeRedis を使っており、実 redis を
+要求するものはない(実 redis を要求する `test_integration*.py` は runtime-api 本体の
+HTTP 起動も要求するため、どちらにせよ runner では skip される)。
+よって workflow に redis の service コンテナは置いていない(置いても解消する fail が
+無く、CI 時間だけ増えるため)。合格ラインは「新規 fail 0」で不変。
+
+### 2026-08-10 実装後の実測(PR 実走前、runner 相当のコンテナで workflow 手順を再現)
+
+- `python -m pytest services/runtime-api/tests` → **122 passed, 27 skipped, 0 failed**
+  (105 + 本 PR で追加したラチェットのユニットテスト 17 件)。
+  `check_pytest_baseline.py` → `collected=149 failed=0 errored=0` で exit 0。
+- `ruff check services/runtime-api` → **total 117**(追加ファイルの新規指摘 0)。
+  `check_ruff_baseline.py` → exit 0。
+
+### 2026-08-10 AT-506 サボタージュ実証(ローカル、commit しない)
+
+| 仕掛けた故障 | pytest exit | ラチェット exit | 検出内容 |
+|---|---|---|---|
+| 必ず fail するテストを1件追加 | 1 | **1** | `tests.test_zz_sabotage::test_sabotage_always_fails` を baseline 外 fail として指摘 |
+| import 不能なテストモジュールを追加(収集エラー) | 2 | **1** | collection error 1 件を baseline 非依存で fail |
+| 収集0件 | 5 | **1** | 「収集0件を緑にしない」で fail |
+| 未使用 import を1件追加 | 1(ruff) | **1** | `F401 21 > baseline 20 (+1)` |
+| 構文エラーを追加 | 1(ruff) | **1** | `invalid-syntax 2 > baseline 0` |
+| すべて撤去(コントロール) | 0 | **0** | 緑に戻る |
+
+pytest exit>=2(収集エラー・収集0件)は workflow の `Run tests` ステップ自体でも
+即 fail する二重化になっている。
+
+**残る不確定性**: 上記はすべて runner 相当のコンテナでの実測であり、GitHub Actions
+実走ではない。PR 実走で追加の failed が出た場合は、その値で
+`pytest-baseline.json` を確定し直す(RF-501)。ベースラインの運用規律は
+dashboard lint ラチェット(#63)と同じ「下げるのは可・上げるのは禁止」。
