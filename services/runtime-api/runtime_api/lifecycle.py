@@ -104,12 +104,12 @@ async def idle_loop(redis, backend: Backend) -> None:
                 pending_names = await state.list_pending_callbacks(redis)
             except Exception:
                 pending_names = []
-                logger.debug("pending-callback scan failed", exc_info=True)
+                logger.warning("pending-callback scan failed", exc_info=True)
             for name in pending_names:
                 try:
                     await _deliver_callback(redis, name)
                 except Exception:
-                    logger.debug(f"pending-callback sweep delivery failed for {name}", exc_info=True)
+                    logger.warning(f"pending-callback sweep delivery failed for {name}", exc_info=True)
 
             # v0.10.5 Pack K.2 — reconcile browser_session:* secondary index.
             #
@@ -155,17 +155,17 @@ async def idle_loop(redis, backend: Backend) -> None:
                                 f"(primary={'missing' if primary is None else primary.get('status')})"
                             )
                     except Exception:
-                        logger.debug(f"Pack K.2 reconcile error on {key}", exc_info=True)
+                        logger.warning(f"Pack K.2 reconcile error on {key}", exc_info=True)
                 if orphan_count > 0:
                     logger.warning(
                         f"Pack K.2 reconcile: swept {orphan_count} orphan browser_session entries"
                     )
             except Exception:
-                logger.debug("Pack K.2 reconcile scan failed", exc_info=True)
+                logger.warning("Pack K.2 reconcile scan failed", exc_info=True)
         except asyncio.CancelledError:
             return
         except Exception:
-            logger.debug("Idle check error", exc_info=True)
+            logger.warning("Idle check error", exc_info=True)
 
 
 # v0.10.5 Pack K.5 — module-level heartbeat state.
