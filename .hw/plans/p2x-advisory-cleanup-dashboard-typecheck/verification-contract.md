@@ -32,3 +32,29 @@ tsc エラーが6件以上ならタスクを中断してプラン層へ差し戻
 - preflight result required: yes
 - evidence pack required: yes(`.hw/gates/p2x-advisory-cleanup-dashboard-typecheck/`)
 - hash-bound approval required: no(S・機械検証のみ)
+
+## 改訂履歴
+
+### 2026-08-10 実行役(Opus 5)
+
+- base-commit を実測値へ更新: `0fe5ea5`(プラン記載・古い)→ `6fe1b23`(着手時 HEAD)。
+  plan.md frontmatter と `base-commit` ファイルの両方を更新。
+- 契約に Research Freshness Check の節はなし(該当なし)。代わりにベースライン取得手順を実測した。
+- ベースライン実測(`6fe1b23`、`npm install --no-audit --no-fund` + `npm run sync-packages` 後):
+  - `npx tsc --noEmit`: exit 2 / エラー1件。
+    `tests/test_voiceprint_recording_ui.test.ts(84,7): error TS2769` —
+    `VoiceprintPreparationGateProps` の必須 prop `children` 欠落。
+    6件未満のため中断条件に該当せず着手。
+  - `npm test`: exit 0 / Test Files 33 passed (33) / Tests 263 passed (263)。
+  - lint ラチェット: current errors=61 warnings=87 = baseline errors=61 warnings=87。
+  - 証跡: `.hw/gates/p2x-advisory-cleanup-dashboard-typecheck/baseline-tsc-6fe1b23.txt`,
+    `baseline-test-6fe1b23.txt`(`.hw/gates/` は gitignore のため未コミット)。
+- 実装後実測: `npx tsc --noEmit` exit 0 / `npm test` 33 files・263 tests passed(非退行)/
+  lint ラチェット OK(errors=61 で増加なし・`lint-baseline.json` 不変)。
+- CI 経路の再現確認: `npm ci --no-audit --no-fund`(sync-packages なし・workflow と同条件)後も
+  `npx tsc --noEmit` exit 0、`npm test` 263 passed。
+- ローカル sabotage 確認: `src/__sabotage_check.ts` に型エラーを注入すると
+  `npx tsc --noEmit` が exit 2 で失敗し、削除後に exit 0 へ復帰(検出力あり・一時ファイルは削除済み)。
+- 実装メモ: 当初 `createElement` の props に `children` を渡す修正を行ったが
+  eslint `react/no-children-prop` が新規1件増え lint ラチェットが赤になったため、
+  コンポーネント関数を直接呼ぶ形へ変更した(assertion とレンダリング結果は不変)。
