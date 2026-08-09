@@ -8,7 +8,7 @@ user A's search must never surface user B's meetings or transcript text.
 from __future__ import annotations
 
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -25,6 +25,16 @@ pytestmark = pytest.mark.skipif(
 
 USER_A = 90001
 USER_B = 90002
+
+
+def _now_utc_naive() -> datetime:
+    """Current UTC time as a *naive* datetime.
+
+    ``Meeting.created_at`` is ``TIMESTAMP WITHOUT TIME ZONE``, so asyncpg
+    rejects tz-aware values; the clock is read in UTC explicitly and the
+    tzinfo is then stripped, replacing the deprecated naive-UTC helper.
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 async def _search(user_id: int, q: str, **kwargs):
@@ -98,7 +108,7 @@ async def _add_meeting(user_id: int, *, title: str, created_at: datetime, lines:
 
 async def test_search_never_returns_another_users_transcripts():
     """FP-301: identical wording is stored for both users; A must see only A's."""
-    now = datetime.utcnow()
+    now = _now_utc_naive()
     a_id = await _add_meeting(
         USER_A, title="Aの会議", created_at=now,
         lines=[(0.0, "佐藤", "買収監査の進捗を共有します")],
@@ -129,7 +139,7 @@ async def test_search_never_returns_another_users_transcripts():
 
 async def test_other_users_meeting_is_absent_even_when_it_would_sort_first():
     """B's meeting is the newest, so a missing user filter would rank it #1."""
-    now = datetime.utcnow()
+    now = _now_utc_naive()
     await _add_meeting(
         USER_B, title="Bの最新会議", created_at=now + timedelta(hours=1),
         lines=[(0.0, "鈴木", "予算計画の見直しについて")],
@@ -147,7 +157,7 @@ async def test_other_users_meeting_is_absent_even_when_it_would_sort_first():
 # --- AT-302: matching, grouping, ordering, snippets, has_more ---------------
 
 async def test_groups_by_meeting_orders_by_created_at_desc_and_caps_snippets():
-    now = datetime.utcnow()
+    now = _now_utc_naive()
     older = await _add_meeting(
         USER_A, title="古い会議", created_at=now - timedelta(days=1),
         lines=[(1.0, "佐藤", "議事録の共有です")],
@@ -175,7 +185,7 @@ async def test_groups_by_meeting_orders_by_created_at_desc_and_caps_snippets():
 
 
 async def test_has_more_and_offset_use_limit_plus_one():
-    now = datetime.utcnow()
+    now = _now_utc_naive()
     ids = []
     for i in range(3):
         ids.append(
@@ -196,7 +206,7 @@ async def test_has_more_and_offset_use_limit_plus_one():
 
 async def test_search_is_case_insensitive():
     await _add_meeting(
-        USER_A, title="英語混じり", created_at=datetime.utcnow(),
+        USER_A, title="英語混じり", created_at=_now_utc_naive(),
         lines=[(0.0, "佐藤", "Quarterly Review の結果")],
     )
     response = await _search(USER_A, "quarterly review")
@@ -206,7 +216,7 @@ async def test_search_is_case_insensitive():
 # --- AT-303: literal match semantics ---------------------------------------
 
 async def test_percent_is_matched_literally_not_as_wildcard():
-    now = datetime.utcnow()
+    now = _now_utc_naive()
     hit = await _add_meeting(
         USER_A, title="達成率", created_at=now,
         lines=[(0.0, "佐藤", "進捗は50%です")],
@@ -221,7 +231,7 @@ async def test_percent_is_matched_literally_not_as_wildcard():
 
 
 async def test_underscore_and_backslash_are_matched_literally():
-    now = datetime.utcnow()
+    now = _now_utc_naive()
     underscore = await _add_meeting(
         USER_A, title="アンダースコア", created_at=now,
         lines=[(0.0, "佐藤", "変数名は user_id です")],
@@ -243,7 +253,7 @@ async def test_underscore_and_backslash_are_matched_literally():
 
 async def test_two_character_query_returns_results():
     meeting_id = await _add_meeting(
-        USER_A, title="短いクエリ", created_at=datetime.utcnow(),
+        USER_A, title="短いクエリ", created_at=_now_utc_naive(),
         lines=[(0.0, "佐藤", "会議の予定を確認します")],
     )
     response = await _search(USER_A, "会議")
