@@ -116,7 +116,7 @@ class DockerBackend(Backend):
             except asyncio.CancelledError:
                 return
             except Exception:
-                logger.debug("Docker event stream reconnecting...", exc_info=True)
+                logger.warning("Docker event stream reconnecting...", exc_info=True)
                 await asyncio.sleep(2)
 
     def _stream_events(self, on_exit: callable, loop: asyncio.AbstractEventLoop) -> None:
@@ -141,7 +141,7 @@ class DockerBackend(Backend):
                 if name:
                     asyncio.run_coroutine_threadsafe(on_exit(name, exit_code), loop)
             except Exception:
-                logger.debug("Failed to parse Docker event", exc_info=True)
+                logger.warning("Failed to parse Docker event", exc_info=True)
 
     # -- Synchronous Docker API operations --
 

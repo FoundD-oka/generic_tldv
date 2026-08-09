@@ -251,7 +251,7 @@ class ProcessBackend(Backend):
             except asyncio.CancelledError:
                 return
             except Exception:
-                logger.debug("Reaper loop error", exc_info=True)
+                logger.warning("Reaper loop error", exc_info=True)
 
     async def _reap_dead(self, on_exit: callable) -> None:
         if not self._redis:
