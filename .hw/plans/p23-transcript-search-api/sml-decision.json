@@ -1,0 +1,22 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {
+      "level": "S",
+      "reason": "親プランで手段(pg_trgm + GIN + ILIKE リテラル一致)・API 形状(パラメータ検証、会議グルーピング、スニペット最大3件、has_more)・変更ファイル集合まで一意に確定済み。実装裁量は SQL の組み立て方のみで、契約は挙動で固定している。"
+    },
+    "technical_unknown": {
+      "level": "M",
+      "reason": "配備イメージでの pg_trgm 可否・日本語トライグラム・インデックス利用はプラン時に実測済み。残る未知は本番 ~507K 行での CONCURRENTLY ビルド時間と実クエリ性能、CI(postgres:16)での再現、gateway スコープ解決の現物挙動で、いずれも RF-301〜304 として実装時実測で閉じる設計。"
+    },
+    "blast_radius": {
+      "level": "M",
+      "reason": "変更は純追加だが、(1) database.py の起動経路に CREATE EXTENSION を足すため meeting-api 全起動へ波及し得る(IF NOT EXISTS + 失敗許容で緩和)、(2) 全ユーザーのテキストを横断する初のクエリ面であり認可 JOIN の書き損じが即情報漏えいになる、(3) 本番テーブルへのインデックス追加という運用手順を伴う。"
+    },
+    "verifiability": {
+      "level": "S",
+      "reason": "全 AT/FP が CI の postgres 統合テスト・ユニットテスト・diff レビューで機械検証可能。認可分離(FP-301)もリテラル一致(AT-303)も統合テストで固定でき、自己申告に依存する項目がない。"
+    }
+  },
+  "verdict_reason": "L 相当の軸なし。技術確認の残余と起動経路・認可面への波及に M が残るため M。Fable 契約レビュー必須。"
+}
