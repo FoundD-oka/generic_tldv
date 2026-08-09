@@ -3,7 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 const pageSource = () =>
-  fs.readFileSync(path.resolve("src/app/meetings/[id]/page.tsx"), "utf8");
+  fs.readFileSync(path.resolve("src/components/meetings/meeting-detail-page.tsx"), "utf8");
 
 const countOf = (source: string, needle: string) => source.split(needle).length - 1;
 
