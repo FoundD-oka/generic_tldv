@@ -3,7 +3,7 @@ generated_by: fable
 task_id: rf71r-meeting-detail-split
 size: M
 runtime: prime
-base-commit: eb7a37d3aa8c433172bbcd517a23c3fbeb7c99be
+base-commit: de926e386c97ec4aea5e3bb5bb741c8465fe86cb
 ---
 
 # RF-71R: meetings/[id]/page.tsx の分割(RF-70/71 の縮約・自己完結版)
