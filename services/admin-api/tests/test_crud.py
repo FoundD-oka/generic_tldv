@@ -21,13 +21,18 @@ from httpx import AsyncClient, ASGITransport
 # --- Helpers ---
 
 def _route_paths_and_methods():
-    """Extract (path, methods) tuples from app routes."""
-    routes = []
-    for route in app.routes:
-        if hasattr(route, "methods") and hasattr(route, "path"):
-            for method in route.methods:
-                routes.append((route.path, method))
-    return routes
+    """Extract (path, METHOD) tuples from the app's OpenAPI schema.
+
+    Uses `app.openapi()["paths"]`, the public API contract. It deliberately
+    does NOT walk FastAPI's internal route table, whose shape is version
+    dependent: 0.141 stopped flattening `include_router()` routes into it, so
+    introspecting it makes these tests break on a dependency upgrade even when
+    routing still works. The OpenAPI schema is stable across versions and is
+    closer to what these tests actually assert: the route is registered and
+    publicly exposed.
+    """
+    paths = app.openapi()["paths"]
+    return [(path, method.upper()) for path, operations in paths.items() for method in operations]
 
 
 def make_fake_user(user_id=1, data=None, email="test@example.com", name="Test"):
@@ -75,7 +80,7 @@ def noop_get_current_user():
     return make_fake_user()
 
 
-# --- Route existence tests (inspect FastAPI app.routes) ---
+# --- Route existence tests (inspect the OpenAPI schema) ---
 
 class TestRouteDefinitions:
     """Verify all expected routes are registered on the FastAPI app."""
