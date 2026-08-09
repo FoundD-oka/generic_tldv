@@ -1,0 +1,10 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {"level": "M", "reason": "押し下げ解消の UI 形はプランで固定した(3件+トグル)が、体感品質の受容判断が残り、契約は描画構造でしか固定できない。"},
+    "technical_unknown": {"level": "S", "reason": "AbortController・トグル・再検索はいずれも既知パターン。世代ガードの現状実装のみ着手時実測。"},
+    "blast_radius": {"level": "S", "reason": "meetings/page.tsx と検索コンポーネント・lib に限定。API/認可層に触れない。"},
+    "verifiability": {"level": "S", "reason": "4挙動とも vitest で機械検証可能。"}
+  },
+  "verdict_reason": "要求の曖昧さが M(UI 判断を含む)。Fable 契約レビューを行う。"
+}
