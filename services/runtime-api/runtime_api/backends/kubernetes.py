@@ -378,7 +378,7 @@ class KubernetesBackend(Backend):
             except asyncio.CancelledError:
                 return
             except Exception:
-                logger.debug("K8s watch reconnecting...", exc_info=True)
+                logger.warning("K8s watch reconnecting...", exc_info=True)
                 await asyncio.sleep(5)
 
 
