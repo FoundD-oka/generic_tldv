@@ -3,6 +3,11 @@ name: Deploy dashboard to GCP
 on:
   push:
     branches: [main]
+    paths:
+      - 'services/dashboard/**'
+      # dashboard は file:../../packages/transcript-rendering に依存する。
+      - 'packages/transcript-rendering/**'
+      - '.github/workflows/deploy-dashboard-gcp.yml'
 
 concurrency:
   group: deploy-dashboard-gcp

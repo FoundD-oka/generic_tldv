@@ -34,3 +34,65 @@
 - evidence pack required: yes(`.hw/gates/p2x-advisory-cleanup-ci-triggers/`)
 - hash-bound approval required: no(S・機械検証のみ)
 - research brief required: no
+
+## 改訂履歴
+
+### 2026-08-09 base-commit 実測値へ同期
+
+プラン作成後に plan コミット(1e242e0)を積んだため `base-commit` が
+`0fe5ea5` → `1e242e0` へずれていた。`base-commit` ファイルと plan.md
+frontmatter の両方を実測 HEAD `1e242e08c492d4009160b0edb6f265120d07fbc6`
+へ更新した。0fe5ea5..1e242e0 の差分は `.hw/plans/` のみ(実装差分なし)。
+
+### 2026-08-09 deploy-dashboard-gcp.yml の paths 発火検証(AT-403 補足)
+
+`deploy-dashboard-gcp.yml` への paths 追加は**本番デプロイの発火条件を変える**
+ため、GitHub の paths フィルタ相当(`**`=`/`含む任意 / `*`=`/`除く任意)の
+マッチャで具体パスを機械照合した。証跡は
+`.hw/gates/p2x-advisory-cleanup-ci-triggers/nft-401-and-paths-sim.txt`。
+Fable は差分しか見えないため結果をここへ転記する。
+
+**発火する(従来どおりデプロイされる)= 12/12 期待どおり**
+
+`services/dashboard/src/app/page.tsx` / `services/dashboard/package.json` /
+`services/dashboard/package-lock.json` / `services/dashboard/Dockerfile` /
+`services/dashboard/next.config.ts` / `services/dashboard/docker-entrypoint.sh` /
+`services/dashboard/public/logo.svg` /
+`services/dashboard/scripts/assert-release-version.mjs` /
+`packages/transcript-rendering/src/index.ts` /
+`packages/transcript-rendering/dist/index.js` /
+`packages/transcript-rendering/package.json` /
+`.github/workflows/deploy-dashboard-gcp.yml`
+
+**発火しない(不要な本番デプロイが消える)= 10/10 期待どおり**
+
+`deploy/compose/docker-compose.yml` / `services/meeting-api/meeting_api/main.py` /
+`services/api-gateway/main.py` / `services/transcription-service/app.py` /
+`libs/admin-models/models.py` / `docs/README.md` / `README.md` /
+`.hw/plans/foo/plan.md` / `.github/workflows/test-dashboard.yml` /
+`scripts/migrations/001.sql`
+
+**契約の3件では拾えない実体依存(契約外・未対応。要判断)**
+
+`deploy-dashboard-gcp.yml` は `gcloud builds submit . --config
+deploy/gcp/cloudbuild-dashboard.yaml` を実行し、`services/dashboard/Dockerfile`
+はリポジトリ root をビルドコンテキストとして次もコピーする。これらだけを変更した
+main push では**今後デプロイが発火しない**(従来は発火していた)。
+
+- `deploy/gcp/cloudbuild-dashboard.yaml`(ビルド設定そのもの)
+- `VERSION`(`COPY VERSION /repo/VERSION` → `npm run assert-release-version`)
+- `deploy/helm/charts/vexa/Chart.yaml`(同上)
+
+AT-403 が「3件ちょうど」を要求するため本タスクでは追加していない。拡張が必要なら
+契約改訂(planner)で `deploy/gcp/**` `VERSION` `deploy/helm/charts/vexa/Chart.yaml`
+を足す。
+
+### 2026-08-09 AT-404 / AT-405 の判定時期
+
+AT-404(4本の実走緑)と AT-405(deploy 不発火)は PR 上の `gh run list` を
+判定手段とする契約であり、本コミット時点では PR 未作成のため未実施。
+静的な事前シミュレーション(`at-404-405-presim.txt`)では、本差分の6ファイルに
+対し test-admin-api / test-api-gateway / test-meeting-api / test-packages の
+4本すべてが自ファイルパスにマッチして発火予定、`deploy-dashboard-gcp.yml` は
+`pull_request` トリガーを持たず `branches: [main]` のみのため PR では不発火。
+実走の確認は PR 作成後にゲート実行者が行う。

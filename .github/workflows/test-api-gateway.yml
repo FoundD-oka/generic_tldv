@@ -11,6 +11,7 @@ on:
     paths:
       - 'services/api-gateway/**'
       - 'services/meeting-api/**'
+      - '.github/workflows/test-api-gateway.yml'
 
 permissions:
   contents: read

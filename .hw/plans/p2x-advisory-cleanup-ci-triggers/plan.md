@@ -1,7 +1,7 @@
 ---
 generated_by: fable
 task_id: p2x-advisory-cleanup-ci-triggers
-base-commit: 0fe5ea5a4473312412d4ab5c5f48c605668d0949
+base-commit: 1e242e08c492d4009160b0edb6f265120d07fbc6
 size: S
 ---
 
