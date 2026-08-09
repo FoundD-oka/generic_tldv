@@ -355,14 +355,18 @@ class TestPasscodeValidation:
 # ---------------------------------------------------------------------------
 
 class TestTeamsNativeMeetingIdValidation:
+    # These cases assert the *native_meeting_id format* rules only. MeetingCreate
+    # separately requires a passcode for Teams (bots cannot pass the lobby without
+    # one), so a valid passcode is supplied here — same convention as
+    # TestPasscodeValidation above — to keep the id format under test.
     def test_numeric_id_accepted(self):
         from meeting_api.schemas import MeetingCreate
-        mc = MeetingCreate(platform="teams", native_meeting_id="9361792952021")
+        mc = MeetingCreate(platform="teams", native_meeting_id="9361792952021", passcode="IXw5Jh")
         assert mc.native_meeting_id == "9361792952021"
 
     def test_hex_hash_accepted(self):
         from meeting_api.schemas import MeetingCreate
-        mc = MeetingCreate(platform="teams", native_meeting_id="a3f7c2d891b04e5f")
+        mc = MeetingCreate(platform="teams", native_meeting_id="a3f7c2d891b04e5f", passcode="IXw5Jh")
         assert mc.native_meeting_id == "a3f7c2d891b04e5f"
 
     def test_full_url_rejected(self):

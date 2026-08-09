@@ -1,0 +1,10 @@
+{
+  "runtime": "inline",
+  "axes": {
+    "duration": false,
+    "state_volume": false,
+    "delegation": false,
+    "recurrence": false
+  },
+  "reason": "duration: conftest 1行削除 + 重複ファイル削除 + workflow 1本 + テスト実行結果への対処で数時間以内の1セッションに収まる。state_volume: 参照は mcp のテスト2本と main.py の該当箇所のみ。delegation: 直列作業で足りる。recurrence: 一回限りの修理と構造追加。全軸非該当のため inline(Opus 5 implementer)。"
+}
