@@ -363,6 +363,15 @@ def _parse_meeting_url(meeting_url: str) -> ParseMeetingLinkResponse:
 # ---------------------------
 # Endpoints (docstrings preserved)
 # ---------------------------
+# Container healthcheck target (compose `healthcheck` hits this). Unauthenticated
+# and dependency-free on purpose: it only proves the HTTP loop is serving.
+# include_in_schema=False keeps it out of the OpenAPI schema, so FastApiMCP does
+# not turn it into an MCP tool (the agent-visible tool surface stays unchanged).
+@app.get("/health", include_in_schema=False)
+async def health() -> Dict[str, Any]:
+    return {"status": "ok"}
+
+
 @app.post("/parse-meeting-link", operation_id="parse_meeting_link", response_model=ParseMeetingLinkResponse)
 async def parse_meeting_link(
     data: ParseMeetingLinkRequest,
