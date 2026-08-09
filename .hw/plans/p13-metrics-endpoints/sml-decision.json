@@ -1,0 +1,22 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {
+      "level": "M",
+      "reason": "監査の指示は「/metrics を付けろ」だが、スクレイパー不在という前提欠落があり reframe を要した(curl 可読な最小露出+README 記載+将来のスクレイプ受け皿、と再定義)。3指標の定義(窓・分母分子・分位点)もプランで固定したが価値判断を含み、レビューで覆り得る余地が M 相当残る。"
+    },
+    "technical_unknown": {
+      "level": "S",
+      "reason": "text format の自前レンダリングは数十行の純関数で技術的未知なし。露出するカウンタ・DB スキーマ・SQL(sweeps.py:725 同型)・タイムスタンプフィールド(queued_at/completed_at)はすべて現物確認済み。uvicorn 単一プロセスであることも確認済みで multiprocess 問題はない。"
+    },
+    "blast_radius": {
+      "level": "S",
+      "reason": "追加は新エンドポイント2本と新モジュール1つのみで、既存経路(health 系・sweep ロジック・認証)は無変更。外部到達経路がないことを確認済み(gateway 明示ルートのみ・host 非公開)。DB 負荷はスクレイプ時オンデマンドで既存 sweep の同型クエリ以下。"
+    },
+    "verifiability": {
+      "level": "S",
+      "reason": "render は純関数、DB 集計は名前 patch、カウンタは monkeypatch で、全要件がローカル pytest(meeting-api / runtime-api とも既存テスト基盤あり)で機械検証可能。実環境依存の残余なし。"
+    }
+  },
+  "verdict_reason": "L 相当の軸なし。要求の曖昧さ(前提欠落の reframe と指標定義の価値判断)に M 相当が残るため M。Fable 契約レビュー必須。"
+}

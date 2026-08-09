@@ -13,9 +13,10 @@ import os
 import httpx
 import redis
 import redis.asyncio as aioredis
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 
+from . import metrics as metrics_module
 from .database import init_db, async_session_local
 from .env_validation import validate_startup_env
 from .webhook_delivery import set_redis_client as set_webhook_redis
@@ -261,6 +262,22 @@ async def health_collector():
         # those. Only fail liveness on confirmed stall (above).
         logger.debug(f"/health/collector transient error: {e}")
         return {"lag": -1, "error": str(e)}
+
+
+@app.get("/metrics")
+async def metrics():
+    """ST-18 — Prometheus text format (0.0.4) exposition.
+
+    Unauthenticated like the other probes: meeting-api is not published to the
+    host in compose (`expose: 8080`) and api-gateway proxies only explicit
+    routes, so there is no external path to this endpoint.
+
+    Partial failures degrade instead of erroring: a scrape returns 200 with the
+    in-process counters even when Postgres or Redis is unreachable, because a
+    monitoring endpoint must not die before the thing it monitors.
+    """
+    body = await metrics_module.render_metrics(getattr(app.state, "redis_client", None))
+    return Response(content=body, media_type=metrics_module.CONTENT_TYPE)
 
 
 @app.on_event("startup")
