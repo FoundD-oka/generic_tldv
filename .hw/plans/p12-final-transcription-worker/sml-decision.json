@@ -1,0 +1,23 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {
+      "level": "S",
+      "reason": "監査ST-6の指摘と改善方針をコード裏取りした結果そのまま採用。分離方式(同一プロセス内の独立asyncioタスク)、envガード共用、_sweep_final_transcription_jobsを無変更でsweeps.pyに残す境界、final_transcription.py変更禁止まで確定済みで実装者の裁量余地は小さい"
+    },
+    "technical_unknown": {
+      "level": "S",
+      "reason": "asyncioタスク分離はリポジトリ内の既存実績(start_sweeps/start_retry_worker)と完全同型。並行実行の排他はskip_locked+run_id/leaseで既に防御済み(PR #45 / issue #2)を現物確認。DBプールもDB_POOL_SIZE=20+overflow=20で+1タスク分は余裕。新規の技術要素なし"
+    },
+    "impact_scope": {
+      "level": "M",
+      "reason": "全会議の確定文字起こしの実行トリガーが変わる最重要経路。分離後は他sweepとfinal-transcriptionが真に並行になり、これまで直列実行が偶然隠していた干渉(同一meetingへのunfinalized修復とfinal transcriptionの同時進行など)が顕在化しうる。既存のskip_locked/leaseで防御されていると裏取りしたが、本番規模の並行挙動は静的推論に依存"
+    },
+    "verifiability": {
+      "level": "M",
+      "reason": "ループ分離・envガード・例外耐性・並行性(AT-005)はunitで決定的に検証可能。ただし本質要求である『長時間会議の文字起こし中も本番の救済sweepが止まらない』は実会議での結合挙動で、ローカルではEvent待ちモックによる代理検証に留まる"
+    }
+  },
+  "rule": "1軸でもL相当ならL、迷ったら上へ。impact_scope / verifiability が M のため総合 M",
+  "review": "M のため Fable 契約レビュー必須"
+}
