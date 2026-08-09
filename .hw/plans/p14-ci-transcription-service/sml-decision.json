@@ -1,0 +1,22 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {
+      "level": "S",
+      "reason": "「transcription-service の pytest を CI で回す」で一意。合格条件も『壊したら赤くなる実証』として契約に固定済みで解釈の余地がない。"
+    },
+    "technical_unknown": {
+      "level": "M",
+      "reason": "テストは macOS fresh venv で 208 passed 実績があるが、Linux ランナーでの wheel 供給(faster-whisper/ctranslate2/soundfile)と HF_HUB_OFFLINE=1 下での挙動はローカルで事前検証できず、PR の実 CI 実行まで確定しない。"
+    },
+    "blast_radius": {
+      "level": "S",
+      "reason": "新規 workflow 1ファイルのみ。サービス本体・既存 workflow・deploy に手を入れない。path filter により他サービスの PR には影響しない。"
+    },
+    "verifiability": {
+      "level": "S",
+      "reason": "最終権威が PR 上の実 CI 実行そのもので、緑・sabotage 赤・キャッシュ効果まで全て run ログで機械検証できる。"
+    }
+  },
+  "verdict_reason": "L 相当の軸なし。技術的未知(macOS→Linux 環境差は CI 実行まで検証不能)が M 相当のため M。Fable 契約レビュー必須。"
+}

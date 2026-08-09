@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "task_id": "p14-ci-transcription-service",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "69d01b2f887a0765d2900f83545e1b58bcf8de0c",
+  "reviewed_commit": "e04815e7b310d2c23d871b8f3c6809486e872ab6",
+  "target_sha256": "sha256:7f9bd5871dd8b51657961647be72fcf9b3749bf4516e342666a3dd0669d7909c",
+  "contract_sha256": "sha256:ce8bcb0e6f854d46c74b834fffb9f71a015af562ceaf69986044634a63aab27c",
+  "prompt_sha256": "sha256:ea92b86711ca5a18be11e0f8ef7a99964cea417ab15dd12e8ac888d5a5d755b2",
+  "response_sha256": "sha256:6c531c237608ea35b3e3c8ab997c824adcfd3b81de40cad56981400e9911b429",
+  "created_at": "2026-08-09T07:59:42.927259+00:00",
+  "verdict": "READY",
+  "summary": "静的検証可能な全契約項目(AT-001/AT-005/FP-001〜FP-004/NFT-001/NFT-002)を差分上で確認し違反なし。workflow は push(main, feature/*)+ pull_request の両方で paths にサービスと workflow 自身を含み、HF_HUB_OFFLINE=1 設定、失敗マスクなし、SHA ピン流用、secrets 不要。差分は新規 workflow 1本と .hw/plans/ のプラン成果物のみで実装スコープ逸脱なし。AT-002/003/004/006 は契約が明示的に CI 実測(PR 上の run)へ委ねた項目であり、本 READY は PR 上での緑・sabotage 赤・キャッシュ・実行時間の証拠収集義務を免除しない。",
+  "confidence": "high",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "CI 委任項目の証拠収集が未完(PR 上で実施必須)",
+      "detail": "AT-002(緑 run)・AT-003(sabotage 赤→revert 緑)・AT-004(cache restore)・AT-006(15分以内)は契約上 CI が最終権威。PR 作成後に実測 run の URL とログ抜粋を .hw/gates/p14-ci-transcription-service/ci-green.txt / ci-sabotage.txt へ保存すること。現ブランチ hw/* は push トリガー対象外のため初回実行は pull_request イベントになる点に留意。",
+      "file": ".hw/gates/p14-ci-transcription-service/"
+    },
+    {
+      "title": "FP-002 の文言と .hw/plans/ 成果物の差",
+      "detail": "FP-002 は「変更ファイルが workflow のみ」と記すが、実差分にはハーネス規約(plan.md へ generated_by/base-commit を記録)上必須の .hw/plans/p14-ci-transcription-service/ 配下5ファイルが含まれる。趣旨(requirements.txt・tests・サービス本体の無変更)は満たすため違反とせず。今後の契約では FP のスコープ文言に .hw/plans/ 成果物を除外条項として明記すると機械判定が曖昧化しない。",
+      "file": ".hw/plans/p14-ci-transcription-service/verification-contract.md"
+    },
+    {
+      "title": "既存 test-*.yml 4本の pull_request paths 盲点の遡及是正",
+      "detail": "既存の test-meeting-api / test-admin-api / test-api-gateway / test-packages は pull_request paths に workflow ファイル自身を含めておらず、workflow のみを変更する PR で CI が走らない盲点が残る。本タスクの新規 workflow では是正済み。別タスクとして既存4本への適用を検討する価値がある(plan.md でもスコープ外 advisory と明記)。",
+      "file": ".github/workflows/"
+    },
+    {
+      "title": "runtime-api の CI 欠如",
+      "detail": "ST-26 の「等」に含まれ得る runtime-api には依然 CI がない。クライアント指示のスコープ(vexa-bot / transcription-service / dashboard)外のため本タスク群に含めない判断は妥当だが、人間の判断材料として記録する。",
+      "file": ".github/workflows/"
+    }
+  ]
+}

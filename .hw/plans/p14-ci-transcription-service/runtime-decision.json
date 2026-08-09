@@ -1,0 +1,10 @@
+{
+  "runtime": "inline",
+  "axes": {
+    "duration": false,
+    "state_volume": false,
+    "delegation": false,
+    "recurrence": false
+  },
+  "reason": "duration: workflow 1ファイル追加+PR 上の sabotage 検証で数時間以内の1セッションに収まる(CI の待ち時間は数分)。state_volume: 参照は既存 test-*.yml 4本と requirements.txt のみ。delegation: 単一 workflow の直列作業で並行委譲は不要。recurrence: 一回限りの構造追加。全軸非該当のため inline(Opus 5 implementer)。"
+}
