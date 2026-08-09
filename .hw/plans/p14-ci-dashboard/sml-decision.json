@@ -1,0 +1,22 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {
+      "level": "M",
+      "reason": "テスト CI 自体は一意だが、lint 既存負債(実測で61 errors/87 warnings 規模)の扱いに方式判断が必要だった。ラチェット(閾値固定・新規増加0)方式をプランで固定したが、総数比較の粗さの許容度など価値判断を含みレビューで覆り得る余地が M 相当残る。"
+    },
+    "technical_unknown": {
+      "level": "S",
+      "reason": "npm ci + vitest はローカル実測で全pass 実績があり、file: 依存の dist も commit 済みを現物確認。eslint --format json の集計は安定 API で、ラチェットスクリプトは合成入力でローカル完全検証できる。Linux 環境差のリスクは pure JS のため小さい。"
+    },
+    "blast_radius": {
+      "level": "S",
+      "reason": "新規3ファイル(workflow + baseline JSON + ratchetスクリプト)のみで、dashboard の実行コード・設定・依存は無変更。path filter で他サービスに波及しない。"
+    },
+    "verifiability": {
+      "level": "S",
+      "reason": "vitest 緑・ラチェット境界(ローカル合成JSON)・CI 上の2種 sabotage(テスト赤・lint赤)まで全て機械検証可能。最終権威は PR の実 CI 実行。"
+    }
+  },
+  "verdict_reason": "L 相当の軸なし。要求の曖昧さ(lint 負債の扱いの方式判断)が M 相当のため M。Fable 契約レビュー必須。"
+}
