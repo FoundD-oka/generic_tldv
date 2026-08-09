@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "task_id": "p12-gemini-concurrency",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "0900ad8c5424322369e2676de2148c44c334b49d",
+  "reviewed_commit": "7c72f2ba9f56d7c83bbf69491d4ea1f801fdfd8b",
+  "target_sha256": "sha256:ed986ac15d012565a337cfc9ceae5aa08892b0da5d6f4d06adf451c796d2cfb0",
+  "contract_sha256": "sha256:29395ecbec16717d0077a19e24d48a83b2a0bb2a8e817370c126c8e0ff2776ab",
+  "prompt_sha256": "sha256:42a4235e2ecef32dd22bb907ab627367040f2be3466d6c142060c64135bec688",
+  "response_sha256": "sha256:c97992fac298ad40ac6f7f387674b3f31c06adf65f31fdecfa616b5e1b3a0802",
+  "created_at": "2026-08-09T03:06:20.837600+00:00",
+  "verdict": "READY",
+  "summary": "契約の全項目に構造的に適合。AT-001〜006 に対応するテストが差分内に存在し、既定3・env override・max(1,...)ガード・semaphore の実効上限・429指数バックオフ(60秒クランプ)・枯渇時 admission_timeout/503・deadline 尊重・非429分類の不変をそれぞれ assert している。FP-002(compose/.env.example の :-3 統一)、FP-004(_retryable_file_call と HttpRetryOptions(attempts=1) 無変更)、FP-005(429経路の追加のみで既存分類・チャンク/admission セマンティクス保存)、NFT-001(time.sleep monkeypatch)、NFT-002(attempt/待機秒付き warning + caplog 検証)も差分上で確認。violations 0件のため READY。FP-001 のベースライン比較と pytest green はレビュー層では実行不能のため、.hw/gates/p12-gemini-concurrency/ の evidence pack をゲートで確認することが前提。本 READY は contract hash sha256:29395ecb… / target hash sha256:ed986ac1… に束縛される。",
+  "confidence": "medium",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "FP-003 の文言が .hw/plans ハーネス成果物と自己矛盾する",
+      "file": ".hw/plans/p12-gemini-concurrency/verification-contract.md",
+      "detail": "git diff --name-only base-commit..HEAD には plan.md・verification-contract.md 等の .hw/plans/<task>/ 成果物が含まれるが、契約自体が plan.md の commit(base-commit frontmatter)を前提とするため文字通りの「services/transcription-service/ 配下のみ」は満たし得ない。括弧書きの意図(meeting-api / deploy/compose / deploy/helm 無変更)は満たされているため違反とはしない。将来契約では FP-003 相当の条項に .hw/plans/<task>/ の明示的除外を書くことを推奨。"
+    },
+    {
+      "title": "AT-005 テストは文字どおりの「過去の deadline」ではない",
+      "file": "services/transcription-service/tests/test_gemini_adapter.py",
+      "detail": "test_rate_limit_retry_stops_at_the_operation_deadline は deadline を time.monotonic()+0.2 とし、約0.2秒の実 sleep を経て中断を検証する。過去の deadline を渡すと呼び出し前の _ensure_operation_active で retry ループに到達しないため、この構成の方が再試行ループの deadline 尊重を強く検証しており意図には適合するが、NFT-001 の「実時間 sleep しない」の字義には約0.2秒だけ触れる。time.monotonic のモック化か、過去 deadline での call_count==0 を確認する補完ケースの追加を検討する価値がある。"
+    },
+    {
+      "title": "GEMINI_RATE_LIMIT_RETRY_ATTEMPTS が compose に配線されていない",
+      "file": "services/transcription-service/docker-compose.yml",
+      "detail": ".env.example には追加されたが docker-compose.yml / docker-compose.cpu.yml の environment リストにはなく、compose デプロイではホスト env を設定してもコンテナに届かずコード既定 6 が常に使われる。契約(FP-002)は GEMINI_MAX_CONCURRENCY のみ対象のため違反ではないが、運用でチューニング可能にするなら ${GEMINI_RATE_LIMIT_RETRY_ATTEMPTS:-6} の配線追加が必要。"
+    },
+    {
+      "title": "_generate_content_with_rate_limit_retry 末尾の raise は到達不能",
+      "file": "services/transcription-service/gemini_adapter.py",
+      "detail": "for ループの各イテレーションは必ず return か raise で抜けるため(最終 attempt では枯渇 raise)、ループ後の admission_timeout raise は実行されない防御的コード。無害だが、attempts の max(1,...) ガードと合わせて到達不能であることをコメントで示すか削除してよい。"
+    }
+  ]
+}

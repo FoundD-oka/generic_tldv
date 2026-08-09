@@ -1,0 +1,22 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {
+      "level": "M",
+      "reason": "「適切な既定値」の決定は外部(Gemini API のレート制限・運用ティア)に依存し、プラン内で 3 と確定させたが、その妥当性は運用パラメータとして env 調整余地を残す判断を含む。機構要件(429 で自滅しない)は機械検証可能な形に確定済み。"
+    },
+    "technical_unknown": {
+      "level": "M",
+      "reason": "429 再試行の安全性根拠(429 = 未処理拒否で billed-ambiguity なし)は堅いが、google-genai SDK の例外形状(status_code 属性の伝搬)と provider 挙動に中程度の未知が残る。_status_code ヘルパの既存実装が吸収する設計だが実装まで確定しない。"
+    },
+    "blast_radius": {
+      "level": "S",
+      "reason": "コード変更は transcription-service の gemini_adapter.py と compose/env 既定値のみ。meeting-api は既存の admission_timeout retryable 経路(final_transcription.py:1462-1474)を無変更で再利用することを現物確認済み。deploy/compose・helm に GEMINI 配線がないことも grep で裏取り済み。"
+    },
+    "verifiability": {
+      "level": "M",
+      "reason": "429 バックオフ・分類・同時実行上限は fake Client で完全に単体検証可能。ただし実レート制限との整合(既定 3 の実運用妥当性)はローカルでは検証不能で、gemini_chunk_usage ログによる本番観測に委ねる残余がある。CI 未整備のためローカル実測+ベースライン比較で代替する点も M 相当。"
+    }
+  },
+  "verdict_reason": "L 相当の軸なし。要求(既定値の根拠)・技術未知(SDK 例外形状)・検証可能性(実レート制限は運用観測依存、CI 不在)に M 相当の残余があるため M。Fable 契約レビュー必須。"
+}
