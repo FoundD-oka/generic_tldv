@@ -1,4 +1,14 @@
 name: vexa
+
+# ST-19: container logs default to an unbounded json-file, so a chatty or
+# looping service fills the host disk and takes the whole stack down. Every
+# service below anchors this rotation policy (10 MB x 3 files per container).
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   # --- Infrastructure ---
 
@@ -13,6 +23,7 @@ services:
       retries: 3
     volumes:
       - redis-data:/data
+    logging: *default-logging
     networks:
       - vexa
     restart: unless-stopped
@@ -35,6 +46,7 @@ services:
       retries: 5
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    logging: *default-logging
     networks:
       - vexa
     restart: unless-stopped
@@ -60,10 +72,21 @@ services:
       - "127.0.0.1:${MINIO_CONSOLE_HOST_PORT:-9001}:9001"
     volumes:
       - minio-data:/data
+    healthcheck:
+      # minio/minio:latest ships curl at /usr/bin/curl (measured 2026-08-09,
+      # curl 8.11.0). /minio/health/live is MinIO's own liveness endpoint.
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging: *default-logging
     networks:
       - vexa
     restart: unless-stopped
 
+  # No healthcheck for minio-init: it is a one-shot bucket bootstrap that exits 0
+  # and stays exited, so a healthcheck would have nothing to report on.
   minio-init:
     image: minio/mc:latest
     depends_on:
@@ -79,6 +102,7 @@ services:
     environment:
       - MINIO_ROOT_USER=${MINIO_ACCESS_KEY:-vexa-access-key}
       - MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY:-vexa-secret-key}
+    logging: *default-logging
     networks:
       - vexa
 
@@ -108,6 +132,7 @@ services:
       retries: 3
       start_period: 10s
     init: true
+    logging: *default-logging
     depends_on:
       postgres:
         condition: service_healthy
@@ -164,7 +189,16 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ../../services/runtime-api/profiles.yaml:/app/profiles.yaml:ro
+    healthcheck:
+      # Mirrors the image-level HEALTHCHECK so the whole stack's health is
+      # readable from this file alone. python:3.12-slim has no curl/wget.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     init: true
+    logging: *default-logging
     depends_on:
       - redis
       - postgres
@@ -243,6 +277,7 @@ services:
       retries: 3
       start_period: 10s
     init: true
+    logging: *default-logging
     depends_on:
       admin-api:
         condition: service_healthy
@@ -377,7 +412,23 @@ services:
     volumes:
       - ${LOCAL_STORAGE_VOLUME_SOURCE:-recordings-data}:/data/recordings
       - ${GOOGLE_APPLICATION_CREDENTIALS_HOST:-/dev/null}:${GOOGLE_APPLICATION_CREDENTIALS:-/var/secrets/google/application_default_credentials.json}:ro
+    healthcheck:
+      # /readyz, NOT /health: /health is a liveness probe that returns 200 as
+      # long as the event loop runs, so a container whose Redis consumers never
+      # came up still looks healthy. /readyz returns 503 until startup completed
+      # and the collector tasks are alive; urllib.request.urlopen raises
+      # HTTPError on 503, so the check exits non-zero and `docker ps` shows
+      # (unhealthy). Overrides the image-level HEALTHCHECK, which uses /health.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/readyz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      # Startup runs a bounded Redis retry (20 attempts, >= ~60s of backoff in
+      # the worst case) before /readyz flips to 200; do not report unhealthy
+      # while that is still legitimately in progress.
+      start_period: 60s
     init: true
+    logging: *default-logging
     depends_on:
       - redis
       - postgres
@@ -420,7 +471,16 @@ services:
     environment:
       - API_GATEWAY_URL=http://api-gateway:8000
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    healthcheck:
+      # python:3.11-slim has no curl/wget; python urllib is the only HTTP client
+      # available in the image.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:18888/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     init: true
+    logging: *default-logging
     depends_on:
       - api-gateway
     networks:
@@ -462,7 +522,17 @@ services:
       - DASHBOARD_BRAND_SLUG=${DASHBOARD_BRAND_SLUG:-kabosu}
       - DASHBOARD_LOCALE=${DASHBOARD_LOCALE:-ja}
       - DEFAULT_BOT_NAME=${DEFAULT_BOT_NAME:-カボス}
+    healthcheck:
+      # node:20-alpine ships busybox wget (no curl). /api/health re-validates the
+      # server config and internally fetches admin-api and api-gateway with a 5s
+      # timeout each, so allow 15s before calling the probe timed out.
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
     init: true
+    logging: *default-logging
     depends_on:
       - api-gateway
     networks:
@@ -507,7 +577,15 @@ services:
       - DASHBOARD_SHARED_AUTH_ENABLED=${KABOSU_DASHBOARD_SHARED_AUTH_ENABLED:-true}
       - DASHBOARD_SHARED_AUTH_EMAIL=${KABOSU_DASHBOARD_SHARED_AUTH_EMAIL:-tech@bonginkan.ai}
       - DASHBOARD_SHARED_AUTH_NAME=${KABOSU_DASHBOARD_SHARED_AUTH_NAME:-カボス運用}
+    healthcheck:
+      # Same image as `dashboard`: busybox wget, /api/health, 15s budget.
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
     init: true
+    logging: *default-logging
     depends_on:
       - api-gateway
     networks:
@@ -537,7 +615,16 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     volumes:
       - tts-voices:/app/voices
+    healthcheck:
+      # python:3.10-slim base (services/tts-service/Dockerfile) — no curl/wget.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      # Voice preload happens at startup and can download models.
+      start_period: 60s
     init: true
+    logging: *default-logging
     networks:
       - vexa
     restart: unless-stopped
@@ -570,11 +657,22 @@ services:
       - WAKE_STT_MAX_SPEECH_DURATION_S=${WAKE_STT_MAX_SPEECH_DURATION_S:-2.0}
       - WAKE_STT_LOG_TRANSCRIPTS=${WAKE_STT_LOG_TRANSCRIPTS:-false}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    healthcheck:
+      # python:3.11-slim base (services/wake-stt/Dockerfile) — no curl/wget.
+      # /health is unauthenticated (app/main.py) so no token is needed here.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8058/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     init: true
+    logging: *default-logging
     networks:
       - vexa
     restart: unless-stopped
 
+  # No healthcheck for wake-orchestrator: it is a client-side polling loop with
+  # no HTTP server, so there is nothing in-container to probe.
   wake-orchestrator:
     profiles: ["wake"]
     build:
@@ -636,6 +734,7 @@ services:
       - WAKE_LOG_TRANSCRIPTS=${WAKE_LOG_TRANSCRIPTS:-false}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     init: true
+    logging: *default-logging
     depends_on:
       - api-gateway
     networks:
@@ -674,6 +773,7 @@ services:
       start_period: 120s
       retries: 6
     init: true
+    logging: *default-logging
     networks:
       - vexa
     restart: unless-stopped
@@ -707,6 +807,14 @@ services:
       - SYNC_INTERVAL_SECONDS=${CALENDAR_SYNC_INTERVAL:-300}
       - DEFAULT_LEAD_TIME_MINUTES=${CALENDAR_LEAD_TIME:-2}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    healthcheck:
+      # python:3.11-slim base (services/calendar-service/Dockerfile) — no curl/wget.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8050/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging: *default-logging
     depends_on:
       - postgres
       - meeting-api
