@@ -1,0 +1,8 @@
+{
+  "_doc": "運用ルールは check_pytest_baseline.py の docstring を読むこと。known_failures は減らす方向のみ許される。",
+  "measured_command": "python -m pytest services/runtime-api/tests --junitxml=pytest-junit.xml",
+  "measured_env": "linux/amd64 + linux/arm64, python:3.11-slim, pip install -e 'services/runtime-api/[dev]'",
+  "measured_result": "105 passed, 27 skipped, 0 failed, 0 error (base-commit 09375ac 時点)",
+  "measured_at": "2026-08-10",
+  "known_failures": []
+}

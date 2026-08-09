@@ -1,0 +1,28 @@
+{
+  "_doc": "運用ルールは check_ruff_baseline.py の docstring を読むこと。件数は下げる方向のみ許される。",
+  "measured_command": "ruff check services/runtime-api --output-format json",
+  "measured_env": "ruff 0.16.2 (macOS arm64 / linux arm64 で同一結果)",
+  "measured_result": "total 117 (base-commit 09375ac 時点)",
+  "measured_at": "2026-08-10",
+  "rules": {
+    "ASYNC220": 1,
+    "ASYNC222": 1,
+    "ASYNC230": 1,
+    "B023": 1,
+    "BLE001": 17,
+    "F401": 20,
+    "F841": 1,
+    "G201": 4,
+    "I001": 12,
+    "PLW0602": 1,
+    "PLW1509": 1,
+    "RUF013": 4,
+    "S110": 7,
+    "SIM102": 1,
+    "SIM115": 2,
+    "UP017": 1,
+    "UP035": 5,
+    "UP041": 1,
+    "UP045": 36
+  }
+}
