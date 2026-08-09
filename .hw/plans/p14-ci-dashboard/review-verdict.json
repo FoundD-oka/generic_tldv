@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "task_id": "p14-ci-dashboard",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "69d01b2f887a0765d2900f83545e1b58bcf8de0c",
+  "reviewed_commit": "4c8a93cc40e8e64d3437fbe6f8192688bdf1fec5",
+  "target_sha256": "sha256:5fb22c3a269b0c0cc727d84894cec22677ebb3d6a4648e241eb2f2ed9d2ad8bb",
+  "contract_sha256": "sha256:8f02573d3ba8b4803e51ae51e29e22ec0203ae2127d84726235b79e12d79e264",
+  "prompt_sha256": "sha256:10b7d8f7f9f8d1160dc16655cd3bc4b73241fee7c315be472e8aad578f55399b",
+  "response_sha256": "sha256:5949793c20ab9e432c737c5dfbf69d80b241d8c4567fdd770b4886ab033fdc7f",
+  "created_at": "2026-08-09T08:29:04.185391+00:00",
+  "verdict": "READY",
+  "summary": "Fable 差分レビュー担当の全契約項目(AT-001/AT-005/AT-006b/AT-007、FP-001〜003/005/006、NFT-001〜004)を確認し、違反なし。workflow は paths 限定・contents: read・SHA ピン・eslint クラッシュ即 fail 分岐を満たし、lint-ratchet.mjs は4境界(同数=0 / errors+1=1 / warnings+1=1 / fatal=1)を正しく実装、lint-baseline.json (61/87) は契約記載のコーディネータ独立実測値と一致。差分に含まれる .hw/plans/ 配下5件は契約自身が前提とするハーネス成果物(契約改訂1の commit を含む)であり FP-002 の意図する保護対象(src/tests/設定/依存の無変更)を損なわないため違反としない。CI 権威項目(AT-002/003/004/006a/008、FP-004)はゲート・CI 判定に委ねる。READY は差分 hash 5fb22c3a… / 契約 hash 8f025733… に束縛。",
+  "confidence": "high",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "FP-002 の文言に .hw/plans/<task>/** の明示的除外を追加すべき",
+      "file": ".hw/plans/p14-ci-dashboard/verification-contract.md",
+      "detail": "git diff --name-only base..HEAD は文字通りには8ファイル(指定3 + .hw/plans/p14-ci-dashboard/ 配下5)を返す。ハーネスが plan.md/sml-decision.json/runtime-decision.json/契約の commit を必須とする以上、FP-002 は恒常的に文字通りには成立しない。今回はコーディネータ自身が改訂1を commit している事実から意図充足と判定したが、次タスク以降の契約テンプレートでは『.hw/plans/<task>/** を除き3ファイルのみ』と書けばレビューごとの解釈判断が不要になる。"
+    },
+    {
+      "title": "NFT-001 の SHA ピン一致は差分内証拠のみで判定(ローカル再突合未実施)",
+      "file": ".github/workflows/test-dashboard.yml",
+      "detail": "本レビューセッションはローカルファイル読み取りツールが無効で、既存 test-*.yml の uses: 行との文字列一致を再確認できなかった。差分内の両 action は40桁 SHA ピン(setup-node 49933ea5… は v4.4.0 の既知ピン)であり形式要件は満たすが、pr-ready-gate 側で `grep -h 'uses:' .github/workflows/test-*.yml | sort -u` の一致確認を evidence に含めると閉じる。"
+    },
+    {
+      "title": "ラチェットの総数比較では fatal 込み errorCount の二重計上に注意(現状は無害)",
+      "file": "services/dashboard/scripts/ci/lint-ratchet.mjs",
+      "detail": "eslint の JSON では fatal エラーは errorCount にも計上される。現実装は fatalErrors > 0 を先に即 fail するため判定への実害はないが、将来 fatal の扱いを緩める改修をする場合は errors 集計との重複を考慮すること。"
+    }
+  ]
+}
