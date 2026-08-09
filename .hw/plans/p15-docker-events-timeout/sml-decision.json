@@ -1,0 +1,22 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {
+      "level": "S",
+      "reason": "半開き検知+イベント消失閉塞+ログ静粛性という成果と、since リプレイ・debug/warning の切り分けまでプランで確定済み。#57 advisory の採否(warning のみ・fail-fast 禁止)も決定済み。"
+    },
+    "technical_unknown": {
+      "level": "M",
+      "reason": "requests streaming の read timeout 例外型(RF-201)と docker /events の since ナノ秒精度挙動(RF-202)に実装時確認が残る。いずれも確認方法とテストでの固定方法を契約に定義済みだが未知は未知。"
+    },
+    "blast_radius": {
+      "level": "M",
+      "reason": "変更は docker.py 中心の単一モジュールだが、bot の exit 検知=会議完了通知という中核経路に触れる。誤実装は「会議が永久 active」または「exit callback 二重発火」に化ける。セマンティクス不変を FP/AT で明示的に固定した。"
+    },
+    "verifiability": {
+      "level": "M",
+      "reason": "fake session 注入のユニットテストで timeout・since・ディスパッチを固定できるが、実 daemon での半開き再現は契約外。runtime-api CI 未整備のため pytest 判定はゲート+契約本文の実測値記載で代替する。"
+    }
+  },
+  "verdict_reason": "L 相当の軸なし。技術的未知(例外型・since 挙動)・影響範囲(exit 検知経路)・検証可能性(実半開き再現不可)が M のため M。Fable 契約レビュー必須。"
+}

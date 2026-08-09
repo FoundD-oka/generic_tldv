@@ -1,0 +1,22 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {
+      "level": "S",
+      "reason": "昇格・非昇格の全依存関係と mem_limit の値・由来をプランで全数列挙済み。判断余地は残っていない。"
+    },
+    "technical_unknown": {
+      "level": "M",
+      "reason": "docker compose config 展開後の mem_limit / depends_on の正規化キー表現がローカル compose バージョン依存で、実装時実測に委ねる(RF-101)。フォールバック(両表現許容)は定義済み。"
+    },
+    "blast_radius": {
+      "level": "M",
+      "reason": "depends_on 変更は compose 全スタックの起動順序に影響する。誤設定は全体起動不能に化けるため、構造デッドロックガード(検査7・8)と sabotage 検証で bound するが、面の広さは M 相当。"
+    },
+    "verifiability": {
+      "level": "M",
+      "reason": "静的検証(展開結果検査+期待マップ完全一致+変異検査)と CI で最低ラインは固定できるが、実起動での healthy 遷移・起動時間は契約外(次回デプロイの運用確認へ委譲)。"
+    }
+  },
+  "verdict_reason": "L 相当の軸なし。技術的未知(キー表現)・影響範囲(起動順序全体)・検証可能性(静的検証が上限)が M のため M。Fable 契約レビュー必須。"
+}

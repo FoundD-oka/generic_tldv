@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Static check of the compose observability config (ST-19 log rotation / ST-20 healthchecks).
+"""Static check of the compose config (ST-19/ST-20 observability, ST-24/ST-25 limits+deps).
 
 Expands `deploy/compose/docker-compose.yml` with every profile via
 `docker compose config --format json` and asserts:
@@ -9,7 +9,12 @@ Expands `deploy/compose/docker-compose.yml` with every profile via
   2. every service outside EXCLUDED_FROM_HEALTHCHECK declares a healthcheck,
   3. each healthcheck points at the endpoint it is supposed to point at --
      in particular meeting-api must probe /readyz, not the always-200 /health,
-  4. the healthchecks that already existed before ST-20 are unchanged.
+  4. the healthchecks that already existed before ST-20 are unchanged,
+  5. runtime-api declares a memory limit (ST-24),
+  6. every depends_on condition matches EXPECTED_DEPENDS exactly (ST-25),
+  7. no structural deadlock: every `service_healthy` target owns an enabled
+     healthcheck,
+  8. no service with `restart: "no"` waits on a healthy/completed condition.
 
 Only stdlib + the docker CLI are required, so this runs as-is in CI.
 
@@ -70,6 +75,103 @@ PRE_EXISTING_TEST_FRAGMENTS = {
     "api-gateway": ["localhost:8000/"],
     "voiceprint-service": ["curl", "localhost:8000/health"],
 }
+
+# ST-24: services that must declare a memory limit, in bytes. runtime-api is the
+# audited one; the value mirrors the load-tested helm limit
+# (deploy/helm/charts/vexa/values.yaml runtimeApi.resources.limits.memory: 512Mi)
+# so a compose-only bump cannot silently diverge from what was measured.
+REQUIRED_MEMORY_LIMIT_BYTES = {
+    "runtime-api": 512 * 1024 * 1024,
+}
+
+# ST-25: the full depends_on graph, asserted for exact equality against the
+# expanded config. Exact equality (not "at least") is the point: a *removed*
+# condition is as much of a regression as a wrong one, and a newly added
+# dependency has to be reviewed here before it can ship.
+#
+# `service_healthy` is only used for infrastructure that becomes healthy on its
+# own (redis / postgres / minio) plus admin-api, which predates ST-25. The
+# application dependencies stay on `service_started` on purpose -- a condition
+# pointed at a service that can legitimately stay un-healthy would stop the
+# whole stack from starting (see the comments in docker-compose.yml).
+EXPECTED_DEPENDS = {
+    "admin-api": {"postgres": "service_healthy"},
+    "api-gateway": {
+        "admin-api": "service_healthy",
+        "meeting-api": "service_started",
+        "redis": "service_healthy",
+    },
+    "calendar-service": {
+        "meeting-api": "service_started",
+        "postgres": "service_healthy",
+    },
+    "dashboard": {"api-gateway": "service_started"},
+    "kabosu-dashboard": {"api-gateway": "service_started"},
+    "mcp": {"api-gateway": "service_started"},
+    "meeting-api": {
+        "minio-init": "service_completed_successfully",
+        "postgres": "service_healthy",
+        "redis": "service_healthy",
+        "runtime-api": "service_started",
+    },
+    "minio-init": {"minio": "service_healthy"},
+    "runtime-api": {"postgres": "service_healthy", "redis": "service_healthy"},
+    "wake-orchestrator": {"api-gateway": "service_started"},
+}
+
+# Conditions that block startup until the dependency reaches a state the
+# dependency itself has to reach. A service that is never restarted cannot
+# recover if such a condition is not met, so check 8 forbids the combination.
+BLOCKING_CONDITIONS = ("service_healthy", "service_completed_successfully")
+
+# An explicit "never restart" policy, as normalised by `docker compose config`
+# (measured 2026-08-09 with compose v5.1.4: the YAML string "no" stays the
+# string "no"; "none" is the equivalent spelling in some compose versions).
+NO_RESTART_VALUES = ("no", "none")
+
+
+def memory_limit_bytes(service):
+    """Return the service's memory limit in bytes, or None if it has none.
+
+    RF-101: `docker compose config --format json` normalises `mem_limit: 512m`
+    to a top-level `mem_limit` holding a byte count (measured 2026-08-09 with
+    compose v5.1.4: the string "536870912"). Older/newer compose versions and
+    swarm-style configs express the same cap as
+    `deploy.resources.limits.memory`, so both spellings are accepted here.
+    """
+    raw = service.get("mem_limit")
+    if raw is None:
+        raw = (
+            ((service.get("deploy") or {}).get("resources") or {}).get("limits") or {}
+        ).get("memory")
+    if raw is None:
+        return None
+    if isinstance(raw, (int, float)):
+        return int(raw)
+    text = str(raw).strip()
+    if text.isdigit():
+        return int(text)
+    units = {"b": 1, "k": 1024, "m": 1024 ** 2, "g": 1024 ** 3}
+    suffix = text[-1:].lower()
+    if suffix in units and text[:-1].replace(".", "", 1).isdigit():
+        return int(float(text[:-1]) * units[suffix])
+    return None
+
+
+def depends_conditions(service):
+    """Return {dependency: condition} for a service, both compose spellings."""
+    depends_on = service.get("depends_on") or {}
+    if isinstance(depends_on, list):
+        # Short list form; compose expands it to service_started.
+        return dict((name, "service_started") for name in depends_on)
+    return dict(
+        (name, (spec or {}).get("condition")) for name, spec in depends_on.items()
+    )
+
+
+def has_enabled_healthcheck(service):
+    healthcheck = service.get("healthcheck") or {}
+    return bool(healthcheck.get("test")) and not healthcheck.get("disable")
 
 
 def load_config():
@@ -161,8 +263,83 @@ def main():
                     % (name, text, fragment)
                 )
 
+    # --- Check 5: memory limits (ST-24) ---
+    for name, expected_bytes in sorted(REQUIRED_MEMORY_LIMIT_BYTES.items()):
+        if name not in services:
+            violations.append("%s: expected service is missing from the config" % name)
+            continue
+        actual = memory_limit_bytes(services[name])
+        if actual is None:
+            violations.append(
+                "%s: no memory limit (expected mem_limit or "
+                "deploy.resources.limits.memory = %d bytes)" % (name, expected_bytes)
+            )
+        elif actual != expected_bytes:
+            violations.append(
+                "%s: memory limit is %d bytes, expected %d"
+                % (name, actual, expected_bytes)
+            )
+
+    # --- Check 6: depends_on conditions match EXPECTED_DEPENDS exactly (ST-25) ---
+    actual_depends = dict(
+        (name, depends_conditions(services[name]))
+        for name in services
+        if services[name].get("depends_on")
+    )
+    for name in sorted(set(actual_depends) | set(EXPECTED_DEPENDS)):
+        expected = EXPECTED_DEPENDS.get(name)
+        actual = actual_depends.get(name)
+        if expected is None:
+            violations.append(
+                "%s: depends_on %r is not declared in EXPECTED_DEPENDS; review the "
+                "startup ordering and add it" % (name, actual)
+            )
+        elif name not in services:
+            violations.append("%s: expected service is missing from the config" % name)
+        elif actual != expected:
+            violations.append(
+                "%s: depends_on is %r, expected %r" % (name, actual, expected)
+            )
+
+    # --- Check 7: no structural deadlock on service_healthy targets ---
+    for name in sorted(services):
+        for dependency, condition in sorted(depends_conditions(services[name]).items()):
+            if condition != "service_healthy":
+                continue
+            if dependency not in services:
+                violations.append(
+                    "%s: depends on %s (service_healthy) but that service is not in "
+                    "the config" % (name, dependency)
+                )
+            elif not has_enabled_healthcheck(services[dependency]):
+                violations.append(
+                    "%s: waits for %s to be healthy but %s has no enabled healthcheck; "
+                    "the condition can never be met" % (name, dependency, dependency)
+                )
+
+    # --- Check 8: services that are never restarted must not block on conditions ---
+    for name in sorted(services):
+        restart = services[name].get("restart")
+        if restart is None or str(restart).strip().lower() not in NO_RESTART_VALUES:
+            continue
+        for dependency, condition in sorted(depends_conditions(services[name]).items()):
+            if condition in BLOCKING_CONDITIONS:
+                violations.append(
+                    "%s: restart is %r, so a %s condition on %s would leave it "
+                    "permanently down when the condition is not met"
+                    % (name, services[name].get("restart"), condition, dependency)
+                )
+
     print("services checked: %d (%s)" % (len(services), ", ".join(sorted(services))))
     print("healthcheck exclusions: %s" % ", ".join(sorted(EXCLUDED_FROM_HEALTHCHECK)))
+    print("depends_on edges checked: %d" % sum(len(v) for v in actual_depends.values()))
+    print(
+        "memory limits checked: %s"
+        % ", ".join(
+            "%s=%s" % (name, memory_limit_bytes(services.get(name) or {}))
+            for name in sorted(REQUIRED_MEMORY_LIMIT_BYTES)
+        )
+    )
 
     if violations:
         print("\nFAIL: %d violation(s)" % len(violations))
@@ -170,7 +347,10 @@ def main():
             print("  - %s" % violation)
         return 1
 
-    print("\nOK: log rotation, healthcheck coverage and endpoints all verified")
+    print(
+        "\nOK: log rotation, healthcheck coverage and endpoints, memory limits and "
+        "depends_on conditions all verified"
+    )
     return 0
 
 

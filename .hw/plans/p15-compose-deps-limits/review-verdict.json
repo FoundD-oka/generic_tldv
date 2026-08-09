@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "task_id": "p15-compose-deps-limits",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "b6abdd74a9b15960902545272d1ab408b6af5b84",
+  "reviewed_commit": "3f22c33eda7a6c5c2c4a57b88e4a0bd33855b3c1",
+  "target_sha256": "sha256:b97cf6f39239331ceacbde44fabe4f6de8620f572bc964aaaf1c9fd5ec0a0516",
+  "contract_sha256": "sha256:314431b60ad3a2a2fd581f5a9e9d02ac4c132f90887dad96a22c783552c9a5eb",
+  "prompt_sha256": "sha256:12a1f58f741d830eadb3d60f5ca5701def1176e3b00bc9c33cc2e79b352aa8f0",
+  "response_sha256": "sha256:64390432dd56d313f05a0216481c26abcdb89d627c19ec56ebc1c0c31b1fee1a",
+  "created_at": "2026-08-09T13:07:01.439408+00:00",
+  "verdict": "READY",
+  "summary": "契約の Fable 判定項目(AT-101〜105、FP-101〜105、NFT-101/102、RF-101)をすべて差分で確認し、違反なし。compose の差分は depends_on・runtime-api mem_limit・契約が要求するコメントに閉じており、EXPECTED_DEPENDS はプラン §2 の期待マップ(昇格8件+非昇格据え置き)と完全一致。検査5〜8 の追加は既存検査1〜4を緩和せず、実装ファイルは契約指定の3ファイルのみ(改訂後 FP-104 の .hw/plans 除外条件も充足)。ゲート/CI 判定項目(AT-106〜108、AT-107 sabotage)は証跡側で確認されること。",
+  "confidence": "high",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "push トリガーの branches フィルタが hw/* 系ブランチを含まない",
+      "file": ".github/workflows/verify-compose-config.yml",
+      "detail": "push は branches: [main, feature/*] に限定されており、現行のタスクブランチ命名(hw/p15-...)では push イベントで workflow が走らない。AT-108 は pull_request トリガーで満たされるため契約違反ではないが、PR を作らない直 push 運用が将来入ると検証が抜ける。hw/* を追加するか、push 側フィルタの意図をコメントで明示すると盲点が閉じる。"
+    },
+    {
+      "title": "AT-107 の sabotage 実行手順とスクリプトの compose パス解決の整合を証跡で明示すべき",
+      "file": "deploy/compose/scripts/verify_observability_config.py",
+      "detail": "AT-107 は「一時ファイルへ複製して変異」を要求するが、スクリプトの load_config が参照する compose パスの上書き手段(引数・env)は差分に現れない。ゲート実行者は変異版をどう読み込ませたか(パス上書き/ディレクトリ複製など)を .hw/gates/ の証跡に手順ごと残すこと。将来の再検証を容易にするなら compose パスの env 上書きを許すのが良い。"
+    }
+  ]
+}

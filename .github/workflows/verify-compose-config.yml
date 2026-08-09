@@ -1,0 +1,31 @@
+name: Verify Compose Config
+
+on:
+  push:
+    branches: [main, feature/*]
+    paths:
+      - 'deploy/compose/**'
+      - '.github/workflows/verify-compose-config.yml'
+  pull_request:
+    paths:
+      - 'deploy/compose/**'
+      # ワークフロー自身も paths に含める。既存4本にあった盲点(自分の変更では
+      # 走らずレビュー時に未検証のままマージされる)を踏まないため。
+      - '.github/workflows/verify-compose-config.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      # スクリプトは stdlib + docker CLI のみに依存する。ubuntu-latest には
+      # python3 と docker compose v2 が同梱されているため、依存導入ステップを
+      # 持たない(NFT-101)。
+      - name: Verify compose config
+        run: python3 deploy/compose/scripts/verify_observability_config.py

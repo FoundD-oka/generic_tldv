@@ -1,0 +1,22 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {
+      "level": "S",
+      "reason": "監査ID 3件は具体的で、現物再監査により残実体(compose mem_limit / depends_on 昇格セット / event stream 再接続設計)まで一意に確定した。#57 advisory と runtime-api CI の採否も本プランで判断済み。"
+    },
+    "technical_unknown": {
+      "level": "M",
+      "reason": "requests の streaming read timeout が例外としてどう表面化するか(Timeout / ConnectionError ラップ)と、docker compose config 展開後の mem_limit キー表現に実装時確認が残る。docker events の since ナノ秒精度リプレイは仕様上裏付けたが実 daemon での挙動確認は実装時。"
+    },
+    "blast_radius": {
+      "level": "M",
+      "reason": "compose の depends_on 変更は全スタックの起動順序に影響し、docker.py の変更は bot exit 検知という中核経路に触れる。ただし変更面はサブタスクごとに単一領域へ分離済みで、構造デッドロックは静的検査でガードする。"
+    },
+    "verifiability": {
+      "level": "M",
+      "reason": "compose 側は静的検証+CI で固定できるが実起動検証は契約外。event stream 側は単体テストで固定できるが、実 daemon での半開き再現は行わない。いずれも最低ラインは機械検証可能。"
+    }
+  },
+  "verdict_reason": "L 相当の軸なし。技術的未知・影響範囲・検証可能性に M が残るため M(両サブタスクとも M)。Fable 契約レビュー必須。"
+}
