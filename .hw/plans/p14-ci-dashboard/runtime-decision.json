@@ -1,0 +1,10 @@
+{
+  "runtime": "inline",
+  "axes": {
+    "duration": false,
+    "state_volume": false,
+    "delegation": false,
+    "recurrence": false
+  },
+  "reason": "duration: 新規3ファイル+PR 上の2種 sabotage 検証で数時間以内の1セッションに収まる。state_volume: 参照は package.json / eslint.config.mjs / 既存 test-*.yml のみで大量資料の分析は不要。delegation: 直列作業で足りる。recurrence: ラチェット運用は仕組みとして CI に資産化されるのであって、エージェント手順の反復ではない。全軸非該当のため inline(Opus 5 implementer)。"
+}
