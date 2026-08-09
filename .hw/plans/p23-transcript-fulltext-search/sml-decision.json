@@ -1,0 +1,22 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {
+      "level": "M",
+      "reason": "計画本体の一行(Transcription テーブルへ Postgres FTS)から、手段の読み替え(tsvector 不可 → pg_trgm)と範囲の線引き(UI まで含む / 話者・日付絞り込みは含まない / 検索粒度は会議グルーピング+発言スニペット)を本プランで確定した。確定後の残曖昧性は低いが、UI の見せ方(セクション配置・強調表示)に実装裁量が残るため M。"
+    },
+    "technical_unknown": {
+      "level": "M",
+      "reason": "最大の未知だった『配備イメージで日本語 FTS 拡張が使えるか』『pg_trgm が Alpine/musl で日本語トライグラムを生成しインデックスが効くか』は稼働中の実コンテナで実測済み(pg_trgm のみ利用可、9トライグラム生成、3文字以上で Bitmap Index Scan)。残る未知は本番 ~507K 行での CONCURRENTLY ビルド時間と実クエリ性能、CI の postgres:16 との差異、gateway のスコープ解決の現物挙動のみで、いずれも RF チェックで実装時に閉じられる。"
+    },
+    "blast_radius": {
+      "level": "M",
+      "reason": "変更は純追加(新インデックス・新エンドポイント・新 UI セクション)で既存経路の書き換えなし。ただし (1) database.py の起動経路に CREATE EXTENSION を足すため全起動へ波及し得る(IF NOT EXISTS + 失敗許容で緩和)、(2) 認可 JOIN の書き損じ一発で全ユーザーのテキストが漏れる初の横断クエリ面である、(3) 本番テーブルへのインデックス追加という不可逆寄りの運用手順を伴う。よって S ではなく M。"
+    },
+    "verifiability": {
+      "level": "S",
+      "reason": "全 AT/FP が CI の postgres 統合テスト・vitest・diff レビューで機械検証可能。認可分離(FP-301)もリテラル一致(AT-303)も 2 ユーザー・メタ文字の統合テストで固定でき、エージェントの自己申告に依存する項目がない。"
+    }
+  },
+  "verdict_reason": "L 相当の軸なし。要求の線引き・残る技術確認・起動経路と認可面への波及に M が残るため M(両サブタスクとも M 想定)。Fable 契約レビュー必須。"
+}

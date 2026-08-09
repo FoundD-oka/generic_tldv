@@ -1,0 +1,10 @@
+{
+  "runtime": "inline",
+  "axes": {
+    "duration": false,
+    "state_volume": false,
+    "delegation": false,
+    "recurrence": false
+  },
+  "reason": "duration: 1ページの拡張 + コンポーネント1つ + ユーティリティ + vitest で数時間以内の1セッションに収まる。state_volume: 参照は meetings/page.tsx・dashboard-copy.ts・API レスポンス形(Stage 1 で確定済み)でコンテキストに載る量。delegation: 単一実装者の直列作業で並行委譲不要。recurrence: 一回限りの機能追加で反復手順の資産化ではない。全軸非該当のため inline(Opus 5 implementer)。"
+}
