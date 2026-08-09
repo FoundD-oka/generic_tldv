@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "task_id": "p23-transcript-search-api",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "7c3c6555f63950eaf5a496da07b6a84da62fd0e8",
+  "reviewed_commit": "e1ebf5ece4fdd13e05497ca2c36aa4745b0e2b38",
+  "target_sha256": "sha256:79676d836b58017b352bec6b208822acc8f038b1c84ec9b4e30ffcaaccb5938f",
+  "contract_sha256": "sha256:20645cb83d6c1d56315d6ca129efe61c20cdf62821188b523d83b9001b334313",
+  "prompt_sha256": "sha256:a95ddd1e8db0d45336a9f9ef18ec4d36ba1c23673687e7cea28abb44d3819a84",
+  "response_sha256": "sha256:0103fad68f40c532e52b9fe38d8b3ccdf7b04f7a11544002e7d46d50cfa6b34a",
+  "created_at": "2026-08-09T13:55:03.874751+00:00",
+  "verdict": "READY",
+  "summary": "p23-transcript-search-api(Stage 1)の差分は検証契約の全項目に適合。migration(AT-301)は IF NOT EXISTS + autocommit CONCURRENTLY で冪等、CI workflow が up→up→status→down→up を grep 検証付きで実行し paths に scripts/migrations/** を追加(AT-308)。escape_like はバックスラッシュ先行エスケープ + ESCAPE 句指定でリテラル一致契約を満たし(AT-303)、入力検証の境界値テスト完備(AT-304)。online_only インデックスと schema-sync スキップのテスト(AT-305)、ensure_schema 前の extension 発行と warning-only 失敗許容(AT-306)、gateway の前方一致スコープを固定するルート・テスト(AT-307/RF-304)を確認。FP-301 は3クエリ全経路に Meeting.user_id フィルタが適用され、フィルタ欠落を直接検出する2ユーザーテストあり。変更ファイルは Stage 1 集合 + .hw/plans/ のみ(FP-302)、libs/schema-sync 無変更(FP-305)、依存追加なし(FP-306)、既存ルート無変更(FP-303)、改訂履歴の実測値は新設テスト数と整合(FP-304)。違反 0 件のため READY。CI ログ・ゲート証跡が判定主体の項目(AT-302 の実 DB 挙動、RF-301 の CI 実行)は CI が最終権威として確認する。",
+  "confidence": "high",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "status コマンドが INVALID インデックスを present と報告する",
+      "detail": "CREATE INDEX CONCURRENTLY は途中失敗すると INVALID なインデックスを残し、次回の IF NOT EXISTS はそれをスキップして成功扱いになる。status は pg_indexes の存在のみ見るため、本番 ~507K 行での適用時に INVALID を検出できない。status で pg_index.indisvalid も表示し、up で INVALID 検出時に DROP→再作成する分岐を足すと運用が安全になる(契約 AT-301 は2連続成功のみ要求のため違反ではない)。",
+      "file": "scripts/migrations/20260809_add_transcription_text_trgm.py"
+    },
+    {
+      "title": "get_user_and_token の二重宣言",
+      "detail": "search_transcripts はデコレータの dependencies=[Depends(get_user_and_token)] とパラメータ auth_data の両方で同じ依存を宣言している。FastAPI の依存キャッシュにより実行は1回だが、宣言としては冗長。パラメータ側のみで十分。",
+      "file": "services/meeting-api/meeting_api/search.py"
+    },
+    {
+      "title": "postgres 統合テストが HTTP 層をバイパスしている",
+      "detail": "test_transcript_search_postgres.py は search_transcripts 関数を直接呼び、auth_data を SimpleNamespace で注入している。FP-301 のクエリ境界は実 DB で固定できているが、meeting-api の HTTP 経由での認可(get_user_and_token 解決)は unit テストの client fixture 側にのみ依存する。将来ルータの依存構成を変えた場合に統合テストが検出しない経路が残る。",
+      "file": "services/meeting-api/tests/integration/test_transcript_search_postgres.py"
+    },
+    {
+      "title": "datetime.utcnow() は deprecated",
+      "detail": "統合テストで datetime.utcnow() を使用している。Python 3.12 以降 deprecation warning が出る(現行 venv は 3.11 のため実害なし)。datetime.now(timezone.utc) への置き換えが将来の警告ノイズを防ぐ。",
+      "file": "services/meeting-api/tests/integration/test_transcript_search_postgres.py"
+    }
+  ]
+}
