@@ -1,0 +1,22 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {
+      "level": "S",
+      "reason": "ゴールは一意(admin-api テストを CI で意味のある緑にし PR #69 のブロックを解く)。設計裁量が要った論点(凍結 vs 根絶 / pyproject 追加可否 / g5 の扱い)はプラン設計時に根拠つきで確定済み。"
+    },
+    "technical_unknown": {
+      "level": "M",
+      "reason": "root cause は実測で確定(fastapi 0.141.1 の _IncludedRouter による app.routes 非平坦化)し、修正方針も新旧両バージョンで missing=[] を実証済み。ただし requirements が unpinned のため、CI 実行時点の依存解決が検証時(0.141.1)からさらに動く可能性が残る。openapi ベースは公開契約なので壊れる確率は低いが、CI での初回緑は未実証。"
+    },
+    "blast_radius": {
+      "level": "S",
+      "reason": "変更は admin-api のテスト3ファイル + workflow 1本のみ。製品コード・requirements・他 workflow に触れない(FP-001/003/004 で機械検証)。稼働コンテナの健全性は実測確認済みで、製品を壊す修正が混入する経路がない。PR #69 との同一ファイル編集は行が離れており衝突リスク小。"
+    },
+    "verifiability": {
+      "level": "S",
+      "reason": "合否は CI の緑/赤(failed 0、sabotage 赤→revert 緑)とローカル fresh venv 実測で完全に機械検証可能。ベースラインは実装者実測を契約本文に記入させる方式で自己申告を排除。"
+    }
+  },
+  "verdict_reason": "L 相当の軸なし。technical_unknown が M 相当(unpinned 依存の将来解決と CI 初回緑の未実証)のため、迷ったら上へ倒す原則も踏まえ M。Fable 契約レビュー必須。"
+}

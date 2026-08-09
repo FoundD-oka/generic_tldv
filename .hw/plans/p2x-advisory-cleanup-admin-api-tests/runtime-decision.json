@@ -1,0 +1,10 @@
+{
+  "runtime": "inline",
+  "axes": {
+    "duration": false,
+    "state_volume": false,
+    "delegation": false,
+    "recurrence": false
+  },
+  "reason": "duration: テストヘルパー1関数の書き換え + skipif 1行 + conftest 1行削除 + workflow 数行で、sabotage 検証を含めても1セッション数時間以内。state_volume: 参照は admin-api のテスト3ファイルと workflow 1本、CI ログのサマリ行のみでコンテキストに収まる。delegation: 直列作業で足り並行委譲は不要。recurrence: 一回限りの修理(P1-4 型の手順は既に確立済みで新規資産化の必要なし)。全軸非該当のため inline(Opus 5 implementer)。"
+}

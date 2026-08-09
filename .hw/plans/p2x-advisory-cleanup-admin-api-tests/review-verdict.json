@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "task_id": "p2x-advisory-cleanup-admin-api-tests",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "0fe5ea5a4473312412d4ab5c5f48c605668d0949",
+  "reviewed_commit": "b9f155423a1a2479791f9e09f7c3f0d642eb569a",
+  "target_sha256": "sha256:2cae65b4d44c6970ce2341836de74722c5c537e207f3443ed0cf62892d6486df",
+  "contract_sha256": "sha256:fa78eb15a2d0ebf73ce0f8b9e4b43e797cbf738e9c3173007cf5cb70bc229f9d",
+  "prompt_sha256": "sha256:60eb8a1a32dd7d381bdb392cf1724c1de3f79a911ff1752c428e940d6ce66f92",
+  "response_sha256": "sha256:815b5e5032b52ae0bdb03d77276636496cacc4b994314d72abedcc392b7e0feb",
+  "created_at": "2026-08-09T15:08:00.293995+00:00",
+  "verdict": "READY",
+  "summary": "Fable判定主体の全項目(AT-002/003/004/007、FP-001〜005、NFT-001/002)が契約に適合。_route_paths_and_methods() は app.openapi()[\"paths\"] ベースへ書き換えられ FastAPI 私有表現への依存が除去、期待値14件は無変更。test_g5_gate.py には RUN_LIVE_STACK_TESTS opt-in の pytestmark が同型で追加されテスト本体は無変更。workflow は欺瞞フォールバック除去・timeout・pip キャッシュ追加で、トリガー節・SHA ピン・permissions は無変更。conftest の死んだ sys.path 挿入は削除され docstring に実行前提を明記。変更ファイルは許容リスト内のみで、契約本文にベースライン/修正後の実測値(59 collected 維持、0 failed / 0 errors)が算術整合する形で記入済み。CI 判定項目(AT-001/005/006、FP-006、NFT-003)は権威分担どおり CI/ゲートに委ねる。違反0件のため READY。",
+  "confidence": "high",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "openapi operations 反復に非メソッドキーが混入し得る",
+      "detail": "書き換え後の `[(path, method.upper()) for path, operations in paths.items() for method in operations]` は、パスレベル `parameters` キーが openapi の path item に現れる構成では (path, \"PARAMETERS\") のような偽タプルを生む。現行テストは存在アサーション(in 判定)のみで実測 0 failed のため実害はないが、将来 path-level parameters を使うルートが増えた場合に備え、HTTP メソッド集合({get, post, put, delete, patch, head, options, trace})でフィルタするとより頑健。",
+      "file": "services/admin-api/tests/test_crud.py"
+    },
+    {
+      "title": "g5 fail-open 期待の陳腐化疑いを issue 化して追跡する",
+      "detail": "plan.md の Why 節に、ローカル opt-in 実行で 403(fail-closed 挙動の可能性)が観測済みと記録されている。本タスクのスコープ外という判断は妥当だが、opt-in ゲート化により通常 CI では今後観測されなくなるため、PR 本文への記載だけでなく issue として起票しないと恒久的に埋もれるリスクがある。",
+      "file": "services/admin-api/tests/test_g5_gate.py"
+    }
+  ]
+}
