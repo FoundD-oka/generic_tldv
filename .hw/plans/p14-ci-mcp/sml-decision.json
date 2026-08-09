@@ -1,0 +1,22 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {
+      "level": "M",
+      "reason": "mcp は ST-26 の明示列挙(3サービス)の外で、スコープに含める判断自体が planner の裁量(依頼で判断を委任された)。コーディネータ・レビューで却下され得る余地が M 相当。含めた後のゴール自体は一意。"
+    },
+    "technical_unknown": {
+      "level": "M",
+      "reason": "テスト2本は一度も収集に成功した形跡がなく、修理後に pass するかが未知(期待値の陳腐化 or 実バグ発見の可能性)。分類と対処(テスト修正 / 停止して報告)の枠はプランで固定済みだが、結果は実行するまで分からない。"
+    },
+    "blast_radius": {
+      "level": "S",
+      "reason": "変更は mcp のテスト配線 + workflow のみで、main.py・meeting-api・既存 workflow に触れない(FP で機械検証)。CI の path filter も test-api-gateway.yml と同型で実績のある範囲。"
+    },
+    "verifiability": {
+      "level": "S",
+      "reason": "収集修理はローカル fresh venv で、CI の実効性は PR 上の緑 + sabotage 赤で、全て機械検証可能。"
+    }
+  },
+  "verdict_reason": "L 相当の軸なし。要求の曖昧さ(スコープ追加の裁量)と技術的未知(未実行テストの成否)が M 相当のため M。Fable 契約レビュー必須。"
+}
