@@ -1,7 +1,7 @@
 ---
 generated_by: fable
 task_id: p2x-advisory-cleanup-docker-events-robustness
-base-commit: 0fe5ea5a4473312412d4ab5c5f48c605668d0949
+base-commit: 03436054d2e1d8a2e0d918bf53ea704cdb4612c0
 size: M
 ---
 
