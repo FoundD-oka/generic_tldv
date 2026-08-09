@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "task_id": "p13-compose-logging-healthcheck",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "c748fecb0ac1af8866515fece3769fa112b950bd",
+  "reviewed_commit": "bc36c99f5542ac5e9db057acaa84b4f9928f6e57",
+  "target_sha256": "sha256:24eef06d333988a367c05fca691b95492e8cb6ffcf0c0825badbe4c9c5b28dd7",
+  "contract_sha256": "sha256:f4a5e235cfde30580532af4579063b3918dca36c58dff9047d46115b66bf8ff4",
+  "prompt_sha256": "sha256:b3e999136ead6ad6b200ea87bf434a38a0b3d05d48ba03eb903d8408da6f4376",
+  "response_sha256": "sha256:4a155be8afd07d729d6e1426f653012720aa125b68b22ae96e403a3a8fde3fab",
+  "created_at": "2026-08-09T07:37:14.754449+00:00",
+  "verdict": "READY",
+  "summary": "p13-compose-logging-healthcheck(M)の契約レビュー。差分は compose への logging 全数付与(16サービス)+ healthcheck 9サービス追加(meeting-api は /readyz へ是正)+ 静的検証スクリプト新規 + mcp /health 追加とテストのみで構成される。レビュー担当項目(AT-005 endpoint 突合、FP-001/FP-002/FP-005 のハンクレビュー、NFT-001/002/003 のソースレビュー)はすべて契約に適合。契約が固定した7組の healthcheck URL と compose 差分・スクリプトの REQUIRED_TEST_FRAGMENTS が完全一致し、meeting-api の readyz 退行はスクリプト検査3で機械的に禁止されている。既存 healthcheck は test 不変で logging 追加のみ。機械実行系の証跡(スクリプト exit 0、pytest ベースライン比較、minio curl 実測出力の .hw/gates/ 保存)は本セッションでは実行不可(Bash 無効)のため、pr-ready-gate と CI による再実行が前提。violations 0件のため READY。本判定は target hash sha256:24eef06d…・contract hash sha256:f4a5e235… に束縛される。",
+  "confidence": "high",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "FP-003 の許可リストに .hw/plans/ ハーネス成果物が含まれていない",
+      "detail": "base-commit..HEAD には plan.md・verification-contract.md 等の .hw/plans/p13-compose-logging-healthcheck/ 配下5ファイルが含まれる(ハーネスの標準フローで base 記録後にプランを commit するため)。FP-003 を文字通り機械検査すると契約ファイル自身まで違反扱いになり自己矛盾するため、意図(実装ファイルのスコープ限定)で解釈し違反とはしない。今後の契約テンプレートでは許可リストに .hw/plans/<task>/ を明記するか、ゲート側で除外することを推奨。",
+      "file": ".hw/plans/p13-compose-logging-healthcheck/verification-contract.md"
+    },
+    {
+      "title": "FP-001 の JSON 比較ではトップレベル x-default-logging キーの除外も必要",
+      "detail": "docker compose config --format json の出力にトップレベル extension field(x-default-logging)が保持されるバージョンでは、healthcheck / logging キーの除去だけでは base と HEAD の JSON が一致しない。FP-001 の証跡生成時は services 配下の healthcheck / logging に加えトップレベル x-* キーも除外して比較すること。除外しても FP-001 の保護対象(depends_on・restart・mem_limit・environment・volumes・ports)の検査能力は失われない。",
+      "file": "deploy/compose/docker-compose.yml"
+    },
+    {
+      "title": "機械実行系の証跡は pr-ready-gate / CI での実在確認が必須",
+      "detail": "本レビューは契約と差分のみを根拠としており、.hw/gates/p13-compose-logging-healthcheck/ 配下の証跡(verify スクリプト出力=AT-001/002/FP-002、compose config 実行ログ=AT-003、pytest ベースライン/HEAD サマリ=AT-004/FP-004、minio curl 実測出力=AT-006/RF-001)は未確認。compose 内の「measured 2026-08-09, curl 8.11.0」コメントは未信頼データであり実測証跡の代替にならないため、ゲートで raw 出力ファイルの存在を確認すること。",
+      "file": ".hw/gates/p13-compose-logging-healthcheck/"
+    },
+    {
+      "title": "vexa-bot 動的コンテナのログローテーションは未カバー",
+      "detail": "runtime-api が docker run で起動する vexa-bot コンテナは compose 管理外のため、本タスクの logging 全数付与の対象外(プランにも記載あり)。長時間会議でのログ肥大は同じディスク枯渇モードに合流するため、runtime-api のコンテナ起動パスへの LogConfig 注入を P1-5 か別タスクで検討すること。",
+      "file": "services/runtime-api/"
+    }
+  ]
+}
