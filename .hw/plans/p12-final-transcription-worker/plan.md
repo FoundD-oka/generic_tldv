@@ -138,7 +138,7 @@ reframe: 不要(監査 ST-6 の指摘・改善方針をコード裏取りした�
 
 環境: python3.11 fresh venv(`pip install -e libs/admin-models/ -e services/meeting-api/`
 + `pytest pytest-asyncio httpx`。/tmp の venv は劣化するため作り直す)。
-ベースライン: 591 passed / 11 skipped / 0 failed。
+ベースライン: 631 passed / 19 skipped / 0 failed(2026-08-09 実測、8bc0374。詳細は契約の改訂履歴参照)。
 
 ## Why(実装者に渡さない)
 

@@ -20,7 +20,7 @@ meeting-api テストは python3.11 fresh venv
 
 | ID | Must Not Regress | Method | Evidence |
 |---|---|---|---|
-| FP-001 | meeting-api テスト: ベースライン 591 passed / 11 skipped / 0 failed に対し新規 fail 0(新規テスト追加による passed 増は許容) | `python -m pytest services/meeting-api/tests` 全件実行しベースライン比較 | pytest サマリ全文 |
+| FP-001 | meeting-api テスト: ベースライン **631 passed / 19 skipped / 0 failed**(同一 HEAD で本差分を退避して実測)に対し、新規 fail 0・passed 増は本タスクの新規テスト分のみ許容・**skipped 増加なし** | `python -m pytest services/meeting-api/tests` をベースラインと変更後で同一 venv 実行しサマリ比較 | ベースライン/変更後の pytest サマリ全文(`.hw/gates/p12-final-transcription-worker/pytest-baseline-8bc0374.txt` / `pytest-full-committed-eebdd38.txt`) |
 | FP-002 | `_sweep_final_transcription_jobs` 本体(選定クエリ・lease 再取得・リトライ上限・skip_locked)が無変更 | `git diff 2da98bb..HEAD -- services/meeting-api/meeting_api/sweeps.py` の該当関数(683-843 相当)にハンクなし(ループ部・追加関数のみ変更) | diff 出力 |
 | FP-003 | `final_transcription.py` が無変更(次タスク p12-audio-disk-streaming との衝突禁止) | `git diff 2da98bb..HEAD -- services/meeting-api/meeting_api/final_transcription.py` が空 | diff 出力 |
 | FP-004 | 既存 sweeps テスト(test_sweeps_skip_locked.py / test_sweeps_stopping.py / test_sweeps_unfinalized_recordings.py / test_sweeps_voiceprint_retention.py / test_final_transcription.py)が無修正で green | FP-001 の全件実行内で確認。上記ファイルへの diff が空であること | pytest ログ + diff 出力 |
@@ -52,3 +52,17 @@ meeting-api テストは python3.11 fresh venv
 
 なし(外部 API・ライブラリの最新仕様に依存しない。asyncio タスク分離パターンは
 リポジトリ内の既存実績 start_sweeps / start_retry_worker で裏取り済み)。
+
+## 改訂履歴
+
+- 2026-08-09 FP-001 改訂(planner Fable、実装者へ差し戻さず契約側を訂正):
+  プラン作成時に handoff 記載値「591 passed / 11 skipped / 0 failed」を実測せず転記した
+  ことが原因で、実測ベースラインと不一致だった。実装者が python3.11 fresh venv を作り直し、
+  本差分を stash 退避した同一 HEAD(8bc0374)で実測した結果は
+  **631 passed / 19 skipped / 17 warnings / 0 failed**。改訂前=591/11、改訂後=631/19。
+  合格の実質(本タスクが既存テストを退行させないこと)は不変で、合格ラインを
+  「新規 fail 0・新規テスト分の passed 増のみ許容・skipped 増加なし」として明文化した。
+  変更後(eebdd38)実測は 638 passed / 19 skipped / 0 failed(+7 = 新規テスト7件のみ)で
+  改訂後基準を満たす。証跡: `.hw/gates/p12-final-transcription-worker/pytest-baseline-8bc0374.txt`、
+  `pytest-full-committed-eebdd38.txt`、`baseline-note.txt`。
+  st9・p06 の前例(ベースライン比較方式への改訂)に準拠。
