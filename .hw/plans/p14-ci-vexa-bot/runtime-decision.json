@@ -1,0 +1,10 @@
+{
+  "runtime": "inline",
+  "axes": {
+    "duration": false,
+    "state_volume": false,
+    "delegation": false,
+    "recurrence": false
+  },
+  "reason": "duration: lockfile 生成 + workflow 1本 + PR 上の検証で数時間以内の1セッションに収まる(CI が赤の場合の反復も数往復で済む想定)。state_volume: 参照は core/package.json / tsconfig / 既存 workflow のみ。delegation: 直列作業で足りる。recurrence: 一回限りの構造追加。全軸非該当のため inline(Opus 5 implementer)。"
+}

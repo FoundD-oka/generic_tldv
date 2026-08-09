@@ -1,0 +1,22 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {
+      "level": "S",
+      "reason": "対象を core に限定する reframe(親の native SDK ビルドは単体CIの範囲外)をプランで確定済み。合格条件も『CI 実測緑 + sabotage 赤』で一意。"
+    },
+    "technical_unknown": {
+      "level": "M",
+      "reason": "core 単体の npm ci が Linux で成功するかはローカル(macOS、親 node_modules 共有)で検証不能。親 node_modules に隠れた依存の有無、onnxruntime-node の postinstall 成否、lockfile 生成(--package-lock-only)の完全性が PR の実 CI まで確定しない。対応方針(devDeps 追加 / 最後の手段 --ignore-scripts / 停止して報告)はプランで枠を固定済み。"
+    },
+    "blast_radius": {
+      "level": "S",
+      "reason": "新規 workflow + lockfile のみで実行コードに触れない。lockfile は CI 専用(本番イメージは親 Dockerfile 経由でビルドされ core lockfile 追加の影響なし)。path filter で他サービスに波及しない。"
+    },
+    "verifiability": {
+      "level": "S",
+      "reason": "最終権威が PR の実 CI 実行で、緑・sabotage 赤・ブラウザDLスキップ・キャッシュまで run ログで機械検証できる。ローカル検証不能な部分(Linux install)も CI 実測という明確な検証手段に閉じている。"
+    }
+  },
+  "verdict_reason": "L 相当の軸なし。技術的未知(Linux での core 単体 install 成否)が M 相当のため M。Fable 契約レビュー必須。"
+}

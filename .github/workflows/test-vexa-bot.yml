@@ -1,0 +1,47 @@
+name: Test Vexa Bot
+
+on:
+  push:
+    branches: [main, feature/*]
+    paths:
+      - 'services/vexa-bot/core/**'
+      - '.github/workflows/test-vexa-bot.yml'
+  pull_request:
+    paths:
+      - 'services/vexa-bot/core/**'
+      - '.github/workflows/test-vexa-bot.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: services/vexa-bot/core
+    env:
+      # core のテストはブラウザを起動しない純ロジックなので、install 時の
+      # ブラウザバイナリ DL(数百MB)を止める。ブラウザ必須のテストを足す場合は
+      # ここを外す判断が必要になる。
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+      PUPPETEER_SKIP_DOWNLOAD: "1"
+      PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: services/vexa-bot/core/package-lock.json
+      # 親 services/vexa-bot は npm workspaces のルートなので、core で素の
+      # npm ci を実行すると npm が親をルートと判定し core/package-lock.json を
+      # 使わない(親の lockfile で親の node_modules へ install する)。
+      # --prefix . で core 単体をルートとして扱わせ、core の lockfile を使う。
+      - name: Install dependencies
+        run: npm ci --prefix . --no-audit --no-fund
+      - name: Run tests
+        run: npm test
