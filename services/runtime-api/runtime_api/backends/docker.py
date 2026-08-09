@@ -9,8 +9,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Any, AsyncIterator, Optional
+import time
+from typing import Any, AsyncIterator, Iterator, Optional
 
+import requests
 import requests_unixsocket
 
 from runtime_api import config
@@ -21,12 +23,19 @@ logger = logging.getLogger("runtime_api.backends.docker")
 
 MANAGED_LABEL = "runtime.managed"
 
+# Connect timeout for the event stream (seconds). The read timeout is
+# config.DOCKER_EVENTS_READ_TIMEOUT.
+EVENTS_CONNECT_TIMEOUT = 5
+
 
 class DockerBackend(Backend):
     def __init__(self):
         self._session: Optional[requests_unixsocket.Session] = None
         self._socket_url: str = ""
         self._event_task: Optional[asyncio.Task] = None
+        # Event stream replay state (nanoseconds).
+        self._last_event_nano: int = 0
+        self._stream_started_nano: int = 0
 
     # -- Socket connection --
 
@@ -119,6 +128,20 @@ class DockerBackend(Backend):
                 logger.warning("Docker event stream reconnecting...", exc_info=True)
                 await asyncio.sleep(2)
 
+    def _next_since(self) -> Optional[str]:
+        """`since` value for the next connection, or None for the first one.
+
+        Derived from the last event observed on the previous connection, or —
+        if that connection saw no event at all — from the time it started, so
+        that events lost while the connection was half-open get replayed.
+        Nanosecond precision: Docker excludes the event at exactly `since`,
+        so the boundary event is not delivered twice.
+        """
+        nano = self._last_event_nano or self._stream_started_nano
+        if not nano:
+            return None
+        return f"{nano // 10**9}.{nano % 10**9:09d}"
+
     def _stream_events(self, on_exit: callable, loop: asyncio.AbstractEventLoop) -> None:
         session = self._get_session()
         url = self._init_socket()
@@ -127,21 +150,46 @@ class DockerBackend(Backend):
             "event": ["die"],
             "label": [f"{MANAGED_LABEL}=true"],
         })
-        resp = session.get(f"{url}/events", params={"filters": filters}, stream=True, timeout=None)
-        for line in resp.iter_lines():
-            if not line:
-                continue
-            try:
-                event = json.loads(line)
-                actor = event.get("Actor", {})
-                attrs = actor.get("Attributes", {})
-                name = attrs.get("name", "")
-                exit_code_str = attrs.get("exitCode", "0")
-                exit_code = int(exit_code_str) if exit_code_str else 0
-                if name:
-                    asyncio.run_coroutine_threadsafe(on_exit(name, exit_code), loop)
-            except Exception:
-                logger.warning("Failed to parse Docker event", exc_info=True)
+        params = {"filters": filters}
+        since = self._next_since()
+        if since:
+            params["since"] = since
+        self._last_event_nano = 0
+        self._stream_started_nano = time.time_ns()
+
+        try:
+            resp = session.get(
+                f"{url}/events",
+                params=params,
+                stream=True,
+                timeout=(EVENTS_CONNECT_TIMEOUT, config.DOCKER_EVENTS_READ_TIMEOUT),
+            )
+            for line in resp.iter_lines():
+                if not line:
+                    continue
+                try:
+                    event = json.loads(line)
+                    time_nano = event.get("timeNano")
+                    if isinstance(time_nano, int):
+                        self._last_event_nano = time_nano
+                    actor = event.get("Actor", {})
+                    attrs = actor.get("Attributes", {})
+                    name = attrs.get("name", "")
+                    exit_code_str = attrs.get("exitCode", "0")
+                    exit_code = int(exit_code_str) if exit_code_str else 0
+                    if name:
+                        asyncio.run_coroutine_threadsafe(on_exit(name, exit_code), loop)
+                except Exception:
+                    logger.warning("Failed to parse Docker event", exc_info=True)
+        except Exception as exc:
+            if not _is_read_timeout(exc):
+                raise
+            # Normal keepalive expiry, not a failure: return so the caller
+            # reconnects immediately with `since` replay.
+            logger.debug(
+                "Docker event stream read timeout after %ss; reconnecting with since replay",
+                config.DOCKER_EVENTS_READ_TIMEOUT,
+            )
 
     # -- Synchronous Docker API operations --
 
@@ -291,6 +339,43 @@ class DockerBackend(Backend):
 
 
 # -- Helpers --
+
+
+def _exception_chain(exc: BaseException) -> Iterator[BaseException]:
+    """Yield `exc` and the exceptions it wraps (cause / context / args[0])."""
+    seen: set[int] = set()
+    pending = [exc]
+    while pending:
+        current = pending.pop()
+        if current is None or id(current) in seen:
+            continue
+        seen.add(id(current))
+        yield current
+        pending.append(current.__cause__)
+        pending.append(current.__context__)
+        if current.args and isinstance(current.args[0], BaseException):
+            pending.append(current.args[0])
+
+
+def _is_read_timeout(exc: BaseException) -> bool:
+    """True when `exc` is a stream read timeout rather than a real failure.
+
+    Measured with requests 2.34.2 / urllib3 2.7.0: a read timeout that hits
+    while iterating the response body surfaces as a
+    `requests.exceptions.ConnectionError` wrapping urllib3's
+    `ReadTimeoutError`, whereas one that hits before the response headers
+    arrive surfaces as `requests.exceptions.ReadTimeout` (a
+    `requests.exceptions.Timeout` subclass). Both are the expected periodic
+    expiry of an idle event stream.
+    """
+    if isinstance(exc, requests.exceptions.Timeout):
+        return True
+    if isinstance(exc, requests.exceptions.ConnectionError):
+        return any(
+            type(inner).__name__ in ("ReadTimeoutError", "ReadTimeout")
+            for inner in _exception_chain(exc)
+        )
+    return False
 
 
 def _docker_to_info(raw: dict) -> ContainerInfo:

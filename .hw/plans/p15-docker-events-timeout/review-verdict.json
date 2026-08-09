@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "task_id": "p15-docker-events-timeout",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "d691ff5b917cf48beae47fb62031394e539f65d7",
+  "reviewed_commit": "4c952ea6c9203818db9ab4a571da348ab92cedb8",
+  "target_sha256": "sha256:dcc0ac8416eee4f26a5700e3a1ede11f983db763d0b28c7b18aa14261e5122ea",
+  "contract_sha256": "sha256:b43ae79d10113eba4f3c53d12c2a278c9ff27d7f069e61664a0a1b14bf392980",
+  "prompt_sha256": "sha256:411036053c8ec882159534f4d39cfa946deadaa8ef9869ef1b687b9d73bd2a89",
+  "response_sha256": "sha256:9764473bb24aa80a0ac66076f0a0237b7b8d2f10f3508a4cc3d9c769bb191895",
+  "created_at": "2026-08-09T13:20:02.048694+00:00",
+  "verdict": "READY",
+  "summary": "契約の全項目(AT-201〜205、FP-201〜205、NFT-201/202)を差分と改訂履歴の実測値で確認し、違反は0件。timeout=Noneの消滅と(5, DOCKER_EVENTS_READ_TIMEOUT)への置換、両例外型の静粛なreturn、ナノ秒精度sinceリプレイ、dieセマンティクス不変、TRANSCRIPTION_SERVICE_URL警告がすべてテストで固定され、新設テスト13件は改訂履歴のpassed +13と一致。変更ファイルスコープ・ログ方針・依存も契約どおり。READYはtarget hash sha256:dcc0ac84…と contract hash sha256:b43ae79d…に束縛される。",
+  "confidence": "high",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "FP-202の厳密な読みでは .hw/plans/ 配下も差分に含まれる",
+      "file": ".hw/plans/p15-docker-events-timeout/verification-contract.md",
+      "detail": "git diff --name-only には base-commit・plan.md・verification-contract.md の3ファイルが含まれるが、これらは本契約のベースライン取得手順が明示的に命じる記帳(base-commit訂正と改訂履歴への実測記入)であり違反とは扱わなかった。次回以降の契約ではFP相当の変更ファイル制限に .hw/plans/<task>/ を明示的に許容リストへ含めると解釈の余地がなくなる。"
+    },
+    {
+      "title": "接続失敗時にsinceリプレイのアンカーが失敗試行の開始時刻へ進む",
+      "file": "services/runtime-api/runtime_api/backends/docker.py",
+      "detail": "_stream_events は session.get の前に _last_event_nano を0へリセットし _stream_started_nano を更新するため、接続試行自体が失敗(get が raise)すると、次回の since は最終観測イベントではなく失敗試行の開始時刻になる。unix socket では daemon 停止中はイベント自体が発生しないため実害はほぼないが、将来 TCP/プロキシ経由にした場合は daemon 稼働中の到達不能期間のイベントを取りこぼし得る。リセットと開始時刻の更新を session.get 成功後へ移すとこの窓が閉じる。契約AT-203の文言(未観測なら前回接続開始時刻)には現実装も適合しているため違反ではない。"
+    },
+    {
+      "title": "read timeout 後に resp を close していない",
+      "file": "services/runtime-api/runtime_api/backends/docker.py",
+      "detail": "iter_lines 中の例外で return する経路でも正常終了の経路でも resp.close() を呼んでおらず、基底接続の解放が GC 任せになる。旧実装から同様の挙動であり、read timeout 到来時点で接続は事実上死んでいるため実害は小さいが、contextlib.closing(resp) で囲むと再接続の反復で確実になる。"
+    },
+    {
+      "title": "_is_read_timeout の判別が型名文字列マッチ",
+      "file": "services/runtime-api/runtime_api/backends/docker.py",
+      "detail": "ConnectionError の例外チェーン判定を type(inner).__name__ in (\"ReadTimeoutError\", \"ReadTimeout\") で行っており、urllib3 の vendoring 差異に強い一方、同名の無関係な例外を timeout と誤判定する余地が理論上ある。urllib3.exceptions.ReadTimeoutError への isinstance を第一判定にし、名前マッチをフォールバックに落とすとより厳密になる。RF-201 で固定した両型はテストで覆われており違反ではない。"
+    }
+  ]
+}

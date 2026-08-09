@@ -11,6 +11,9 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 # Docker backend
 DOCKER_HOST = os.getenv("DOCKER_HOST", "unix:///var/run/docker.sock")
 DOCKER_NETWORK = os.getenv("DOCKER_NETWORK", "bridge")
+# Docker event stream read timeout (seconds). Bounds half-open connection
+# detection latency; on expiry the stream reconnects with `since` replay.
+DOCKER_EVENTS_READ_TIMEOUT = float(os.getenv("DOCKER_EVENTS_READ_TIMEOUT", "300"))
 
 # Kubernetes backend
 K8S_NAMESPACE = os.getenv("K8S_NAMESPACE", os.getenv("POD_NAMESPACE", "default"))

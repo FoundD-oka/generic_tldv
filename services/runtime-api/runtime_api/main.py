@@ -144,6 +144,16 @@ def register_metrics_route(app: FastAPI) -> None:
         return Response(content=body, media_type=METRICS_CONTENT_TYPE)
 
 
+def warn_missing_bot_env() -> None:
+    """Warn once at startup when bots would be launched without a transcription URL."""
+    if not os.getenv("TRANSCRIPTION_SERVICE_URL", "").strip():
+        logger.warning(
+            "TRANSCRIPTION_SERVICE_URL is not set; bot containers will "
+            "receive an empty URL and realtime transcription will fail silently "
+            "(profiles.yaml injects this value into every bot)"
+        )
+
+
 def create_app() -> FastAPI:
     vexa_env = os.getenv("VEXA_ENV", "development")
     public_docs = vexa_env != "production"
@@ -190,6 +200,7 @@ def create_app() -> FastAPI:
 
         # Load profiles
         load_profiles()
+        warn_missing_bot_env()
         install_sighup_handler()
 
         # Initialize backend
