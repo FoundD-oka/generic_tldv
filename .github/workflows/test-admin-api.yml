@@ -11,6 +11,7 @@ on:
     paths:
       - 'services/admin-api/**'
       - 'libs/admin-models/**'
+      - '.github/workflows/test-admin-api.yml'
 
 permissions:
   contents: read

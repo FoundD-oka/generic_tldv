@@ -2,7 +2,7 @@ name: Verify Compose Config
 
 on:
   push:
-    branches: [main, feature/*]
+    branches: [main, feature/*, hw/**]
     paths:
       - 'deploy/compose/**'
       - '.github/workflows/verify-compose-config.yml'

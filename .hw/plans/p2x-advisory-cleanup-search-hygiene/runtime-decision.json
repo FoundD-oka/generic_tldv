@@ -1,0 +1,1 @@
+{"runtime": "inline", "axes": {"duration": false, "state_volume": false, "delegation": false, "recurrence": false}, "reason": "duration: 2ファイルの微修正で1時間級(venv 構築込み)。state_volume: 参照は search.py とテスト1本。delegation: 不要。recurrence: 一回限り。全軸非該当のため inline(Opus 5)。"}

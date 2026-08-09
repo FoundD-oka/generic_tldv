@@ -1,0 +1,10 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {"level": "S", "reason": "「新規回帰のみ block、既存負債は実測ベースライン固定」という合格ラインまでプランで確定済み。dashboard lint ラチェットの前例に倣う。"},
+    "technical_unknown": {"level": "M", "reason": "CI 環境での failed 集合がローカルと一致するか、redis service コンテナでどの fail が解消するかは実測しないと分からない(RF-501/502)。確定手順は契約に定義済みだが未知は未知。"},
+    "blast_radius": {"level": "S", "reason": "プロダクションコード・既存テスト・pyproject に差分なしを FP-502 で固定。変更は新規 workflow と tests/ci/ 配下のみ。"},
+    "verifiability": {"level": "M", "reason": "ベースライン機構の正しさはユニットテスト+サボタージュ実証で固定できるが、最終確定は PR 上の CI 実走に依存し、ローカルだけでは閉じない。"}
+  },
+  "verdict_reason": "技術的未知(CI 環境の failed 集合)と検証可能性(CI 実走依存)が M のため M。Fable 契約レビュー必須。"
+}

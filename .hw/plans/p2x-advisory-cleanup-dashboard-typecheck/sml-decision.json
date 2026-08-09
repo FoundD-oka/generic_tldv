@@ -1,0 +1,10 @@
+{
+  "size": "S",
+  "axes": {
+    "requirement_ambiguity": {"level": "S", "reason": "修正対象(children 欠落1件)と CI ステップの内容が確定済み。想定超過時の中断条件(6件以上)も定義済み。"},
+    "technical_unknown": {"level": "S", "reason": "tsc の実行と workflow ステップ追加に未知なし。エラー件数の不確かさは着手時実測+中断条件で fail-closed に処理。"},
+    "blast_radius": {"level": "S", "reason": "テストファイル1件と workflow 1ステップ。tsconfig 不変・src 挙動不変を FP で固定。"},
+    "verifiability": {"level": "S", "reason": "tsc exit 0・npm test 非退行・CI 実走のすべてが機械検証。"}
+  },
+  "verdict_reason": "全軸 S。機械検証のみで Fable レビュー不要。"
+}

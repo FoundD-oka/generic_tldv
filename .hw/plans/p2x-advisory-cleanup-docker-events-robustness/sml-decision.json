@@ -1,0 +1,10 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {"level": "S", "reason": "4つの修正内容と保持すべきセマンティクス(#66 の AT 群)はプランで行番号レベルまで確定済み。"},
+    "technical_unknown": {"level": "M", "reason": "requests/urllib3 の例外発生経路は #66 で推測が2回実測に覆った領域。ConnectTimeout の実挙動と closing の二重例外safety に実装時確認が残る(RF-601/602)。"},
+    "blast_radius": {"level": "M", "reason": "変更は docker.py 単一モジュールだが、bot exit 検知=会議完了通知の中核経路。誤実装は「会議が永久 active」「callback 二重発火」に化ける。セマンティクス不変を FP-601 で固定。"},
+    "verifiability": {"level": "S", "reason": "fake session 注入のユニットテストで全 AT を機械検証でき、CI(test-runtime-api)が整備済みなら回帰も CI で判定できる。実半開き再現は #66 同様契約外。"}
+  },
+  "verdict_reason": "技術的未知(例外経路)と影響範囲(exit 検知中核)が M のため M。Fable 契約レビュー必須。"
+}

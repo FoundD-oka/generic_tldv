@@ -9,6 +9,7 @@ on:
   pull_request:
     paths:
       - 'packages/**'
+      - '.github/workflows/test-packages.yml'
 
 permissions:
   contents: read

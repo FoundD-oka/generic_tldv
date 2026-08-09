@@ -1,0 +1,10 @@
+{
+  "size": "S",
+  "axes": {
+    "requirement_ambiguity": {"level": "S", "reason": "削除する行と置換する呼び出し(9箇所)まで特定済み。挙動不変が要求のすべて。"},
+    "technical_unknown": {"level": "S", "reason": "唯一の不確かさ(naive/aware と DB カラムの整合)は RF-801 の実測手順で閉じる。統合テストが即座に検出する。"},
+    "blast_radius": {"level": "S", "reason": "2ファイルのみ。認可条件・クエリ不変を FP-803 で固定。FastAPI の依存キャッシュにより decorator 削除は実行回数の変化すらない。"},
+    "verifiability": {"level": "S", "reason": "既存の unit + 実 postgres 統合テストで完全に機械検証できる。"}
+  },
+  "verdict_reason": "全軸 S。機械検証のみで Fable レビュー不要。タスク群の最後尾(価値最小、落とす判断も可)。"
+}
