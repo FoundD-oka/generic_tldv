@@ -36,7 +36,7 @@ frontmatter へ書き込んだ値)。検証は commit 済み clean tree に対�
 | FP-101 | depends_on と runtime-api mem_limit 以外の compose 差分ゼロ: healthcheck・logging・environment・volumes・ports・restart が無変更 | base と HEAD の `config --format json` から depends_on / mem_limit(および memory 表現)キーを除去した JSON の一致確認(jq またはスクリプト) | ゲート(比較出力)+ Fable(diff のハンクが該当キーのみか) | 比較出力 |
 | FP-102 | #60 の既存検査1〜4(logging 全数 / healthcheck 全数 / meeting-api readyz / 既存 healthcheck 不変)が引き続き exit 0 | 拡張後スクリプトの実行(検査1〜4を削除・緩和していないこと) | Fable(スクリプト差分)+ CI | スクリプト出力 |
 | FP-103 | wake-orchestrator の depends_on と restart: "no" が不変 | 検査8 + diff | Fable + ゲート | スクリプト出力 |
-| FP-104 | 変更ファイルが `deploy/compose/docker-compose.yml`・`deploy/compose/scripts/verify_observability_config.py`・`.github/workflows/verify-compose-config.yml` のみ | `git diff --name-only base-commit..HEAD` | Fable | diff |
+| FP-104 | **実装ファイル**(プロダクトコード・設定・workflow)が `deploy/compose/docker-compose.yml`・`deploy/compose/scripts/verify_observability_config.py`・`.github/workflows/verify-compose-config.yml` の3つのみ。`.hw/plans/` 配下のハーネス成果物(プラン・契約・decision・レビュー verdict)は本 FP の対象外(ハーネス規約上コミット必須のため)。**`.hw/plans/` 以外**の `.hw/`(hooks / rules / verify.sh 等)への差分は従来どおり violation | `git diff --name-only base-commit..HEAD -- ':(exclude).hw/plans'` の出力が上記3ファイルに一致 | Fable | diff |
 | FP-105 | minio-init のスクリプト本文(entrypoint)が不変 | diff | Fable | diff |
 
 ## Non-Functional Checks
@@ -100,3 +100,10 @@ frontmatter へ書き込んだ値)。検証は commit 済み clean tree に対�
 `mcp/dashboard/kabosu-dashboard/wake-orchestrator→api-gateway` がすべて `service_started`。
 `admin-api→postgres` と `api-gateway→admin-api` のみ既に `service_healthy`。
 runtime-api には memory 制限なし(`mem_limit` キー自体が不在)。
+- 2026-08-09 改訂(Fable planner、レビュー実施前): FP-104 の適用範囲を「実装ファイル」に
+  明確化し、判定コマンドを `.hw/plans` 除外形へ変更。理由: ハーネス規約上、プラン・契約・
+  decision・レビュー verdict は commit 必須であり、旧文言のままでは規約準拠の差分
+  (`.hw/plans/p15-compose-deps-limits/` 一式、親プラン `p15-deploy-hardening/`、
+  後続プラン `p15-docker-events-timeout/`、および本改訂自身と今後の review-verdict.json)が
+  機械的に violation になる。契約文言と運用実態の乖離の是正であり、実装差分を上記3ファイルに
+  閉じ込める合格ライン自体は不変(緩和なし。`.hw/plans/` 以外の `.hw/` は violation のまま)。

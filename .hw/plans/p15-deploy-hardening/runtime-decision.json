@@ -1,0 +1,10 @@
+{
+  "runtime": "inline",
+  "axes": {
+    "duration": false,
+    "state_volume": false,
+    "delegation": false,
+    "recurrence": false
+  },
+  "reason": "duration: 各サブタスクは compose 1ファイル+スクリプト+workflow、または docker.py 約60行+テストで、それぞれ数時間以内の1セッションに収まる。state_volume: 参照は docker-compose.yml・docker.py・テスト数本でコンテキストに載る量。delegation: 直列2タスクで並行委譲は不要。recurrence: 一回限りの是正であり反復手順の資産化ではない(検証スクリプトのCI化は成果物であって手順ではない)。全軸非該当のため inline(Opus 5 implementer)。"
+}
