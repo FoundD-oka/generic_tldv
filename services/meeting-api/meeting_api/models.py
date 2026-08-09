@@ -93,6 +93,13 @@ class Transcription(Base):
         # Fresh installs still get it via create_all (new table = no lock).
         Index('ix_transcription_meeting_cluster', 'meeting_id', 'speaker_cluster',
               info={'online_only': True}),
+        # online_only for the same reason: pg_trgm GIN index backing the
+        # cross-meeting transcript search (scripts/migrations/
+        # 20260809_add_transcription_text_trgm.py builds it CONCURRENTLY).
+        Index('ix_transcription_text_trgm', 'text',
+              postgresql_using='gin',
+              postgresql_ops={'text': 'gin_trgm_ops'},
+              info={'online_only': True}),
     )
 
 

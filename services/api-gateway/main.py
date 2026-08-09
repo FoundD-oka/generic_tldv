@@ -1120,6 +1120,17 @@ async def get_meeting_by_id_proxy(meeting_id: int, request: Request):
     url = f"{MEETING_API_URL}/bots/id/{meeting_id}"
     return await forward_request(app.state.http_client, "GET", url, request)
 
+@app.get("/transcripts/search",
+        tags=["Transcriptions"],
+        summary="Search transcript text across the caller's meetings",
+        description="Forwards to meeting-api. Same auth/scope semantics as the other /transcripts routes (ROUTE_SCOPES prefix match → 'tx').",
+        dependencies=[Depends(api_key_scheme)])
+async def search_transcripts_proxy(request: Request):
+    """Forward request to Meeting API for cross-meeting transcript search."""
+    url = f"{MEETING_API_URL}/transcripts/search"
+    return await forward_request(app.state.http_client, "GET", url, request)
+
+
 @app.get("/transcripts/{platform}/{native_meeting_id}",
         tags=["Transcriptions"],
         summary="Get transcript for a specific meeting",

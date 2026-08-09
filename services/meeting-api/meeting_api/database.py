@@ -87,11 +87,28 @@ async def get_db() -> AsyncSession:
             await session.close()
 
 
+async def ensure_pg_trgm_extension():
+    """Create pg_trgm before schema-sync so trigram indexes can be built.
+
+    pg_trgm is a trusted extension since PG13, so the DB owner (the app user in
+    every deployment) may create it. Fresh installs (compose/lite) never run the
+    migration scripts, so without this the create_all of
+    ix_transcription_text_trgm would fail. Best effort only: a failure here must
+    not turn startup into a fail-fast (see #57).
+    """
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
+    except Exception as e:
+        logger.warning(f"Could not ensure pg_trgm extension (continuing): {e}")
+
+
 async def init_db():
     """Converge database schema to match meeting-api models (idempotent)."""
     from schema_sync import ensure_schema
     from admin_models.models import Base as AdminBase
     logger.info(f"Initializing database tables at {DB_HOST}:{DB_PORT}/{DB_NAME}")
+    await ensure_pg_trgm_extension()
     try:
         await ensure_schema(engine, Base, prerequisites=AdminBase)
         logger.info("Database tables checked/created successfully.")

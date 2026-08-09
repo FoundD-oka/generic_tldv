@@ -33,6 +33,15 @@ def test_cluster_index_is_marked_online_only():
     assert not _is_online_only_index(_find_index("ix_transcription_meeting_start"))
 
 
+def test_text_trgm_index_is_marked_online_only():
+    """Same reason for the pg_trgm search index (scripts/migrations/
+    20260809_add_transcription_text_trgm.py builds it CONCURRENTLY)."""
+    index = _find_index("ix_transcription_text_trgm")
+    assert _is_online_only_index(index)
+    assert index.dialect_options["postgresql"]["using"] == "gin"
+    assert index.dialect_options["postgresql"]["ops"] == {"text": "gin_trgm_ops"}
+
+
 def test_sync_indexes_skips_online_only_but_creates_normal_ones():
     created: list[str] = []
 
@@ -45,4 +54,5 @@ def test_sync_indexes_skips_online_only_but_creates_normal_ones():
         _sync_indexes(MagicMock(), Base)
 
     assert "ix_transcription_meeting_cluster" not in created
+    assert "ix_transcription_text_trgm" not in created
     assert "ix_transcription_meeting_start" in created

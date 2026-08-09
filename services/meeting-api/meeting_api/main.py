@@ -34,6 +34,7 @@ from .voice_agent import router as voice_agent_router
 from .recordings import router as recordings_router
 from .voiceprints import router as voiceprints_router
 from .transcription_dictionary import router as transcription_dictionary_router
+from .search import router as search_router
 
 # Collector imports
 from .collector.config import (
@@ -90,6 +91,7 @@ app.include_router(recordings_router)
 app.include_router(collector_router)
 app.include_router(voiceprints_router)
 app.include_router(transcription_dictionary_router)
+app.include_router(search_router)
 
 # Collector background task references
 _collector_tasks: list = []

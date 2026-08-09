@@ -1,0 +1,10 @@
+{
+  "runtime": "inline",
+  "axes": {
+    "duration": false,
+    "state_volume": false,
+    "delegation": false,
+    "recurrence": false
+  },
+  "reason": "duration: Stage 1 は migration スクリプト(既存前例の踏襲)+ 新規ルータ1本 + gateway 転送1ルート + テストで、Stage 2 は一覧ページ1画面の拡張。各サブタスクとも数時間以内の1セッションに収まる。state_volume: 参照は meetings.py の該当関数・models.py・migration 前例・dashboard 1ページでコンテキストに載る量(大量ログ・資料の分析なし)。delegation: 直列2タスクで並行委譲不要。recurrence: 一回限りの機能追加で反復手順の資産化ではない。全軸非該当のため inline(Opus 5 implementer)。"
+}
