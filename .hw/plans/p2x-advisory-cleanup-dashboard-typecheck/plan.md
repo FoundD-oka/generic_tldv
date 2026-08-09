@@ -1,7 +1,7 @@
 ---
 generated_by: fable
 task_id: p2x-advisory-cleanup-dashboard-typecheck
-base-commit: 0fe5ea5a4473312412d4ab5c5f48c605668d0949
+base-commit: 6fe1b2328b49c7fe9d9a2459c386b93477895212
 size: S
 ---
 
