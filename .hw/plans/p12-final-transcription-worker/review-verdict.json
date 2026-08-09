@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "task_id": "p12-final-transcription-worker",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "2da98bbab812d4d12941a47b126645809444fb13",
+  "reviewed_commit": "1c66727817a959a4973bc1a94164c6237863cd26",
+  "target_sha256": "sha256:936192fd3faa6efab7d5deca68eec2dfa4ebac8049200b297dad4590a5628a9c",
+  "contract_sha256": "sha256:72d8a671c4dc364709a597b45d5430000b0a6f3d9f68d4b59d5381567f3cc917",
+  "prompt_sha256": "sha256:54fb67e7bb217784039a5667529b679e01cfd325b55c47a7e253bde8807d0896",
+  "response_sha256": "sha256:d5f0d60a1923818d6dfc7d0f5fda8013160c9154428b97c3db7d8d8f705e9a0d",
+  "created_at": "2026-08-09T02:10:25.958369+00:00",
+  "verdict": "READY",
+  "summary": "契約の全項目(AT-001〜007 / FP-001〜005 / NFT-001〜002)に対応する差分・テストが揃っており、契約違反は検出されなかった。start_sweeps ループから final-transcription 実行ブロックが除去され(:1103 付近の削除ハンク)、`_sweep_final_transcription_jobs` の await 呼び出しは新設 `start_final_transcription_worker` 内の1箇所のみ。ワーカーは `_sweeps_enabled()` ガード・専用 `_ft_stop_event`・専用カウンタ・イテレーション内 try/except・既定60秒ポーリング(env 上書き可、必須 env なし)を備え、main.py startup で `asyncio.create_task(start_final_transcription_worker(async_session_local))` により起動される(AT-006 充足)。新規テスト7件は契約の a〜f + NFT-002 に1対1対応し、FP-001 改訂履歴の実測(ベースライン 631 passed/19 skipped/0 failed → 変更後 638/19/0、+7 = 新規テスト数と一致)は改訂後基準を満たす。`_sweep_final_transcription_jobs` 本体(683-843)、final_transcription.py、deploy/、既存 sweeps テスト5ファイルへのハンクは差分に存在せず FP-002/003/004/NFT-001 を充足。他 sweep は start_sweeps に残存し新規テストで検証済み(FP-005)。stop イベント・カウンタは start_sweeps 側と別変数で独立(NFT-002)。なお本セッションでは実行系ツールが利用不可のため、判定は契約文書と commit 済み差分の静的検証に基づく(pytest 実測値は契約改訂履歴に記録済み)。証跡パックの物理的存在確認は pr-ready-gate に委ねる(advisory 参照)。",
+  "confidence": "high",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "証跡パックの存在はレビューセッション内で独立確認できていない",
+      "detail": "本セッションでは Bash/Glob/Grep が利用不可のため、`.hw/gates/p12-final-transcription-worker/`(pytest-baseline-8bc0374.txt / pytest-full-committed-eebdd38.txt / grep 出力)の物理的存在と内容照合は行えていない。契約改訂履歴に実測サマリが記録されており矛盾はないが、PR 前の `bash .hw/hooks/pr-ready-gate.sh p12-final-transcription-worker` で evidence pack の実在を必ず確認すること。",
+      "file": ".hw/gates/p12-final-transcription-worker/"
+    },
+    {
+      "title": "shutdown で stop_final_transcription_worker が配線されていない",
+      "detail": "main.py の shutdown は新ワーカーを明示停止しない。既存 start_sweeps も同様でプランが意図的に据え置いた既知挙動(契約外)だが、両ループの graceful stop 配線は将来タスクとして plan.md の advisory どおり Issue 化しておくとよい。プロセス終了時はタスクごと破棄されるため実害は現状なし。",
+      "file": "services/meeting-api/meeting_api/main.py"
+    },
+    {
+      "title": "ワーカー二重起動時の stop シグナル孤立(既存パターンと同型の潜在挙動)",
+      "detail": "start_final_transcription_worker が2回呼ばれると `_ft_stop_event` が再代入され、1本目のループは stop 不能になる(start_sweeps の `_stop_event` と同じ潜在パターン)。現状の起動配線は startup 1箇所のみで顕在化しないが、再起動・多重起動を導入する際は要注意。",
+      "file": "services/meeting-api/meeting_api/sweeps.py"
+    },
+    {
+      "title": "AT-005 テストの finally が cancel 併用でクリーン終了経路を検証していない",
+      "detail": "test_other_sweeps_progress_while_final_transcription_blocks の finally で release.set() + stop の後に worker_task.cancel() を無条件実行しているため、ブロック解除→stop によるワーカーの正常終了経路はこのテストでは assert されない(正常終了自体は AT-007 テストが担保)。挙動上の問題はないが、cancel を外し wait_for で正常終了を待つ形にするとカバレッジがわずかに上がる。",
+      "file": "services/meeting-api/tests/test_final_transcription_worker.py"
+    }
+  ]
+}

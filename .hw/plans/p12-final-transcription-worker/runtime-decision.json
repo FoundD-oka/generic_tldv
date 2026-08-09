@@ -1,0 +1,10 @@
+{
+  "runtime": "inline",
+  "axes": {
+    "duration": false,
+    "state_volume": false,
+    "delegation": false,
+    "recurrence": false
+  },
+  "reason": "変更は meeting-api 内の2ソースファイル(sweeps.py, main.py)+新規テスト1ファイルで、想定所要は1セッション内(2時間未満)。作業状態はプランと対象ファイルでコンテキストに収まり、大量ログ分析・複数エージェントへの並行委譲・反復手順の資産化のいずれも不要。4軸すべて非該当のため既定どおり inline(Opus 5 implementer)"
+}
