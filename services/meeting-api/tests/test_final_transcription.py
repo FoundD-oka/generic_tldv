@@ -343,7 +343,7 @@ async def test_find_final_transcription_source_requires_finalized_audio_master()
 
 
 @pytest.mark.asyncio
-async def test_call_transcription_service_marks_deferred_tier(monkeypatch):
+async def test_call_transcription_service_marks_deferred_tier(monkeypatch, tmp_path):
     captured = {}
 
     class FakeResponse:
@@ -374,7 +374,10 @@ async def test_call_transcription_service_marks_deferred_tier(monkeypatch):
     monkeypatch.setenv("TRANSCRIPTION_SERVICE_TOKEN", "secret")
     monkeypatch.setattr("meeting_api.final_transcription.httpx.AsyncClient", FakeClient)
 
-    result = await _call_transcription_service(b"wav", "wav", language="ja")
+    audio_path = tmp_path / "recording.wav"
+    audio_path.write_bytes(b"wav")
+
+    result = await _call_transcription_service(str(audio_path), "wav", language="ja")
 
     assert result["language"] == "ja"
     assert captured["data"]["transcription_tier"] == "deferred"

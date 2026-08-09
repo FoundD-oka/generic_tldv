@@ -236,7 +236,7 @@ async def test_lane_failure_falls_back_to_mixed_master_entirely():
     # shared-mic fixtures (needs_review sub-clusters); this file only
     # asserts on Transcription rows
 
-    async def download(source):
+    async def download(source, dest_path):
         if "lane-" in source.storage_path:
             raise RuntimeError("lane object missing")
         return b"wav"
@@ -274,7 +274,7 @@ async def test_soniox_lane_provider_failure_falls_back_to_mixed_master_entirely(
     ))
     monkeypatch.setenv("DEFERRED_TRANSCRIPTION_MODEL", "stt-async-v5")
 
-    async def download(source):
+    async def download(source, dest_path):
         return source.storage_path.encode("utf-8")
 
     async def transcribe(audio, fmt, *, language):

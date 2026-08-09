@@ -7,7 +7,6 @@ only after the new transcript has succeeded.
 from __future__ import annotations
 
 import asyncio
-import io
 import json
 import logging
 import os
@@ -574,141 +573,156 @@ async def _transcribe_lanes(
     running duration total is checked as each lane finishes, so a
     meeting that is already over budget aborts (and cancels any lanes not
     yet downloaded) before paying full download+ffmpeg cost for every lane.
-    Decoded audio is dropped from `prepared` before transcription starts, so
-    at most one lane's buffer is referenced per in-flight STT call instead of
-    every lane's audio staying resident for the whole all-lanes STT gather.
+    Lane audio lives on disk (one temp dir for the whole lane set, removed on
+    every exit path including cancellation and fallback); only paths travel
+    through `prepared`, and each lane's file is deleted as soon as its own
+    STT call returns.
     """
     semaphore = asyncio.Semaphore(LANE_STT_CONCURRENCY)
 
-    async def _prepare(lane: LaneTranscriptionSource):
-        async with semaphore:
-            audio = await _download_recording_audio(FinalTranscriptionSource(
-                storage_path=lane.storage_path,
-                media_format=lane.media_format,
-                session_uid=lane.session_uid,
-                storage_backend=lane.storage_backend,
-                source="lane",
-            ))
-            audio, fmt = await asyncio.to_thread(
-                _convert_audio_to_wav, audio, lane.media_format
-            )
-            duration = _audio_duration_seconds(audio, fmt) or 0.0
-            return lane, audio, fmt, duration
-
-    pending = {asyncio.ensure_future(_prepare(lane)): lane for lane in lane_sources}
-    prepared: List[tuple] = []
-    total_duration = 0.0
-    budget_reason: Optional[str] = None
-    try:
-        for task in asyncio.as_completed(list(pending.keys())):
-            try:
-                result = await task
-            except Exception as exc:
-                lane = pending.get(task)
-                raise LaneTranscriptionFallback(
-                    f"lane download/convert failed for {lane.lane_key if lane else '?'}: {exc}"
-                ) from exc
-            prepared.append(result)
-            total_duration += result[3]
-            if total_duration > MAX_LANE_TOTAL_DURATION_SECONDS:
-                # Cap already breached by lanes measured so far — stop the
-                # loop immediately instead of waiting for every remaining
-                # lane to finish downloading; `finally` below cancels
-                # whatever is still in flight so we stop paying ffmpeg cost
-                # for lanes we already know we will not transcribe.
-                budget_reason = (
-                    f"lane duration budget exceeded: {total_duration:.0f}s > "
-                    f"{MAX_LANE_TOTAL_DURATION_SECONDS:.0f}s"
+    with tempfile.TemporaryDirectory(prefix="final-tx-lanes-") as work_dir:
+        async def _prepare(index: int, lane: LaneTranscriptionSource):
+            async with semaphore:
+                suffix = _media_format_suffix(lane.media_format)
+                dest_path = os.path.join(work_dir, f"lane-{index}.{suffix}")
+                audio = await _download_recording_audio(
+                    FinalTranscriptionSource(
+                        storage_path=lane.storage_path,
+                        media_format=lane.media_format,
+                        session_uid=lane.session_uid,
+                        storage_backend=lane.storage_backend,
+                        source="lane",
+                    ),
+                    dest_path,
                 )
-                break
-    finally:
-        for task in pending:
-            if not task.done():
-                task.cancel()
-        # Retrieve every task's result/exception exactly once, even the ones
-        # we abandoned above — otherwise asyncio logs "exception was never
-        # retrieved" for a sibling lane that also failed/was cancelled.
-        await asyncio.gather(*pending.keys(), return_exceptions=True)
+                audio, fmt = await asyncio.to_thread(
+                    _convert_audio_to_wav, audio, lane.media_format
+                )
+                duration = _audio_duration_seconds(audio, fmt) or 0.0
+                return lane, audio, fmt, duration
 
-    if budget_reason:
-        raise LaneTranscriptionFallback(budget_reason)
-
-    async def _transcribe(lane: LaneTranscriptionSource, audio: bytes, fmt: str, duration: float):
-        async with semaphore:
-            if prompt:
-                tx = await _call_transcription_service(audio, fmt, language=language, prompt=prompt)
-            else:
-                tx = await _call_transcription_service(audio, fmt, language=language)
-            shifted_events = _shift_speaker_events(speaker_events, lane.start_offset_seconds)
-            segments, detected = _parse_segments(
-                tx,
-                language=language,
-                speaker_events=shifted_events,
-                fallback_duration=duration,
-            )
-            shared_mic = _apply_lane_identity(lane, segments)
-            _shift_segment_times(segments, lane.start_offset_seconds)
-            # NOTE: don't rely on a task-object → lane dict lookup in the
-            # merge loop below — asyncio.as_completed() does not guarantee
-            # yielding the identical Future/Task object that was used as a
-            # dict key, so the lane_key is threaded through the return
-            # value itself instead.
-            # BUG-006 (monitor) — this relies on Python truthiness, so an
-            # empty-string lane_key would be conflated with "no shared-mic
-            # lane" (None) below and in the `if shared_mic_lane_key:` check
-            # further down. lane_key is always a 10-char sha1 slug generated
-            # bot-side (vexa-bot browser.ts: sha1Hex(track.id).slice(0,10))
-            # and is never empty through normal bot operation, so this is
-            # acceptable while the internal upload endpoint is the only
-            # producer of `media_type="lane-..."` — see tribunal BUG-006.
-            return segments, detected, (lane.lane_key if shared_mic else None)
-
-    transcribe_tasks = {
-        asyncio.ensure_future(_transcribe(lane, audio, fmt, duration)): lane
-        for lane, audio, fmt, duration in prepared
-    }
-    prepared.clear()  # drop the (lane, audio, ...) tuples; each task's own
-    # frame is now the only thing keeping its audio buffer alive, so it is
-    # released as soon as that lane's own STT call returns — not held until
-    # every lane's transcription finishes.
-
-    errors: List[BaseException] = []
-    merged: List[Dict[str, Any]] = []
-    shared_mic_lane_keys: List[str] = []
-    # BUG-018 — duration-weighted vote across lanes instead of last-lane-wins:
-    # one minority-language participant should not flip the whole meeting's
-    # recorded language.
-    language_durations: Dict[str, float] = {}
-    for task in asyncio.as_completed(list(transcribe_tasks.keys())):
+        pending = {
+            asyncio.ensure_future(_prepare(index, lane)): lane
+            for index, lane in enumerate(lane_sources)
+        }
+        prepared: List[tuple] = []
+        total_duration = 0.0
+        budget_reason: Optional[str] = None
         try:
-            segments, detected, shared_mic_lane_key = await task
-        except Exception as exc:
-            errors.append(exc)
-            continue
-        merged.extend(segments)
-        # BUG-006 (monitor) — truthiness check paired with the one in
-        # `_transcribe` above; see the comment there for the invariant this
-        # relies on (lane_key is always a non-empty bot-generated slug).
-        if shared_mic_lane_key:
-            shared_mic_lane_keys.append(shared_mic_lane_key)
-        if detected and detected != "unknown":
-            lane_duration = sum(
-                max(0.0, float(seg.get("end", 0)) - float(seg.get("start", 0)))
-                for seg in segments
-            )
-            language_durations[detected] = language_durations.get(detected, 0.0) + lane_duration
-    if errors:
-        raise LaneTranscriptionFallback(
-            f"lane STT failed for {len(errors)}/{len(lane_sources)} lanes: {errors[0]}"
-        ) from errors[0]
+            for task in asyncio.as_completed(list(pending.keys())):
+                try:
+                    result = await task
+                except Exception as exc:
+                    lane = pending.get(task)
+                    raise LaneTranscriptionFallback(
+                        f"lane download/convert failed for {lane.lane_key if lane else '?'}: {exc}"
+                    ) from exc
+                prepared.append(result)
+                total_duration += result[3]
+                if total_duration > MAX_LANE_TOTAL_DURATION_SECONDS:
+                    # Cap already breached by lanes measured so far — stop the
+                    # loop immediately instead of waiting for every remaining
+                    # lane to finish downloading; `finally` below cancels
+                    # whatever is still in flight so we stop paying ffmpeg cost
+                    # for lanes we already know we will not transcribe.
+                    budget_reason = (
+                        f"lane duration budget exceeded: {total_duration:.0f}s > "
+                        f"{MAX_LANE_TOTAL_DURATION_SECONDS:.0f}s"
+                    )
+                    break
+        finally:
+            for task in pending:
+                if not task.done():
+                    task.cancel()
+            # Retrieve every task's result/exception exactly once, even the ones
+            # we abandoned above — otherwise asyncio logs "exception was never
+            # retrieved" for a sibling lane that also failed/was cancelled.
+            await asyncio.gather(*pending.keys(), return_exceptions=True)
 
-    detected_language = (
-        max(language_durations.items(), key=lambda kv: kv[1])[0]
-        if language_durations
-        else (language or "unknown")
-    )
-    merged.sort(key=lambda s: (float(s.get("start", 0)), str(s.get("_lane_key", ""))))
-    return merged, detected_language, shared_mic_lane_keys
+        if budget_reason:
+            raise LaneTranscriptionFallback(budget_reason)
+
+        async def _transcribe(lane: LaneTranscriptionSource, audio: str, fmt: str, duration: float):
+            async with semaphore:
+                try:
+                    if prompt:
+                        tx = await _call_transcription_service(audio, fmt, language=language, prompt=prompt)
+                    else:
+                        tx = await _call_transcription_service(audio, fmt, language=language)
+                finally:
+                    # Release this lane's disk as soon as its own STT call is
+                    # done, instead of holding every lane's audio until the
+                    # whole lane set finishes.
+                    _unlink_quietly(audio)
+                shifted_events = _shift_speaker_events(speaker_events, lane.start_offset_seconds)
+                segments, detected = _parse_segments(
+                    tx,
+                    language=language,
+                    speaker_events=shifted_events,
+                    fallback_duration=duration,
+                )
+                shared_mic = _apply_lane_identity(lane, segments)
+                _shift_segment_times(segments, lane.start_offset_seconds)
+                # NOTE: don't rely on a task-object → lane dict lookup in the
+                # merge loop below — asyncio.as_completed() does not guarantee
+                # yielding the identical Future/Task object that was used as a
+                # dict key, so the lane_key is threaded through the return
+                # value itself instead.
+                # BUG-006 (monitor) — this relies on Python truthiness, so an
+                # empty-string lane_key would be conflated with "no shared-mic
+                # lane" (None) below and in the `if shared_mic_lane_key:` check
+                # further down. lane_key is always a 10-char sha1 slug generated
+                # bot-side (vexa-bot browser.ts: sha1Hex(track.id).slice(0,10))
+                # and is never empty through normal bot operation, so this is
+                # acceptable while the internal upload endpoint is the only
+                # producer of `media_type="lane-..."` — see tribunal BUG-006.
+                return segments, detected, (lane.lane_key if shared_mic else None)
+
+        transcribe_tasks = {
+            asyncio.ensure_future(_transcribe(lane, audio, fmt, duration)): lane
+            for lane, audio, fmt, duration in prepared
+        }
+        prepared.clear()  # drop the (lane, audio_path, ...) tuples; each task
+        # now owns its lane's file and unlinks it when that lane's own STT
+        # call returns — not when every lane's transcription finishes.
+
+        errors: List[BaseException] = []
+        merged: List[Dict[str, Any]] = []
+        shared_mic_lane_keys: List[str] = []
+        # BUG-018 — duration-weighted vote across lanes instead of last-lane-wins:
+        # one minority-language participant should not flip the whole meeting's
+        # recorded language.
+        language_durations: Dict[str, float] = {}
+        for task in asyncio.as_completed(list(transcribe_tasks.keys())):
+            try:
+                segments, detected, shared_mic_lane_key = await task
+            except Exception as exc:
+                errors.append(exc)
+                continue
+            merged.extend(segments)
+            # BUG-006 (monitor) — truthiness check paired with the one in
+            # `_transcribe` above; see the comment there for the invariant this
+            # relies on (lane_key is always a non-empty bot-generated slug).
+            if shared_mic_lane_key:
+                shared_mic_lane_keys.append(shared_mic_lane_key)
+            if detected and detected != "unknown":
+                lane_duration = sum(
+                    max(0.0, float(seg.get("end", 0)) - float(seg.get("start", 0)))
+                    for seg in segments
+                )
+                language_durations[detected] = language_durations.get(detected, 0.0) + lane_duration
+        if errors:
+            raise LaneTranscriptionFallback(
+                f"lane STT failed for {len(errors)}/{len(lane_sources)} lanes: {errors[0]}"
+            ) from errors[0]
+
+        detected_language = (
+            max(language_durations.items(), key=lambda kv: kv[1])[0]
+            if language_durations
+            else (language or "unknown")
+        )
+        merged.sort(key=lambda s: (float(s.get("start", 0)), str(s.get("_lane_key", ""))))
+        return merged, detected_language, shared_mic_lane_keys
 
 
 def _speaking_ranges(speaker_events: List[Dict[str, Any]]) -> List[tuple]:
@@ -813,42 +827,87 @@ def name_clusters_by_dom_vote(
     return names
 
 
-async def _download_recording_audio(source: FinalTranscriptionSource) -> bytes:
+def _media_format_suffix(media_format: str) -> str:
+    """Filesystem-safe suffix for a media_format that comes from meeting.data."""
+    safe = "".join(ch for ch in (media_format or "") if ch.isalnum()).lower()
+    return safe or "bin"
+
+
+def _unlink_quietly(path: Any) -> None:
+    """Best-effort delete. Never raises — callers use this purely to release
+    disk early, and a path that is already gone (or is not a real path at
+    all, e.g. a test double's stand-in value) must not break the run."""
+    try:
+        os.unlink(path)
+    except (OSError, TypeError, ValueError):
+        pass
+
+
+def _ffmpeg_timeout_seconds(input_size_bytes: int) -> float:
+    """ffmpeg timeout proportional to the input size, clamped to [floor, cap].
+
+    A fixed timeout cannot cover both a 2-minute and a 3-hour recording; the
+    long one always times out. DEFERRED_TRANSCRIPTION_FFMPEG_TIMEOUT_SECONDS
+    keeps its meaning as the FLOOR so environments that raised it keep
+    waiting at least that long. cap < floor (misconfiguration) resolves to
+    floor rather than to an unusably small timeout.
+    """
+    floor = float(os.getenv("DEFERRED_TRANSCRIPTION_FFMPEG_TIMEOUT_SECONDS", "120"))
+    cap = float(os.getenv("DEFERRED_TRANSCRIPTION_FFMPEG_TIMEOUT_MAX_SECONDS", "1800"))
+    per_mib = float(os.getenv("DEFERRED_TRANSCRIPTION_FFMPEG_SECONDS_PER_MIB", "4.0"))
+    proportional = (input_size_bytes / (1024 * 1024)) * per_mib
+    return min(max(proportional, floor), max(cap, floor))
+
+
+async def _download_recording_audio(source: FinalTranscriptionSource, dest_path: str) -> str:
+    """Stream the source object to `dest_path` and return that path.
+
+    Deliberately avoids the read-all-bytes storage API: a multi-hour master
+    must never be materialized in the API process memory.
+    """
     storage = create_storage_client(source.storage_backend)
-    return await asyncio.to_thread(storage.download_file, source.storage_path)
+    return await asyncio.to_thread(
+        storage.download_file_to_path, source.storage_path, dest_path
+    )
 
 
-def _convert_audio_to_wav(audio_data: bytes, media_format: str) -> tuple[bytes, str]:
+def _convert_audio_to_wav(src_path: str, media_format: str) -> tuple[str, str]:
+    """Convert an on-disk recording to 16k mono WAV, file → file.
+
+    Returns (path, format). Formats that need no conversion pass straight
+    through. The decoded WAV is never read into memory here; only its path
+    travels downstream.
+    """
     media_format = (media_format or "webm").lower()
     if media_format not in ("webm", "opus", "ogg", "mp4", "m4a"):
-        return audio_data, media_format
+        return src_path, media_format
 
-    src_path = None
     dst_path = None
     try:
-        with tempfile.NamedTemporaryFile(suffix=f".{media_format}", delete=False) as src:
-            src.write(audio_data)
-            src_path = src.name
-        dst_path = src_path.rsplit(".", 1)[0] + ".wav"
+        dst_path = f"{os.fspath(src_path).rsplit('.', 1)[0]}.converted.wav"
+        try:
+            input_size = os.path.getsize(src_path)
+        except OSError:
+            input_size = 0
         result = subprocess.run(
             ["ffmpeg", "-i", src_path, "-ar", "16000", "-ac", "1", "-f", "wav", dst_path, "-y"],
             capture_output=True,
-            timeout=float(os.getenv("DEFERRED_TRANSCRIPTION_FFMPEG_TIMEOUT_SECONDS", "120")),
+            timeout=_ffmpeg_timeout_seconds(input_size),
         )
         if result.returncode != 0:
             logger.error("ffmpeg conversion failed: %s", result.stderr.decode(errors="ignore")[:500])
             raise HTTPException(status_code=500, detail="Audio conversion failed")
-        with open(dst_path, "rb") as converted:
-            return converted.read(), "wav"
     except subprocess.TimeoutExpired as exc:
+        _unlink_quietly(dst_path)
         raise HTTPException(status_code=500, detail="Audio conversion timed out") from exc
-    finally:
-        for path in (src_path, dst_path):
-            if path:
-                try:
-                    os.unlink(path)
-                except FileNotFoundError:
-                    pass
+    except BaseException:
+        _unlink_quietly(dst_path)
+        raise
+    # The source encoding is no longer needed — drop it so only one copy of
+    # the audio occupies disk from here on. The caller's temp dir removes
+    # whatever is left on any exit path.
+    _unlink_quietly(src_path)
+    return dst_path, "wav"
 
 
 def _deferred_transcription_endpoint() -> tuple[str, str]:
@@ -870,7 +929,7 @@ def _deferred_transcription_endpoint() -> tuple[str, str]:
 
 
 async def _call_transcription_service(
-    audio_data: bytes,
+    audio_path: str,
     media_format: str,
     *,
     language: Optional[str],
@@ -881,54 +940,58 @@ async def _call_transcription_service(
         raise HTTPException(status_code=503, detail="TRANSCRIPTION_SERVICE_URL not configured")
 
     timeout = float(os.getenv("DEFERRED_TRANSCRIPTION_TIMEOUT_SECONDS", "1680"))
-    try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            files = {"file": (f"recording.{media_format}", audio_data, f"audio/{media_format}")}
-            form_data = {
-                "model": _requested_model(),
-                "transcription_tier": "deferred",
-            }
-            if language:
-                form_data["language"] = language
-            if prompt and _is_gemini_requested():
-                form_data["prompt"] = prompt
-            headers = {"X-Transcription-Tier": "deferred"}
-            if tx_token:
-                headers["Authorization"] = f"Bearer {tx_token}"
-
-            response = await client.post(
-                tx_url,
-                files=files,
-                data=form_data,
-                headers=headers,
-            )
-            response.raise_for_status()
-            return response.json()
-    except httpx.HTTPStatusError as exc:
-        status_code = exc.response.status_code
-        code = "provider_error"
+    # The audio is streamed from disk in 64KiB multipart chunks; opening it
+    # outside the try below keeps a local file error out of the provider
+    # error mapping (it is not a provider outcome).
+    with open(audio_path, "rb") as audio_file:
         try:
-            detail = exc.response.json().get("detail")
-            if isinstance(detail, dict):
-                code = str(detail.get("code") or code)
-        except Exception:
-            pass
-        logger.error("Transcription service error status=%s code=%s", status_code, code)
-        mapped = 409 if code == "unknown_manual_reconcile" else (502 if status_code >= 500 else 422)
-        raise ProviderTranscriptionError(
-            mapped,
-            "Transcription provider failed",
-            code=code,
-        ) from exc
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.error("Transcription service request failed: %s", exc)
-        raise ProviderTranscriptionError(
-            409,
-            "Transcription provider result is unknown",
-            code="unknown_manual_reconcile",
-        ) from exc
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                files = {"file": (f"recording.{media_format}", audio_file, f"audio/{media_format}")}
+                form_data = {
+                    "model": _requested_model(),
+                    "transcription_tier": "deferred",
+                }
+                if language:
+                    form_data["language"] = language
+                if prompt and _is_gemini_requested():
+                    form_data["prompt"] = prompt
+                headers = {"X-Transcription-Tier": "deferred"}
+                if tx_token:
+                    headers["Authorization"] = f"Bearer {tx_token}"
+
+                response = await client.post(
+                    tx_url,
+                    files=files,
+                    data=form_data,
+                    headers=headers,
+                )
+                response.raise_for_status()
+                return response.json()
+        except httpx.HTTPStatusError as exc:
+            status_code = exc.response.status_code
+            code = "provider_error"
+            try:
+                detail = exc.response.json().get("detail")
+                if isinstance(detail, dict):
+                    code = str(detail.get("code") or code)
+            except Exception:
+                pass
+            logger.error("Transcription service error status=%s code=%s", status_code, code)
+            mapped = 409 if code == "unknown_manual_reconcile" else (502 if status_code >= 500 else 422)
+            raise ProviderTranscriptionError(
+                mapped,
+                "Transcription provider failed",
+                code=code,
+            ) from exc
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.error("Transcription service request failed: %s", exc)
+            raise ProviderTranscriptionError(
+                409,
+                "Transcription provider result is unknown",
+                code="unknown_manual_reconcile",
+            ) from exc
 
 
 def _parse_segments(
@@ -974,11 +1037,12 @@ def _parse_segments(
     return segments, detected_language
 
 
-def _audio_duration_seconds(audio_data: bytes, media_format: str) -> Optional[float]:
+def _audio_duration_seconds(audio_path: str, media_format: str) -> Optional[float]:
+    """Duration from the WAV header on disk — no audio bytes are loaded."""
     if (media_format or "").lower() != "wav":
         return None
     try:
-        with wave.open(io.BytesIO(audio_data), "rb") as wav_file:
+        with wave.open(audio_path, "rb") as wav_file:
             frame_rate = wav_file.getframerate()
             if frame_rate <= 0:
                 return None
@@ -1331,44 +1395,51 @@ async def run_deferred_transcription(
                 await asyncio.gather(heartbeat_task, return_exceptions=True)
                 return await _skip_no_speaker_events(meeting, db, meeting_id, triggered_by=triggered_by)
 
-            audio_data = await _download_recording_audio(source)
-            audio_data, media_format = await asyncio.to_thread(
-                _convert_audio_to_wav,
-                audio_data,
-                source.media_format,
-            )
-            fallback_duration = _audio_duration_seconds(audio_data, media_format)
-            logger.info(
-                "Calling deferred transcription service for meeting %s with language=%s",
-                meeting_id,
-                resolved_language,
-            )
-            if _is_gemini_requested():
-                locked = (await db.execute(
-                    select(Meeting).where(Meeting.id == meeting_id).with_for_update().execution_options(populate_existing=True)
-                )).scalars().first()
-                if locked is None or dict(_meeting_data(locked).get("final_transcription") or {}).get("run_id") != run_id:
-                    raise HTTPException(status_code=409, detail="Deferred transcription run lost its lease")
-                meeting = locked
-                _set_final_transcription_state(
-                    meeting,
-                    provider_started_at=_utcnow_iso(),
-                    updated_at=_utcnow_iso(),
+            # The audio only ever exists on disk inside this temp dir; the
+            # dir is removed as soon as the provider responded (and on every
+            # error path), since nothing below needs the audio again.
+            with tempfile.TemporaryDirectory(prefix="final-tx-") as work_dir:
+                download_path = os.path.join(
+                    work_dir, f"master.{_media_format_suffix(source.media_format)}"
                 )
-                await db.commit()
-            if dictionary_prompt:
-                tx_result = await _call_transcription_service(
-                    audio_data,
-                    media_format,
-                    language=resolved_language,
-                    prompt=dictionary_prompt,
+                audio_path = await _download_recording_audio(source, download_path)
+                audio_path, media_format = await asyncio.to_thread(
+                    _convert_audio_to_wav,
+                    audio_path,
+                    source.media_format,
                 )
-            else:
-                tx_result = await _call_transcription_service(
-                    audio_data,
-                    media_format,
-                    language=resolved_language,
+                fallback_duration = _audio_duration_seconds(audio_path, media_format)
+                logger.info(
+                    "Calling deferred transcription service for meeting %s with language=%s",
+                    meeting_id,
+                    resolved_language,
                 )
+                if _is_gemini_requested():
+                    locked = (await db.execute(
+                        select(Meeting).where(Meeting.id == meeting_id).with_for_update().execution_options(populate_existing=True)
+                    )).scalars().first()
+                    if locked is None or dict(_meeting_data(locked).get("final_transcription") or {}).get("run_id") != run_id:
+                        raise HTTPException(status_code=409, detail="Deferred transcription run lost its lease")
+                    meeting = locked
+                    _set_final_transcription_state(
+                        meeting,
+                        provider_started_at=_utcnow_iso(),
+                        updated_at=_utcnow_iso(),
+                    )
+                    await db.commit()
+                if dictionary_prompt:
+                    tx_result = await _call_transcription_service(
+                        audio_path,
+                        media_format,
+                        language=resolved_language,
+                        prompt=dictionary_prompt,
+                    )
+                else:
+                    tx_result = await _call_transcription_service(
+                        audio_path,
+                        media_format,
+                        language=resolved_language,
+                    )
             segments, detected_language = _parse_segments(
                 tx_result,
                 language=resolved_language,

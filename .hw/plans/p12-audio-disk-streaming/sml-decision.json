@@ -1,0 +1,22 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {
+      "level": "S",
+      "reason": "監査 ST-9/ST-10 が行番号付きで具体的。ゴールは『ピークメモリの音声長非比例』『タイムアウトのサイズ比例+クランプ』として機械検証可能な形に確定済み。"
+    },
+    "technical_unknown": {
+      "level": "M",
+      "reason": "httpx の multipart ファイルストリーミング挙動と tracemalloc ベースのメモリ検証テストの CI 安定性に中程度の未知が残る。前者は AT-001 の実測が経験的に固定し、後者は 4 倍以上の閾値余裕で緩和するが、実装まで確定はしない。"
+    },
+    "blast_radius": {
+      "level": "M",
+      "reason": "変更は final_transcription.py 1ファイルだが、mixed/lane/Gemini/Soniox の全 deferred STT 経路の中核であり、5テストファイル30箇所以上が内部関数を mock している。関数名維持で影響を抑える設計だが、mock 戻り値(bytes)が path として流れる経路の想定外挙動の可能性が残る。"
+    },
+    "verifiability": {
+      "level": "M",
+      "reason": "本質要求(メモリ非比例)は tracemalloc + DrainTransport で機械検証可能に設計済み。ただし ffmpeg サブプロセスのメモリは tracemalloc の対象外で、そこは file→file 構造(現状維持)の静的性質に依存する。"
+    }
+  },
+  "verdict_reason": "L 相当の軸なし(要求・検証手段とも確定済み)。技術的未知・影響範囲・検証可能性に M 相当の残余があるため M。Fable 契約レビュー必須。"
+}
