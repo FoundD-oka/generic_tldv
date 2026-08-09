@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "task_id": "p14-ci-dashboard",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "69d01b2f887a0765d2900f83545e1b58bcf8de0c",
+  "reviewed_commit": "c90d62731a355e9345c76de9e11c6f37ae5014e0",
+  "target_sha256": "sha256:6cc8e3efa77bb95ab766e1cdb95a29c30149515d1cb43b2f91e9c00f7b1d9d51",
+  "contract_sha256": "sha256:d5597094134a2db81d469f3a60f4bb47a091aa4886b6f786e13ba13266f720bd",
+  "prompt_sha256": "sha256:cb6a5429f026b8f181ec9c4ce77cfdd1faa16ffaa61afe94f39895a62315050a",
+  "response_sha256": "sha256:df400c7548ec8c7c02a882ae7f7a106c3224446da862ee2a27131b40ad81ab86",
+  "created_at": "2026-08-09T08:52:16.193400+00:00",
+  "verdict": "READY",
+  "summary": "p14-ci-dashboard(M)のFable担当項目をすべて差分と契約の突合で確認し、契約違反0件。AT-001(paths限定の有効なworkflow)、AT-005(ラチェット4境界の判定式)、AT-006b(baseline 61/87が契約記載の独立実測値と一致)、AT-007(eslint exit≥2の即fail分岐)、AT-009a/b(vitest.config.tsのTZ=Asia/Tokyo固定とworkflowにTZなし)、FP-001〜003/005/006(握り潰しなし・変更ファイル限定・vitest設定弱化なし・依存追加なし・既存workflow無変更)、NFT-001〜004(SHAピン・contents:readのみ・baseline自動昇格なし・由来記録ルールのコメント明記)を確認。CI/ゲート担当項目(AT-002/003/004/006a/008/009c、FP-004)は権威分担どおりレビュー合否根拠から除外。READYはtarget hash sha256:6cc8e3ef…とcontract hash sha256:d5597094…に束縛される。",
+  "confidence": "high",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "FP-002の文言に .hw/plans/<task>/** の明示的除外を追加すべき",
+      "file": ".hw/plans/p14-ci-dashboard/verification-contract.md",
+      "detail": "git diff --name-only base-commit..HEAD には許容4ファイルに加え .hw/plans/p14-ci-dashboard/ 配下5件(plan.md, base-commit, verification-contract.md, sml-decision.json, runtime-decision.json)が含まれる。これらはハーネス(CLAUDE.md)が要求するメタデータであり実装変更ではないため違反とはしないが、FP-002を字義どおり読むと矛盾する。次回契約から「.hw/plans/<task>/** はスコープ外」と明記すれば判定の曖昧さが消える。"
+    },
+    {
+      "title": "NFT-001のSHAピン同一性は差分外照合が必要(ゲートで確認を推奨)",
+      "file": ".github/workflows/test-dashboard.yml",
+      "detail": "checkout@34e11487…とsetup-node@49933ea5…はいずれも40桁SHAピン+バージョンコメントで形式適合し、plan.mdは既存test-*.ymlと同一ピンと記載、前回レビュー(7168bb5)もREADYだった。ただし本レビューセッションはファイルアクセス制限により既存test-*.ymlのuses:行を直接照合できていない。pr-ready-gate側で grep \"uses:\" .github/workflows/test-*.yml の一致確認をevidenceに含めることを推奨。"
+    },
+    {
+      "title": "push trigger の branches フィルタに hw/* が含まれない",
+      "file": ".github/workflows/test-dashboard.yml",
+      "detail": "push は branches [main, feature/*] に限定されるため、hw/* 等の作業ブランチへの直pushではCIが走らない(pull_requestでは走るので契約のAT-002〜004の実証には支障なし)。PRを開かずにpushだけで検証しようとすると run が見つからず混乱し得る。運用上PR必須なら現状で問題ないが、branchesフィルタを外してpaths限定のみにする選択肢もある。"
+    }
+  ]
+}
