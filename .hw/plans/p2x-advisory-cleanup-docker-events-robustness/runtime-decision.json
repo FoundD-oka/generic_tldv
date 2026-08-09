@@ -1,0 +1,1 @@
+{"runtime": "inline", "axes": {"duration": false, "state_volume": false, "delegation": false, "recurrence": false}, "reason": "duration: docker.py 約30行+テスト数本で1セッションに収まる(#66 の同経路実績より小さい)。state_volume: 参照は docker.py と既存テストのみ。delegation: 単一サービスの直列作業。recurrence: 一回限りの是正。全軸非該当のため inline(Opus 5)。"}

@@ -1,0 +1,10 @@
+{
+  "size": "S",
+  "axes": {
+    "requirement_ambiguity": {"level": "S", "reason": "選別記録のみでコード変更なし。採否と理由は本ファイルで確定済み。"},
+    "technical_unknown": {"level": "S", "reason": "実装がないため未知なし。"},
+    "blast_radius": {"level": "S", "reason": ".hw/plans/ 配下の記録追加のみ。"},
+    "verifiability": {"level": "S", "reason": "ファイルの存在と内容で完結。"}
+  },
+  "verdict_reason": "記録のみのタスクで全軸 S。Fable レビュー不要、後続タスクのコミットに plan(hw): で同乗させる。"
+}
