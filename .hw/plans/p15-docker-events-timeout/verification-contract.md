@@ -71,5 +71,69 @@ CI は未整備のため本タスクでは不使用。pytest 判定はゲート+
 
 ## 改訂履歴
 
-- (実装者が着手時に記入: base-commit、pytest ベースライン実測サマリ
-  — passed/failed/skipped 数と failed テスト名一覧)
+### base-commit(着手時実測)
+
+- `d691ff5b917cf48beae47fb62031394e539f65d7`(plan.md frontmatter と
+  `base-commit` ファイルを同値へ更新済み。プラン記載の `b6abdd7...` は第1弾
+  マージ前の古い値だった)
+
+### pytest ベースライン実測(base-commit d691ff5 / clean tree)
+
+環境: python3.11.15 fresh venv `~/.cache/hw-venvs/p15-docker-events-timeout`、
+`pip install -e "services/runtime-api/[dev]"`、
+`python -m pytest services/runtime-api/tests -q`。
+
+- **ベースライン: 18 failed, 94 passed, 7 skipped**
+- **実装後: 18 failed, 107 passed, 7 skipped**(新規 fail 0。passed +13 は
+  新設 `tests/test_docker_events.py` の13件のみ)
+- failed 集合はベースライン・実装後で完全一致(環境依存の既存 fail、本タスク非対象):
+  - `test_backends.py::test_process_backend_inspect`
+  - `test_integration.py::TestHealth::test_profiles_loaded`
+  - `test_integration.py::TestContainerLifecycle::test_01_create_container`
+  - `test_integration.py::TestContainerLifecycle::test_02_list_containers`
+  - `test_integration.py::TestContainerLifecycle::test_03_inspect_container`
+  - `test_integration.py::TestContainerLifecycle::test_04_touch_container`
+  - `test_integration.py::TestContainerLifecycle::test_05_stop_container`
+  - `test_integration.py::TestContainerLifecycle::test_06_container_gone`
+  - `test_integration.py::TestContainerLifecycle::test_07_list_after_stop`
+  - `test_integration.py::TestErrors::test_unknown_profile`
+  - `test_integration.py::TestErrors::test_inspect_nonexistent`
+  - `test_integration.py::TestErrors::test_delete_nonexistent`
+  - `test_integration.py::TestCallback::test_callback_url_accepted`
+  - `test_integration_process.py::TestProcessLifecycle::test_01_create_process`
+  - `test_integration_process.py::TestProcessLifecycle::test_02_list_shows_process`
+  - `test_integration_process.py::TestProcessLifecycle::test_03_inspect_process`
+  - `test_integration_process.py::TestProcessLifecycle::test_04_stop_process`
+  - `test_integration_process.py::TestProcessLifecycle::test_05_process_stopped`
+- 証跡全文: `.hw/gates/p15-docker-events-timeout/pytest-baseline-d691ff5.txt`、
+  `pytest-after-impl.txt`(gitignore 領域)
+
+### RF-201 実測(streaming read timeout の例外型)
+
+確認方法: ヘッダのみ返して本文を送らない TCP サーバと unix socket サーバを立て、
+`session.get(..., stream=True, timeout=(5,1))` + `iter_lines()` で read timeout を
+実際に発生させ、例外型を出力した(requests 2.34.2 / urllib3 2.7.0 / python 3.11.15)。
+
+- **本文ストリーミング中の read timeout** → `requests.exceptions.ConnectionError`
+  (`args[0]` と `__cause__` が `urllib3.exceptions.ReadTimeoutError`)。
+  `isinstance(exc, requests.exceptions.Timeout)` は **False**。
+  TCP・unix socket(requests_unixsocket)とも同一挙動。
+- **ヘッダ到着前(`session.get` 内)の read timeout** → `requests.exceptions.ReadTimeout`
+  (`requests.exceptions.Timeout` のサブクラス)。
+- したがって判別ヘルパー `_is_read_timeout` は「`Timeout` サブクラス」に加えて
+  「`ConnectionError` の例外チェーンに `ReadTimeoutError` を含むもの」も timeout 扱い
+  にする必要がある。両型をテストで固定した(`test_docker_events.py`)。
+- 証跡: `.hw/gates/p15-docker-events-timeout/rf-201-read-timeout-repro.txt`
+
+### RF-202 実測(Docker API の since ナノ秒精度)
+
+確認方法: ローカル docker daemon(Server API 1.54)で `runtime.managed=true` ラベル付き
+コンテナを2つ die させ、`curl --unix-socket /var/run/docker.sock '/v1.43/events?since=...'`
+を実行して境界イベントの再配送有無を確認した。
+
+- 観測した die イベント: `1786281088293639700`(rf202-a)/ `1786281088546786600`(rf202-b)
+- `since=1786281088.293639700`(rf202-a の timeNano ちょうど)→ **rf202-b の1件のみ**。
+  境界イベントは再配送されない(ナノ秒精度 `<sec>.<9桁>` は受理され、`since` は排他的)。
+- 参考: `since=1786281088`(秒精度)→ 2件とも配送され rf202-a が重複する。
+  ナノ秒精度が必須であることを実測で確認。
+- 証跡: `.hw/gates/p15-docker-events-timeout/rf-202-since-nano.txt`
