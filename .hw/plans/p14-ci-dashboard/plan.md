@@ -40,9 +40,10 @@ reframe(lint の扱い): `npm test`(vitest、32 files / 240 tests 全pass)は
 
 ## How
 
-変更は3ファイル: `.github/workflows/test-dashboard.yml`(新規)、
+変更は4ファイル: `.github/workflows/test-dashboard.yml`(新規)、
 `services/dashboard/lint-baseline.json`(新規)、
-`services/dashboard/scripts/ci/lint-ratchet.mjs`(新規)。
+`services/dashboard/scripts/ci/lint-ratchet.mjs`(新規)、
+`services/dashboard/vitest.config.ts`(TZ 固定の1項目追加のみ。§4)。
 
 ### 1. `services/dashboard/lint-baseline.json`(新規)
 
@@ -97,9 +98,36 @@ reframe(lint の扱い): `npm test`(vitest、32 files / 240 tests 全pass)は
 - 禁止事項: `continue-on-error` / `|| true` は使わない(上記 `set +e` ブロックが
   唯一の例外で、exit code を変数捕捉して明示判定するためマスクではない)。
 
-### 4. 検証手順(PR での実証)
+### 4. テストのタイムゾーン固定(PR #63 CI 赤対応。改訂2で追加)
 
-1. PR 作成 → `Test Dashboard` 緑(240 tests pass + ラチェット緑)を確認。
+- **事実**: `tests/test_export_and_bot_defaults.test.ts > exportToTxt > uses a
+  Japanese text export template` が JST 前提のリテラル期待値
+  (`日時: 2026年6月25日 19:00`)を持ち、UTC の CI ランナーで赤になった。
+  実測: 当該ファイルは TZ=UTC で 1 failed / TZ=Asia/Tokyo で 6 passed。
+  スイート全体を TZ=UTC / America/New_York / Pacific/Kiritimati で実行した
+  結果、失敗は全ゾーンともこの1件のみ(1 failed | 242 passed (243))。
+  **他のテストに同種の TZ 依存はない**。
+- **製品バグではない**: `exportToTxt`(`src/lib/export.ts`)は date-fns +
+  ja ロケールで整形し、呼び出し元 `src/app/meetings/[id]/page.tsx` は
+  `"use client"` = ブラウザ実行。閲覧者ローカル TZ での整形は意図どおりの
+  挙動。欠陥は「テストが実行環境の TZ に暗黙依存」していること。
+- **修正**: `vitest.config.ts` の `test` に `env: { TZ: "Asia/Tokyo" }` を
+  追加し、**テストプロセスの TZ を Asia/Tokyo に固定**する
+  (Node v22 は POSIX で実行中の `process.env.TZ` 変更を即時反映することを
+  実測確認済み。vitest は worker 起動時=テスト import 前に test.env を
+  process.env へ注入する)。テストファイル自体・製品コードは変更しない。
+  万一 `test.env` で固定が効かない場合の代替は setupFiles 先頭での
+  `process.env.TZ = "Asia/Tokyo"`(同等の効果。実装者判断で選択可)。
+- **workflow には TZ を設定しない**: CI ランナーは UTC のままにする。
+  これにより「CI 緑」自体が TZ 固定が効いていることの機械検証になる
+  (workflow に TZ を足すと修理の実効性を CI で検証できなくなる)。
+
+### 5. 検証手順(PR での実証)
+
+0. ローカルで `TZ=UTC npm test` と `TZ=Asia/Tokyo npm test` の両方が
+   全pass(同数)になることを確認(TZ 固定の実証)。
+1. PR 作成 → `Test Dashboard` 緑(全 tests pass + ラチェット緑)を確認。
+   ランナーは UTC なので、この緑が TZ 固定の CI 側実証を兼ねる。
 2. **sabotage 検証(テスト)**: 既存テスト1件の期待値を壊す一時 commit →
    テストステップで赤 → revert → 緑。
 3. **sabotage 検証(lint ラチェット)**: 新規 lint error を1件足す一時 commit
@@ -111,7 +139,9 @@ reframe(lint の扱い): `npm test`(vitest、32 files / 240 tests 全pass)は
 ## 変更しないもの
 
 - dashboard の src / tests / package.json / eslint.config.mjs(lint 負債の返済は
-  本タスクのスコープ外。ラチェットで凍結するだけ)。
+  本タスクのスコープ外。ラチェットで凍結するだけ)。vitest.config.ts は
+  §4 の TZ env 追加**のみ**(include・passWithNoTests 等の判定に関わる設定は
+  変更しない)。テストファイル(tests/**)も無変更(TZ 固定で通るため)。
 - packages/transcript-rendering(path filter に含めるだけで変更しない)。
 - deploy-dashboard-gcp.yml(テストゲート化は advisory)。
 
@@ -131,3 +161,16 @@ reframe(lint の扱い): `npm test`(vitest、32 files / 240 tests 全pass)は
 - vitest の passWithNoTests 既定(false)に依存して「収集0で緑」を防いでいる。
   設定で有効化された場合はテスト削除が緑で通るようになるため、レビューで
   vitest 設定変更を見る(FP に含めた)。
+
+### 追記(改訂2): TZ 方針の判断理由
+
+- (A)「workflow に `TZ: Asia/Tokyo` を設定」を退けた理由: CI だけ直り
+  「JST のマシンでしか通らない」欠陥が残る。他 TZ の開発者がローカルで
+  踏み続け、かつ CI 側からは欠陥が見えなくなる(隠蔽に近い)。
+- (B) のうち「期待値を実行環境から導出」を退けた理由: 実装と同じ date-fns
+  呼び出しで期待値を作るとトートロジー化し、リテラル断言
+  (`日時: 2026年6月25日 19:00`)の可読性と検出力を失う。
+- 採用した「テストプロセスの TZ を Asia/Tokyo に固定」は、(B) の本質
+  (誰の環境でも同一結果)を満たしつつ、日本語限定プロダクト(カボス方針)の
+  実運用表示と期待値リテラルを一致させたまま保てる。CI ランナーを UTC の
+  ままにすることで、固定が外れた退行は即 CI 赤で検出される。
