@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "task_id": "p13-metrics-endpoints",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "5559ff9e57e004805106e10b41da9451b1207923",
+  "reviewed_commit": "ed24ed476026af58881747bdeb2da71cc11bb6df",
+  "target_sha256": "sha256:21480db7bb3b3014a6090052bd40dafad8659539bcb7b3feef5e8094afc5c462",
+  "contract_sha256": "sha256:0ee29ecc5c687a910dbcae969b76fab405d7c4d7e72bb0c7c553e7d4bc4098ca",
+  "prompt_sha256": "sha256:731279d5b151f9b8d4ebfe183537e167677bd76d0bac25505797bccd197ea755",
+  "response_sha256": "sha256:5f2f0a59d4a53b9eeda8212400fe4ed1b109b39ede75e45a3c209d030d8c0a0f",
+  "created_at": "2026-08-09T07:10:56.392462+00:00",
+  "verdict": "READY",
+  "summary": "p13-metrics-endpoints(M、reviewed ed24ed4)は契約適合。AT-001〜007 は新設テスト(meeting-api 3系統露出・Content-Type・HELP/TYPE とラベルエスケープ・部分故障 200・runtime-api 認証スキップ・backlog SQL と sweep の述語一致・README 手順)で機械検証されており、FP-003〜006(変更ファイル範囲・依存追加なし・既存ハンドラ無変更・skip list 追加は /metrics のみ)と NFT-001/002(バックグラウンド収集なし・窓付き/同型 SQL のみ)は差分ハンクレビューで確認した。FP-001/FP-002 は .hw/gates/ の実測証跡が根拠で差分外だが、差分に既存テストの改変はなく差分起因の regression 機構は見当たらない。violations 0件のため READY(target/contract hash に束縛、gate の証跡確認を前提とする)。",
+  "confidence": "high",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "FP-003 の許可リストに .hw/plans/<task>/ を明示すべき",
+      "detail": "diff には .hw/plans/p13-metrics-endpoints/(plan.md・verification-contract.md・sml/runtime-decision.json・base-commit)が含まれるが、FP-003 の許可リストには載っていない。ハーネス設計上プラン成果物が base-commit..HEAD に入るのは必然(base-commit 記録後に plan を commit する)であり違反とはしないが、契約テンプレート側で明示的に許可リストへ加え曖昧さを除くべき。",
+      "file": ".hw/plans/p13-metrics-endpoints/verification-contract.md"
+    },
+    {
+      "title": "meeting-api /metrics の app.state.redis_client 属性名の配線確認",
+      "detail": "エンドポイントは getattr(app.state, \"redis_client\", None) で Redis client を読むが、startup が実際にこの属性名で格納しているかは差分から確認できない。不一致でも全テストは green のまま collector_stream_lag が恒常 -1 になり、Redis 障害と区別がつかない。実配備で一度 /metrics を叩き lag が実値になることを確認するのが望ましい。",
+      "file": "services/meeting-api/meeting_api/main.py"
+    },
+    {
+      "title": "完了ジョブ 0 件時に latency 系列が出力から消える",
+      "detail": "db_samples は latencies が空のとき meeting_api_final_transcription_latency_seconds の HELP/TYPE ごと省略する。静かな環境では『未実装』と『データなし』が curl 出力上で区別できない。README に一行注記するか、常に系列を出して NaN を返す選択もある(text format 上どちらも合法)。",
+      "file": "services/meeting-api/meeting_api/metrics.py"
+    },
+    {
+      "title": "runtime-api ローカル renderer が HELP テキストをエスケープしない",
+      "detail": "meeting-api 側は _escape_help で \\\\ と改行をエスケープするが、runtime-api の render_prometheus_text は help をそのまま出力する。現状の help はすべて静的リテラルで実害はないが、将来 help 文字列に改行やバックスラッシュを含めるとフォーマット違反になる。同型化しておくと安全。",
+      "file": "services/runtime-api/runtime_api/main.py"
+    }
+  ]
+}
