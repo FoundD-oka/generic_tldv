@@ -3,6 +3,19 @@ name: Deploy dashboard to GCP
 on:
   push:
     branches: [main]
+    paths:
+      - 'services/dashboard/**'
+      # dashboard は file:../../packages/transcript-rendering に依存する。
+      - 'packages/transcript-rendering/**'
+      - '.github/workflows/deploy-dashboard-gcp.yml'
+      # gcloud builds submit が使うビルド設定。
+      - 'deploy/gcp/**'
+      # Dockerfile が COPY し assert-release-version が照合する。
+      - 'VERSION'
+      - 'deploy/helm/charts/vexa/Chart.yaml'
+      # ビルドコンテキスト(リポジトリ root)の内容を左右する。
+      - '.dockerignore'
+      - '.gcloudignore'
 
 concurrency:
   group: deploy-dashboard-gcp

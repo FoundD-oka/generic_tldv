@@ -1,0 +1,10 @@
+{
+  "size": "S",
+  "axes": {
+    "requirement_ambiguity": {"level": "S", "reason": "追加すべき paths / branches はプランで具体値まで確定済み。現物の workflow を読んで pull_request 側のみ欠落と特定済み(handoff の記述より狭い)。"},
+    "technical_unknown": {"level": "S", "reason": "GitHub Actions の paths フィルタ仕様は既知。pull_request は PR head の workflow 定義で走るため、自パス追加はその PR 自身で実証される。"},
+    "blast_radius": {"level": "S", "reason": "差分は6 workflow の on: 節のみ。jobs に触れない制約を FP-402 で固定。deploy の paths 絞りも branches: [main] 不変で、誤りは AT-403 の静的検査で捕まる。"},
+    "verifiability": {"level": "S", "reason": "静的検査(grep)+ PR 上の実走(gh run list の workflow 名)で完全に機械検証できる。"}
+  },
+  "verdict_reason": "全軸 S。不確定性ほぼゼロの機械的な workflow 編集。Fable レビュー不要、機械検証のみ。"
+}
