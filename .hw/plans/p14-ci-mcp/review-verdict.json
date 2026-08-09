@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "task_id": "p14-ci-mcp",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "0c43bdff378a394857c3305be3186b6a1adb8d89",
+  "reviewed_commit": "b39acc47ca2910f127c2e40cc1865183f54e87e7",
+  "target_sha256": "sha256:b3567423536f1088a3411ccddc1cbc933a2c77e12597107e39a97e117eb5dbe1",
+  "contract_sha256": "sha256:ffedefca3a7b3884cad2b55b88229a5c9e56c483713655e7bc82b958d85d9765",
+  "prompt_sha256": "sha256:5f32e8c4d8dd8692b30c74b1c1ac22d119962afec2ecee4e44207cc3b537ab99",
+  "response_sha256": "sha256:2456c5c13ce01c1ebfe43d0d5b85a81a9d73967faae1d94a7ec1fcb54f703422",
+  "created_at": "2026-08-09T08:39:38.063294+00:00",
+  "verdict": "READY",
+  "summary": "Fable差分レビュー担当のAT-002/003/004、FP-001〜006、NFT-001/002をすべて合格と判定。conftestの死んだsys.path挿入は削除+実行前提docstring化、重複旧テストは削除、workflowは契約指定のtrigger paths・SHAピン・contents: readのみ・fastapi-mcp不installを満たし、握り潰しパターンや範囲外の製品コード変更なし。テスト期待値修正(Teams passcode必須化への追随2件)は根拠コメント付きで差分内に存在するが、FP-005のPR本文要件はPR未作成のため検証不能であり、失敗未発生としてadvisoryでゲートへ引き継ぐ。AT-001/005/006/007はCI・ゲート管轄。READYはtarget hash sha256:b3567423…・contract hash sha256:ffedefca…に束縛。",
+  "confidence": "high",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "FP-005のPR本文要件はPR作成前レビューでは判定不能(改訂1と同類の層ミスマッチが残存)",
+      "detail": "テスト期待値の修正(TestTeamsNativeMeetingIdValidationの2件にpasscode追加)が発生しているためFP-005が発動するが、Fableレビューはpr-ready-gate前=PR本文が存在しない時点で走るため検証できない。根拠自体は差分内のテストコメント(MeetingCreateがTeamsにpasscodeを必須とする現実装を正とした旨)に記載済み。ゲートはPR作成時に本文へこの根拠が転記されていることを確認すること。次回以降の契約ではFP-005相当を「根拠をテストコメントまたはcommit messageに記載(Fable差分判定)+PR本文への転記(ゲート判定)」へ分離することを推奨。",
+      "file": "services/mcp/tests/test_parse_meeting_url.py"
+    },
+    {
+      "title": "FP-003の許可リストに .hw/plans/<task>/** が未列挙(契約の自己整合性)",
+      "detail": "base-commit..HEADの差分には .hw/plans/p14-ci-mcp/ のプラン成果物5点(base-commit, plan.md, sml-decision.json, runtime-decision.json, verification-contract.md)が含まれるが、FP-003の許可リストには載っていない。契約自身がplan.md frontmatterのbase-commitやGate Requirementsでこれらの存在を前提としているため、ハーネス規定成果物として合格扱いとした。次回以降の契約ではFP-003に .hw/plans/<task>/** を明示列挙して曖昧さを除くこと。",
+      "file": ".hw/plans/p14-ci-mcp/plan.md"
+    },
+    {
+      "title": "NFT-001のSHAピン同一性は差分単独ではbyte比較不能",
+      "detail": "test-mcp.ymlのcheckout(34e11487…)とsetup-python(a26af69b…)はSHAピン+バージョン注記の形式で契約の趣旨(タグでなくSHA固定)を満たすが、既存test-*.ymlのuses:行との文字列一致は差分外のためこの環境では突合できなかった。ゲートがevidence確認の際に grep \"uses:\" .github/workflows/test-*.yml で同一性を一行確認しておくとよい。",
+      "file": ".github/workflows/test-mcp.yml"
+    }
+  ]
+}
