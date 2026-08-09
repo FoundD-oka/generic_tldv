@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "task_id": "p14-ci-vexa-bot",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "704e7380e8ab45ca957777bb4997e4386297a232",
+  "reviewed_commit": "9841ecf10f084b1bff74fb7de9110e30c5b97fc3",
+  "target_sha256": "sha256:0a0e7ae88eeac4bc56be4863dfe82679681d2ef4b83a192e602c05c8eb19a3d7",
+  "contract_sha256": "sha256:8e99b59f59acdc901042492aecc9e0903a8ff1d58d337bd82dbdf4c0e5f70ad7",
+  "prompt_sha256": "sha256:3bfeb1974f2fe5f476205b153268f712f95c69565d65c4bf18ffe1e6e090f5a5",
+  "response_sha256": "sha256:b6d7a0c06d1392a02127659e598418943cc6045c0d8ca9ff6d2510920c1167ff",
+  "created_at": "2026-08-09T08:23:34.483159+00:00",
+  "verdict": "READY",
+  "summary": "Fable差分レビュー層で判定可能な全項目が契約に適合。AT-001: workflowは構造的に有効なYAMLで、push/pull_request双方のpathsが services/vexa-bot/core/** と workflow自身に限定され、親ディレクトリ直下を含まない。AT-002(Fable分): package-lock.json は lockfileVersion 3(≥2)で、package.json の dependencies 12項目(@jjhbw/silero-vad, @types/uuid, basic-ftp, onnxruntime-node, playwright, playwright-extra, puppeteer, puppeteer-extra, puppeteer-extra-plugin-stealth, redis, uuid, zod)と devDependencies 3項目(@types/node, tsx, typescript)すべてに解決済みエントリが存在。AT-005(Fable分): job env に PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD / PUPPETEER_SKIP_DOWNLOAD(+旧名 PUPPETEER_SKIP_CHROMIUM_DOWNLOAD)を確認。FP-001: continue-on-error / || true / 失敗マスクなし。FP-002: 実体変更は契約列挙の2ファイルのみ(残りは .hw/plans/p14-ci-vexa-bot/ 配下のハーネス必須メタデータで、実行コードに影響する失敗シナリオを構成しない)。plan §3 の例外(package.json 変更・--ignore-scripts)は不使用。FP-003/FP-005/FP-006: src・既存workflow・親ディレクトリへの差分なし。FP-004: package.json 無変更のため test スクリプト7本の && 連結は維持。NFT-002: permissions は contents: read のみで secrets 不使用。NFT-003: --ignore-scripts 不使用のため対象外。npm ci への --prefix . 追加は許可ファイル内の変更で、理由が workflow コメントに明記されており、挙動の正否は契約上 CI(npm ci 成功)が最終権威として検出する設計に収まる。AT-003/004/006 および Linux install 成否は契約の権威分担どおり CI とゲートに委ねる。なお本セッションは Bash/Grep が無効のため、判定は契約と提示差分のみを根拠とした(契約の権威分担が要求するレビュー範囲と一致)。",
+  "confidence": "high",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "NFT-001 のSHAピン同一性はゲートで既存 test-*.yml と突合を推奨",
+      "detail": "差分中の checkout(34e11487...# v4)と setup-node(49933ea5...# v4)はSHAピン済みだが、レビュー環境でツールが無効化されており既存 test-*.yml の uses: 行との同一性を実測突合できなかった。pr-ready-gate で `grep -h 'uses:' .github/workflows/test-*.yml | sort -u` の出力を evidence に含めると NFT-001 が完全に閉じる。",
+      "file": ".github/workflows/test-vexa-bot.yml"
+    },
+    {
+      "title": "FP-002 の許容ファイル列挙に .hw/plans/<task>/** を明記すると次回から機械判定できる",
+      "detail": "本差分には .hw/plans/p14-ci-vexa-bot/ 配下のハーネス必須成果物(plan.md, base-commit, verification-contract.md, sml-decision.json, runtime-decision.json)が含まれるが、FP-002 の列挙は2ファイルのみで、プロセス必須物の扱いがレビュアーの解釈に依存する。契約テンプレートに『.hw/plans/<task>/** は常に許容』を明記すれば git diff --name-only の結果だけで機械判定できる。",
+      "file": ".hw/plans/p14-ci-vexa-bot/verification-contract.md"
+    },
+    {
+      "title": "npm ci --prefix . のworkspaces回避挙動はCI緑後にログで裏取りを推奨",
+      "detail": "workflow コメントの『親が npm workspaces ルートで --prefix . により core 単体をルート扱いさせる』という主張はレビュー層では検証不能(未信頼データとして扱った)。仮に --prefix が意図どおり効かなくても、core の依存が入らなければ npm test(tsc build)が module not found で赤になるため契約上は CI が検出するが、AT-003 の緑 run 確認時に install ログで core/package-lock.json 由来のパッケージ数(約2500行規模の lockfile 相当)が入っていることを ci-green.txt の抜粋に含めると、偶然親側 node_modules で通る類の偽陽性を排除できる。",
+      "file": ".github/workflows/test-vexa-bot.yml"
+    }
+  ]
+}
