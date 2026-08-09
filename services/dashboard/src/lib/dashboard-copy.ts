@@ -108,6 +108,14 @@ const EN_DASHBOARD_COPY = {
     noMatches: "No meetings match your filters",
     noMeetings: "No meetings yet",
     joinFirst: "Join your first meeting",
+    // 日本語限定方針(カボス単一ブランド)のため、新設文言は ja / en 双方で日本語。
+    transcriptSearch: {
+      title: "文字起こしに一致",
+      loading: "文字起こしを検索中...",
+      error: "文字起こしの検索に失敗しました",
+      empty: "文字起こしに一致する会議はありません",
+      matchCount: "{count}件一致",
+    },
     participantsMeetingTitle: "Meeting with {names}",
     statusDescriptions: {
       stopped: "Recording was stopped by user action or the system",
@@ -284,6 +292,13 @@ const JA_DASHBOARD_COPY: typeof EN_DASHBOARD_COPY = {
     noMatches: "条件に一致する会議はありません",
     noMeetings: "まだ会議がありません",
     joinFirst: "最初の会議に参加",
+    transcriptSearch: {
+      title: "文字起こしに一致",
+      loading: "文字起こしを検索中...",
+      error: "文字起こしの検索に失敗しました",
+      empty: "文字起こしに一致する会議はありません",
+      matchCount: "{count}件一致",
+    },
     participantsMeetingTitle: "{names} の会議",
     statusDescriptions: {
       stopped: "ユーザー操作またはシステムにより録音を停止しました",
