@@ -43,12 +43,20 @@ export function formatTranscriptForProvider(meeting: Meeting, segments: Transcri
   for (const segment of segments) {
     let timestamp = "";
     if (segment.absolute_start_time) {
-      const date = parseUTCTimestamp(segment.absolute_start_time);
-      timestamp = `${date.getFullYear().toString().padStart(4, "0")}-${(date.getMonth() + 1).toString().padStart(2, "0")}-${date.getDate().toString().padStart(2, "0")} ${date.getHours().toString().padStart(2, "0")}:${date.getMinutes().toString().padStart(2, "0")}:${date.getSeconds().toString().padStart(2, "0")}`;
+      try {
+        const date = parseUTCTimestamp(segment.absolute_start_time);
+        timestamp = `${date.getFullYear().toString().padStart(4, "0")}-${(date.getMonth() + 1).toString().padStart(2, "0")}-${date.getDate().toString().padStart(2, "0")} ${date.getHours().toString().padStart(2, "0")}:${date.getMinutes().toString().padStart(2, "0")}:${date.getSeconds().toString().padStart(2, "0")}`;
+      } catch {
+        timestamp = segment.absolute_start_time;
+      }
     } else if (segment.start_time !== undefined) timestamp = `${Math.floor(segment.start_time / 60).toString().padStart(2, "0")}:${Math.floor(segment.start_time % 60).toString().padStart(2, "0")}`;
     output += timestamp ? `[${timestamp}] ${segment.speaker}: ${segment.text}\n\n` : `${segment.speaker}: ${segment.text}\n\n`;
   }
   return output;
+}
+
+export function recordingDownloadBaseName(title: unknown): string {
+  return String(title).trim().replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, "_") || "recording";
 }
 
 export function useMeetingActions(options: MeetingActionsOptions) {
@@ -156,7 +164,7 @@ export function useMeetingActions(options: MeetingActionsOptions) {
       const source = kind === "mp3" ? mp3MasterUrl(recordingDownloadTarget.recordingId) : recordingDownloadTarget.webmUrl;
       const blob = await downloadRecordingInChunks(source, kind === "mp3" ? "audio/mpeg" : "audio/webm", (progress) => toast.loading(`${label}をダウンロード中... ${progress}%`, { id: toastId }));
       const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url;
-      link.download = `${String(recordingMeetingTitle(currentMeeting)).trim().replace(/[\/:*?"<>|]+/g, "-").replace(/\s+/g, "_") || "recording"}_audio.${kind}`; link.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      link.download = `${recordingDownloadBaseName(recordingMeetingTitle(currentMeeting))}_audio.${kind}`; link.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000);
       toast.success(`${label}をダウンロードしました`, { id: toastId });
     } catch (error) { console.error("Failed to download recording audio:", error); toast.error(`${label}のダウンロードに失敗しました`, { id: toastId, description: "通信が不安定な場合は、少し時間をおいてもう一度試してください。" }); }
     finally { setIsDownloadingRecording(false); }
