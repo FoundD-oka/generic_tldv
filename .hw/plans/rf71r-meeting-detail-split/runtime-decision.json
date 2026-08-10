@@ -1,0 +1,10 @@
+{
+  "runtime": "prime",
+  "axes": {
+    "duration": true,
+    "state_volume": true,
+    "delegation": false,
+    "recurrence": true
+  },
+  "reason": "duration: 2502行の単一routeコンポーネント分割+hook/component新設+テスト追加+lint/tscの反復調整で、編集・検証サイクルが数時間級(ゲート1周に npm ci 込みで数分×リトライ)。state_volume: page.tsx 2502行の全体像+抽出先モジュール群+関連テスト33ファイルを同時に保持しながら書き換える作業で、途中状態(全書き換え履歴)が1コンテキストに収まらない。delegation: 単一ファイル起点の直列分割で並行委譲は不要(false)。recurrence: リファクタv2にはRF-72/73/74系の同型分割が多数残っており、『機械判定ゲートを停止条件にprimeで分割を走らせる』手順自体を資産化する対象。2軸以上該当のためprime。停止条件はpr-ready-gateではなくHW_PRIME_GATEで渡す機械検証スクリプト(理由はplan.mdのWhy参照。M/LのFable READYはread-onlyレビュー工程の産物でPrime Agentには構造的に作れないため)。"
+}
