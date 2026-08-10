@@ -101,10 +101,7 @@ export function MeetingDetailContent(props: MeetingDetailContentProps) {
                     try {
                       const saveUrl = browserRouteUrl(`/b/${sessionToken}/save`);
                       if (!saveUrl) throw new Error("実行時設定を読み込み中です");
-                      const response = await fetch(saveUrl, {
-                        method: "POST",
-                      });
-                      if (!response.ok) throw new Error(await response.text());
+                      await saveBrowserState(saveUrl);
                       toast.success("ブラウザ状態を保存しました");
                     } catch (error) {
                       toast.error("保存に失敗しました: " + (error as Error).message);
