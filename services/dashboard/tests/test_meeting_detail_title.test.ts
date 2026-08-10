@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const pageSource = readFileSync("src/components/meetings/meeting-detail-page.tsx", "utf8");
+const pageSource = readFileSync("src/lib/meeting-detail-title.ts", "utf8");
 
 const countOf = (needle: string) => pageSource.split(needle).length - 1;
 
