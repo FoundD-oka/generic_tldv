@@ -1,0 +1,56 @@
+{
+  "schema_version": "1.0",
+  "task_id": "rf71r-meeting-detail-split",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "4cac66fd4e1ac3b3b9ef759a35b9c411d61779fe",
+  "reviewed_commit": "7587654580a9fef6c9d060a9be081f953550742d",
+  "target_sha256": "sha256:47dec8dfbd66350f9a2579056183cc17077d96989a40c4585864570395b2dd60",
+  "contract_sha256": "sha256:4b2e1e8a13ceb435735de8d2419cdf0f31f06faf273379240b1b11c60f3f3221",
+  "prompt_sha256": "sha256:cd47c614d280df9507a1b500a7da003aeca28bdfcea6ed76a57991cd5153f7c7",
+  "response_sha256": "sha256:a6a2165ecd6d757b87d6b33be89ba6ac6cca3c42a0cafa459545cd0522821a51",
+  "created_at": "2026-08-10T08:32:46.033346+00:00",
+  "verdict": "READY",
+  "summary": "RF-71R 第2版契約に対する違反は検出されませんでした。責務分解は実質を伴っており(ポーリング/再生/アクションのhook化、fetchのlib集約、タイトル保存の1本化、VNC URL組立の共通化)、page.tsxは自ファイルでexport default functionを定義しpassthroughに該当しません。src純増は概算−231行でC18上限内、テスト規律(新規3ファイル・既存改変は許可3ファイルのみ・.only/.skipなし)、差分スコープ(services/dashboard+base-commitのみ)、lint-baselineは引き下げのみ、ポーリング間隔5000/2500msは保持されテストでassert済み。NFT-003該当の難読化は認められませんでした。本READYは対象差分hash sha256:47dec8…と契約hash sha256:4b2e1e…に束縛され、正の機械判定はコーディネータによるRF71R_BASE=4cac66fピン付きのRF-71R.sh再実行(AT-001/003/008/009、FP-001/006/007/010/011/012)を前提とします。",
+  "confidence": "medium",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "モバイル版.vttエクスポート項目のアイコン退行",
+      "file": "services/dashboard/src/hooks/use-meeting-actions.tsx",
+      "detail": "MeetingExportItems の mobile 分岐で .vtt 項目のアイコンが base 版の FileText から FileJson に変わっている。意図せぬ混入の可能性が高い視覚退行。desktop 分岐は FileText のままで一貫していない。"
+    },
+    {
+      "title": "同一実装のタイトル関数エイリアス4本",
+      "file": "services/dashboard/src/lib/meeting-detail-title.ts",
+      "detail": "desktopMeetingTitle / mobileMeetingTitle / browserMeetingTitle / recordingMeetingTitle は全て resolveMeetingTitle の同一ラッパー。count ベースの test_meeting_detail_title の assert を新ファイルで満たすための構造に見える。動作は保存されており NFT-003 の violation とは判断しないが、1関数に統合しテスト側を意味的な assert に改訂することを推奨。"
+    },
+    {
+      "title": "1行詰め込み整形による可読性低下",
+      "file": "services/dashboard/src/components/meetings/meeting-detail-mobile-header.tsx",
+      "detail": "mobile-header / mobile-overlays / use-meeting-actions / use-meeting-live-data / meeting-detail-page の props 受け渡し部などで、複数文・巨大な型宣言を1行に詰め込む整形が多用されている。周囲のコード様式から逸脱しレビュー性を損なう。概算では通常整形でも C16 の 600行/32,000B 上限内に収まるため、通常整形への展開を推奨(行数上限を意識した詰め込みと誤解される構造でもある)。"
+    },
+    {
+      "title": "useMeetingActions のハンドラ identity が毎レンダーで変わる",
+      "file": "services/dashboard/src/hooks/use-meeting-actions.tsx",
+      "detail": "options オブジェクトが呼び出し側で毎レンダー新規生成され、useCallback の deps に options 全体が入っているため handleStopBot 等の identity が毎回変わる。現状はイベントハンドラ用途のみで正しく動くが、将来 effect の deps に使われると再実行ループの温床になる。個別の安定参照を deps に取ることを推奨。"
+    },
+    {
+      "title": "eslint-disable によるフック警告の抑止",
+      "file": "services/dashboard/src/hooks/use-meeting-playback.ts",
+      "detail": "react-hooks/set-state-in-effect を eslint-disable-next-line で抑止している。base 版の同期リセット挙動を保存するための透過的な措置でありラチェット違反ではない(baseline は下げ方向)が、警告の構造的解消(reducer 化など)を将来課題として残す。"
+    },
+    {
+      "title": "全画面ブラウザビュー中の再文字起こしポーリング停止",
+      "file": "services/dashboard/src/components/meetings/meeting-detail-content.tsx",
+      "detail": "startRetranscriptionStatusPolling の effect が MeetingDetailContent 内に移動したため、viewMode='browser' の全画面早期 return 中はポーリングが走らない。base 版は page トップレベルで常時走っていた。再文字起こし中(post-meeting)とブラウザビュー(active系ステータス限定)は実質重複しないため実害はほぼないが、挙動の微差として記録。"
+    },
+    {
+      "title": "空の型 import",
+      "file": "services/dashboard/src/components/meetings/meeting-detail-desktop-header.tsx",
+      "detail": "import type {} from \"react\"; は何も import しないデッドコード。削除を推奨。"
+    }
+  ]
+}

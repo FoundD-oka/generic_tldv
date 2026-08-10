@@ -1,0 +1,22 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {
+      "level": "S",
+      "reason": "成功条件は全て数値目標と機械検査(C00〜C15)で確定済み。page<=1200行・setInterval 0・raw fetch 0・VNC URL組立0・title保存1本化・テスト非退行・tsc/lintラチェット緑。曖昧さはほぼない。"
+    },
+    "technical_unknown": {
+      "level": "M",
+      "reason": "JSXを子コンポーネントへ移す際のmount/unmount副作用(media要素のリセット、タブ切替時の状態消失)、store/generation guardとhook抽出の相互作用、tscを緑にする修正がeslintラチェットを赤にする相互作用(PR #73で実例あり)に未知が残る。"
+    },
+    "blast_radius": {
+      "level": "M",
+      "reason": "変更はdashboardの単一route+新規モジュールに閉じる(C02の許容リストで機械的に強制)が、対象は最大の2502行ページで、再生・VNC・TTS・エクスポート・タイトル編集・ノートなど多機能が集中する。ソース文字列に結合した既存テスト3本の付け替えも伴う。"
+    },
+    "verifiability": {
+      "level": "M",
+      "reason": "構造目標・テスト非退行・文言不変(C14)・lint/tscは機械判定できるが、視覚回帰基盤がなくDOM/レイアウトの完全な挙動不変は機械判定できない。日本語文言残存検査+ソース結合テスト+Fable契約レビューで代替する。RF-71の視覚回帰条件は本タスクでは契約から落とした。"
+    }
+  },
+  "verdict_reason": "L相当の軸なし(要求は数値で確定、影響はallowlistで機械的に封じ込め)。技術的未知・影響範囲・検証可能性がMのためM。Fable契約レビュー必須。"
+}

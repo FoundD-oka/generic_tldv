@@ -14,7 +14,7 @@ describe("transcript reprocess UI contract", () => {
   });
 
   it("updates the detail badge immediately from the committed POST status", () => {
-    const source = fs.readFileSync(path.resolve("src/app/meetings/[id]/page.tsx"), "utf8");
+    const source = fs.readFileSync(path.resolve("src/components/meetings/meeting-detail-content.tsx"), "utf8");
     expect(source).toContain("onTranscribeStatusChange={(status)");
     expect(source).toContain("useMeetingsStore.getState().currentMeeting");
     expect(source).toContain("setCurrentMeeting({");
