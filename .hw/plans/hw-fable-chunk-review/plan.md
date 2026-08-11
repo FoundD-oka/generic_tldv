@@ -4,6 +4,7 @@ task_id: hw-fable-chunk-review
 created: 2026-08-11
 size: M
 runtime: inline
+base-commit: 6334d0b6a86c8bc067ae7195add483f4ce46024f
 ---
 
 # hw-fable-chunk-review: fable_review.py に上限超過時のチャンク分割レビューを実装する
