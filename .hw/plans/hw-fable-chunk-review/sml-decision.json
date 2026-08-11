@@ -1,0 +1,10 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": "S: 分割規則・集約規則・互換制約は設計書とplanで数値まで確定済み",
+    "technical_unknown": "M: CLI多重呼び出し時の実挙動(budget消費・出力揺れ)はstubでは検証しきれない未知が残る",
+    "blast_radius": "M: レビュー層は権威連鎖の一部。check_review_verdict.py/pr-ready-gateとのハッシュ束縛互換を壊すと全M/Lタスクが止まる",
+    "verifiability": "M: 制御フローはstub CLIで機械検証可能だが、実Fable CLI経路はCIで検証できない"
+  },
+  "reason": "要求は確定しているが、権威連鎖(READY束縛)に触れる影響範囲と実CLI経路の検証不能性が残るためM。迷ったら上へ倒す。"
+}

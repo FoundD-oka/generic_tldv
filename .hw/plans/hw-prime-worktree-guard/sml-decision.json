@@ -1,0 +1,10 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": "S: モード名・各分岐の挙動・拒否条件はplanで確定済み",
+    "technical_unknown": "S: git worktree/branch操作は既知。未知はほぼない",
+    "blast_radius": "M: prime実行フローの入口を変える。ガードを誤ると実験汚染(RF-71Rで実際に踏みかけた事故)が再発し、厳しすぎると正当な再開を止める",
+    "verifiability": "M: 分岐はstub CLIで全数検証可能だが、実prime-agentバイナリとの結合経路はCIで検証できない"
+  },
+  "reason": "要求と技術は確定しているが、prime実行の入口という影響範囲と実CLI経路の検証不能性が残るためM。迷ったら上へ倒す。"
+}

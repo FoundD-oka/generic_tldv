@@ -1,0 +1,10 @@
+{
+  "runtime": "inline",
+  "axes": {
+    "duration": false,
+    "state_volume": false,
+    "delegation": false,
+    "recurrence": false
+  },
+  "reason": "単一ファイル+テスト1本の改修で数時間未満。状態は1コンテキストに収まり、並行委譲も反復手順化も不要。4軸すべて否のためinline。"
+}
