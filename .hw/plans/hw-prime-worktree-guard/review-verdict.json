@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "task_id": "hw-prime-worktree-guard",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "c453073e3f8f6cc27d9b79857e0d01c50acafa41",
+  "reviewed_commit": "f987a9fd77d099824e3c3fba588a9580405b72e5",
+  "target_sha256": "sha256:28049bdc8dc4feb76641c6be96296fb10da4fe7a9e0604abb61345d35cc5e1ee",
+  "contract_sha256": "sha256:ce388f7cd9a14963a472f72b59c6fcf701fa26dc9a52cfe38c0a63c153701544",
+  "prompt_sha256": "sha256:af5649ea72fec66ae239863c740152c960ec4a3bf0ea6ae5e41d89f08dffded3",
+  "response_sha256": "sha256:fab3237ad84a94529909cc11aa2f677075136d96ec195c588377b97141e393c4",
+  "created_at": "2026-08-11T05:50:18.856208+00:00",
+  "verdict": "READY",
+  "summary": "ensure_worktree の fail-closed 化は契約の全項目(AT-101〜111 / FP-101〜103 / NFT-101)を充足。初回のみ無停止、既存 worktree/branch は HW_PRIME_WORKTREE_MODE 明示必須、resume は登録・attach・clean の3条件検査、fresh は未登録ディレクトリ保護+branch 作り直しで旧履歴排除。テストは prime_run.py を丸ごと実行し stub マーカーで起動有無を判定(出力文字列非依存)、verify.sh に || exit 1 で配線済み。契約の想定迂回一覧はすべてテストで遮断されている。違反 0 件。",
+  "confidence": "high",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "mode 検証が worktree 無効チェックより前にある",
+      "detail": "HW_PRIME_WORKTREE=0 かつ不正な HW_PRIME_WORKTREE_MODE の組み合わせでは、早期 return 前に検証が走り停止する。FP-101 の「モード検査に入らず」の文言とは微妙にずれるが、mode 未設定での現行挙動(root で起動)は保存されており fail-closed 方向のため違反としない。意図的なら現状維持でよい。",
+      "file": ".hw/prime_run.py"
+    },
+    {
+      "title": "verify.sh のテストファイル存在ガード",
+      "detail": "`if [ -f .hw/tests/prime-worktree-guard.test.sh ]` のため、テストファイルが削除されると verify.sh は黙ってスキップする。既存テストと同じパターンだが、「死んだテスト」迂回の残余経路。必須テストの存在自体を検査する仕組みがあると閉じられる。",
+      "file": ".hw/verify.sh"
+    },
+    {
+      "title": "AT-104 は未追跡ファイルのみ検査",
+      "detail": "dirty 判定のテストは untracked ファイルのケースのみで、追跡済みファイルの変更(modified)は未検査。実装は status --porcelain の全行を数えるため実害は薄いが、1ケース追加で網羅できる。",
+      "file": ".hw/tests/prime-worktree-guard.test.sh"
+    },
+    {
+      "title": "未登録ディレクトリ + mode 未設定時の案内が二段階エラーになる",
+      "detail": "mode 未設定の停止メッセージは resume/fresh の指定を促すが、git 未登録ディレクトリではどちらのモードも失敗するため、人間は2回エラーを踏んでから手動処分に辿り着く。動作は契約(AT-106)どおりで UX のみの問題。未登録検出時は最初から手動処分の案内を出すと親切。",
+      "file": ".hw/prime_run.py"
+    }
+  ]
+}

@@ -216,15 +216,122 @@ def resolve_cli(command: str) -> str:
     return resolved
 
 
-def ensure_worktree(root: pathlib.Path, task_id: str, head: str) -> pathlib.Path:
-    """作業用の worktree を用意する。
+WORKTREE_MODES = ("resume", "fresh")
+
+
+def worktree_state(
+    root: pathlib.Path,
+    path: pathlib.Path,
+    branch: str,
+    base: str = "",
+) -> dict[str, Any]:
+    """worktree path と branch の実状態を集める(判定と状態レポートの材料)。
+
+    `path.is_dir()` だけでは「git が知らないゴミディレクトリ」と「正規の worktree」
+    を区別できないので、`git worktree list --porcelain` の登録有無を必ず見る。
+    """
+    resolved = path.expanduser()
+    try:
+        resolved = resolved.resolve()
+    except OSError:  # pragma: no cover - resolve は strict=False で基本落ちない
+        pass
+
+    registered = False
+    for line in run_git(root, "worktree", "list", "--porcelain").splitlines():
+        if not line.startswith("worktree "):
+            continue
+        entry = pathlib.Path(line[len("worktree ") :])
+        try:
+            entry = entry.resolve()
+        except OSError:  # pragma: no cover
+            pass
+        if entry == resolved:
+            registered = True
+
+    branch_exists = bool(run_git(root, "branch", "--list", branch))
+
+    head_branch: Optional[str] = None
+    dirty_count = 0
+    if registered and path.is_dir():
+        head_branch = (
+            run_git(path, "symbolic-ref", "--short", "HEAD", check=False) or None
+        )
+        status = run_git(
+            path, "status", "--porcelain", "--untracked-files=all", check=False
+        )
+        dirty_count = len([line for line in status.splitlines() if line.strip()])
+
+    # 表示専用。branch 作成時点は記録が無いので base-commit からの本数で近似する。
+    ahead_count: Optional[int] = None
+    if branch_exists and base:
+        raw = run_git(root, "rev-list", "--count", f"{base}..{branch}", check=False)
+        if raw.isdigit():
+            ahead_count = int(raw)
+
+    return {
+        "path": path,
+        "exists": path.exists(),
+        "registered": registered,
+        "branch": branch,
+        "branch_exists": branch_exists,
+        "head_branch": head_branch,
+        "dirty_count": dirty_count,
+        "ahead_count": ahead_count,
+    }
+
+
+def format_worktree_state(state: dict[str, Any]) -> str:
+    ahead = state["ahead_count"]
+    return (
+        f"  worktree path : {state['path']}\n"
+        f"  存在(exists)  : {'yes' if state['exists'] else 'no'}\n"
+        f"  git登録(registered): {'yes' if state['registered'] else 'no'}\n"
+        f"  branch {state['branch']} : {'あり' if state['branch_exists'] else 'なし'}\n"
+        f"  worktreeのHEAD(head_branch): {state['head_branch'] or 'detached/不明'}\n"
+        f"  未コミット変更(dirty_count): {state['dirty_count']}\n"
+        f"  base-commitからの先行コミット(ahead_count): "
+        f"{'不明' if ahead is None else ahead}"
+    )
+
+
+def worktree_choice_help(state: dict[str, Any]) -> str:
+    return (
+        "既存の worktree / branch があります。再開か作り直しかは機械には判断できません。\n"
+        f"{format_worktree_state(state)}\n"
+        "次のどちらかを明示してください:\n"
+        "  HW_PRIME_WORKTREE_MODE=resume  前回の続きから再開する"
+        "(登録済み・自ブランチにattach・cleanのときだけ許可)\n"
+        "  HW_PRIME_WORKTREE_MODE=fresh   worktreeとbranchを作り直す"
+        "(現在のHEADから)\n"
+        "手動確認: git worktree list / "
+        f"git -C {state['path']} status\n"
+        f"手動で処分する場合: git worktree remove --force {state['path']} && "
+        f"git branch -D {state['branch']}"
+    )
+
+
+def ensure_worktree(
+    root: pathlib.Path, task_id: str, head: str, base: str = ""
+) -> tuple[pathlib.Path, str]:
+    """作業用の worktree を用意し、(作業ディレクトリ, 使ったモード) を返す。
 
     隔離するのは Prime Agent がサンドボックスではないから。base-commit ではなく
     現在の HEAD から切るのは、plan.md 自体が base-commit の後に commit されるため。
     成功しても自動で消さない(人間が成果を確認してから消す)。
+
+    既存の worktree / branch が在るときは、状態を検査せずに再利用しない。
+    「前回の続き」か「作り直し」かは人間しか決められないので、既定は停止し
+    HW_PRIME_WORKTREE_MODE の明示を求める(HW_PRIME_GATE と同型の上書き)。
     """
+    mode = os.environ.get("HW_PRIME_WORKTREE_MODE", "").strip()
+    if mode and mode not in WORKTREE_MODES:
+        raise PrimeRunError(
+            f"HW_PRIME_WORKTREE_MODE の値が不正です: {mode!r}。"
+            f"有効値は {' / '.join(WORKTREE_MODES)} のみです"
+        )
+
     if env("HW_PRIME_WORKTREE") != "1":
-        return root
+        return root, "disabled"
 
     default_root = root.parent / f"{root.name}.hw-worktrees"
     worktree_root = pathlib.Path(
@@ -233,17 +340,59 @@ def ensure_worktree(root: pathlib.Path, task_id: str, head: str) -> pathlib.Path
     path = worktree_root / task_id
     branch = f"hw/prime/{task_id}"
 
-    if path.is_dir():
-        print(f"[hw][prime] 既存のworktreeを再利用: {path}")
+    state = worktree_state(root, path, branch, base)
+
+    def create() -> pathlib.Path:
+        worktree_root.mkdir(parents=True, exist_ok=True)
+        run_git(root, "worktree", "add", "-b", branch, str(path), head)
+        print(f"[hw][prime] worktree作成: {path} (branch: {branch})")
         return path
 
-    worktree_root.mkdir(parents=True, exist_ok=True)
-    if run_git(root, "branch", "--list", branch):
-        run_git(root, "worktree", "add", str(path), branch)
-    else:
-        run_git(root, "worktree", "add", "-b", branch, str(path), head)
-    print(f"[hw][prime] worktree作成: {path} (branch: {branch})")
-    return path
+    if not state["exists"] and not state["branch_exists"]:
+        return create(), "initial"
+
+    if not mode:
+        raise PrimeRunError(worktree_choice_help(state))
+
+    if mode == "resume":
+        missing = []
+        if not state["exists"]:
+            missing.append(f"worktree {path} が存在しない")
+        if not state["registered"]:
+            missing.append("git worktree として登録されていない")
+        if state["head_branch"] != branch:
+            missing.append(
+                f"worktreeのHEADが {branch} ではない"
+                f"({state['head_branch'] or 'detached/不明'})"
+            )
+        if state["dirty_count"]:
+            missing.append(f"未コミットの変更が {state['dirty_count']} 件ある")
+        if missing:
+            raise PrimeRunError(
+                "resume の条件を満たしていません:\n"
+                + "".join(f"  - {item}\n" for item in missing)
+                + format_worktree_state(state)
+                + "\n作り直してよいなら HW_PRIME_WORKTREE_MODE=fresh を指定してください"
+            )
+        print(f"[hw][prime] 既存のworktreeを再利用(resume): {path}")
+        return path, "resume"
+
+    # mode == "fresh"
+    if state["exists"] and not state["registered"]:
+        raise PrimeRunError(
+            f"{path} は git worktree として登録されていないディレクトリです。"
+            "中身を判断できないため自動削除しません。人間が確認して処分してから"
+            "再実行してください\n" + format_worktree_state(state)
+        )
+    if state["registered"]:
+        if state["exists"]:
+            run_git(root, "worktree", "remove", "--force", str(path))
+        run_git(root, "worktree", "prune")
+        print(f"[hw][prime] 既存worktreeを除去(fresh): {path}")
+    if state["branch_exists"]:
+        run_git(root, "branch", "-D", branch)
+        print(f"[hw][prime] 既存branchを削除(fresh): {branch}")
+    return create(), "fresh"
 
 
 def atomic_write_json(path: pathlib.Path, value: dict[str, Any]) -> None:
@@ -283,7 +432,9 @@ def run_prime(task_id: str) -> int:
             f"入力が上限 {max_prompt} bytes を超えました。タスクを分割してください"
         )
 
-    workdir = ensure_worktree(root, task_id, context["head"])
+    workdir, worktree_mode = ensure_worktree(
+        root, task_id, context["head"], context["base"]
+    )
     cli = resolve_cli(env("HW_PRIME_CLI"))
     command = [
         cli,
@@ -350,6 +501,7 @@ def run_prime(task_id: str) -> int:
             "start_commit": context["head"],
             "head_commit": head_after,
             "worktree": str(workdir),
+            "worktree_mode": worktree_mode,
             "started_at": started,
             "finished_at": finished,
             "exit_code": proc.returncode,
@@ -360,6 +512,11 @@ def run_prime(task_id: str) -> int:
 
     if status == "ready":
         print(f"[hw][prime] ready: ゲート通過。worktree {workdir} を確認してPRを作る")
+        if workdir != root:
+            print(
+                f"[hw][prime] PRマージ後の後始末: git worktree remove {workdir} && "
+                f"git branch -d hw/prime/{task_id}"
+            )
         return 0
 
     detail = (proc.stderr or "")[-2000:].strip()
