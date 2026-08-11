@@ -30,6 +30,12 @@ if [ -f .hw/tests/fable-review-chunking.test.py ]; then
   python3 .hw/tests/fable-review-chunking.test.py .hw/fable_review.py || exit 1
 fi
 
+# prime_run.py の worktree ガードの退行検査。壊すと既存 worktree/branch を無検査で
+# 再利用し、前回の成果物の上に次の実行を積む(実験と成果の汚染)ので毎回実行する。
+if [ -f .hw/tests/prime-worktree-guard.test.sh ]; then
+  bash .hw/tests/prime-worktree-guard.test.sh .hw/prime_run.py || exit 1
+fi
+
 # checks/run は失敗を "  <赤>CHECK_ID<リセット>" の行で出す。集計行("3 failed out of
 # 97 checks")は数字始まりなのでこのパターンに合わない。
 failed="$(printf '%s\n' "$output" | python3 -c '
