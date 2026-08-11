@@ -4,6 +4,7 @@ task_id: hw-prime-worktree-guard
 created: 2026-08-11
 size: M
 runtime: inline
+base-commit: c453073e3f8f6cc27d9b79857e0d01c50acafa41
 ---
 
 # hw-prime-worktree-guard: ensure_worktree の無検査再利用を fail-closed の明示モードに置き換える

@@ -60,3 +60,12 @@ exit 0 する。「Prime が起動したか」はマーカーの有無で判定�
 - option matrix required: no(設計書 `.pipeline/plans/hw-harness-prime-gaps-2026-08/design.md` §2 に記録済み)
 - kpi backcast roadmap required: no
 - external consultation required: no
+
+## 改訂履歴
+
+- 2026-08-11: base-commit を実測し直した。プラン作成時点の `fd657c1` はその後の
+  PR #78 マージで陳腐化していたため、実装開始時の HEAD
+  `c453073e3f8f6cc27d9b79857e0d01c50acafa41` へ更新(plan.md frontmatter と
+  `base-commit` ファイルの両方)。契約本文(AT/FP/NFT)は無改訂。
+- ベースライン取得手順および Research Freshness Check は本契約に定義がないため
+  該当なし。実測が必要な前提値は base-commit のみ。
