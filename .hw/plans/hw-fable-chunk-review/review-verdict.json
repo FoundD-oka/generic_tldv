@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "task_id": "hw-fable-chunk-review",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "6334d0b6a86c8bc067ae7195add483f4ce46024f",
+  "reviewed_commit": "20ca5f9aaa8dd27002152cc9185d642ae1925b1a",
+  "target_sha256": "sha256:fb0672a92161cadce48c0c5fdb85231cfea3d8e7a023f32f4d98cc954ff90d6f",
+  "contract_sha256": "sha256:5794df8697cd7373aa511884014b714c5ccdb8f0c303b6c971316a297de5e6d5",
+  "prompt_sha256": "sha256:9e8c0589d106e5d74b1bfdf8e54d94d74224267d425cfa9848e1ed0b544c15cd",
+  "response_sha256": "sha256:4ad18a9cc21e0cc5266a4f8a89248ed435996e6a16065d4cbbdeb90cae2a9d44",
+  "created_at": "2026-08-11T05:37:00.078705+00:00",
+  "verdict": "READY",
+  "summary": "チャンク分割レビューの実装は検証契約の全項目に適合する。上限以下は現行同一の1回実行(AT-001/FP-001)、超過時はファイル境界の first-fit 分割で各プロンプトが既定上限200,000 bytes以下(AT-002/AT-003)、被覆はテスト側の独立分割と byte 一致で突合(AT-004)、target_sha256 は全材料 hash に束縛され check_review_verdict を通過(AT-005)、集約は fail-closed(AT-006)、チャンク数上限・単一ファイル超過・dirty tree はいずれも CLI 未呼び出しのまま exit 2(AT-007/AT-008/FP-002)、verify.sh へ `|| exit 1` 付きで配線(AT-009)、chunk_count 整合・-M/-C 不採用・confidence 上限 medium も実装とテスト双方で担保されている(NFT-001..003)。violations は0件。",
+  "confidence": "high",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "テストファイル名が契約の Evidence 記載(.sh)と異なる(.py)",
+      "detail": "契約 AT-001 の Evidence 欄は `.hw/tests/fable-review-chunking.test.sh` を指すが、実装は `.hw/tests/fable-review-chunking.test.py`。要求本体(mktemp 一時リポジトリ + HW_FABLE_CLI stub による機械実行、verify.sh 配線)は満たしており実害はないが、契約と成果物の参照が食い違うため、次回以降は契約側の Evidence パスを実ファイル名に合わせて更新するとよい。",
+      "file": ".hw/tests/fable-review-chunking.test.py"
+    },
+    {
+      "title": "AT-009 のテスト内検査がテキスト grep で、故意失敗の実伝播を検証していない",
+      "detail": "テストの AT-009 ケースは verify.sh 本文に「fable-review-chunking.test.py」と「exit 1」が含まれるかの文字列検査のみ。「exit 1」は verify.sh の他行にも存在するため、将来この行だけ `|| true` 等に変わっても検査を素通りし得る。現時点の verify.sh には `|| exit 1` が正しく付いており契約要求は満たすが、検査を「当該行に `|| exit 1` が付く」ことの検査(行単位 grep)か、サブプロセスで故意失敗を注入した verify.sh 実行に強化する余地がある。",
+      "file": ".hw/tests/fable-review-chunking.test.py"
+    },
+    {
+      "title": "HW_FABLE_MAX_CHUNKS / HW_FABLE_MAX_PROMPT_BYTES の非数値はトレースバックになる",
+      "detail": "`int(os.environ.get(...))` が ValueError を送出した場合 ReviewError 経路(exit 2 + 日本語メッセージ)を通らず生トレースバックで落ちる。契約外だが、環境変数の誤設定時に ReviewError へ変換すると他のエラーと exit code 規約が揃う。再現: `HW_FABLE_MAX_CHUNKS=abc python3 .hw/fable_review.py <task>`。",
+      "file": ".hw/fable_review.py"
+    }
+  ]
+}
