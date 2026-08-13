@@ -5,12 +5,22 @@ import Link from "next/link";
 import Image from "next/image";
 import { formatDistanceToNow, format } from "date-fns";
 import { ja } from "date-fns/locale";
-import { ChevronRight, Calendar, Clock, FileText, MessageSquare, Pencil, Check, X, Monitor } from "lucide-react";
+import { ChevronRight, Calendar, Clock, FileText, MessageSquare, Pencil, Check, X, Monitor, Trash2, Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import type { Meeting } from "@/types/vexa";
 import { getDetailedStatus } from "@/types/vexa";
 import { cn, parseUTCTimestamp } from "@/lib/utils";
@@ -79,6 +89,7 @@ function PlatformIcon({ platform, className }: { platform: string; className?: s
 export function MeetingCard({ meeting }: MeetingCardProps) {
   const statusConfig = getDetailedStatus(meeting.status, meeting.data);
   const updateMeetingData = useMeetingsStore((state) => state.updateMeetingData);
+  const deleteMeeting = useMeetingsStore((state) => state.deleteMeeting);
   const customTitle = getCustomMeetingTitle(meeting.data);
   const hasCustomTitle = customTitle !== "";
   const displayTitle = resolveMeetingTitle(meeting.data, meeting.platform_specific_id);
@@ -90,6 +101,12 @@ export function MeetingCard({ meeting }: MeetingCardProps) {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState("");
   const [isSavingTitle, setIsSavingTitle] = useState(false);
+
+  // Delete state. The backend only accepts deletion for finalized meetings
+  // (collector/endpoints.py:856) — anything else returns 409, so no button.
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const canDelete = meeting.status === "completed" || meeting.status === "failed";
 
   // v0.10.5.3 Pack D-1 (#265): use parseUTCTimestamp consistently so the
   // unsuffixed-ISO timestamps the API returns are interpreted as UTC. Then
@@ -209,6 +226,19 @@ export function MeetingCard({ meeting }: MeetingCardProps) {
     }
   };
 
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    try {
+      await deleteMeeting(meeting.platform, meeting.platform_specific_id, meeting.id);
+      toast.success("会議を削除しました");
+      // 成功時は store が一覧から除くのでこのカードごとアンマウントされる
+    } catch (error) {
+      toast.error("会議の削除に失敗しました", { description: (error as Error).message });
+      setIsDeleting(false);
+      setIsDeleteDialogOpen(false);
+    }
+  };
+
   const handleCancelEdit = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -240,11 +270,18 @@ export function MeetingCard({ meeting }: MeetingCardProps) {
     }
   };
 
+  const handleOpenDeleteDialog = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDeleteDialogOpen(true);
+  };
+
   return (
+    <>
     <Link
       href={`/meetings/${meeting.id}`}
       className="group block h-full rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-      onClick={(event) => isEditingTitle && event.preventDefault()}
+      onClick={(event) => (isEditingTitle || isDeleteDialogOpen) && event.preventDefault()}
     >
       <Card
         className={cn(
@@ -367,6 +404,23 @@ export function MeetingCard({ meeting }: MeetingCardProps) {
                 >
                   <Pencil className="h-3.5 w-3.5" />
                 </Button>
+                {canDelete && (
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6 shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100"
+                    aria-label="会議を削除"
+                    onClick={handleOpenDeleteDialog}
+                    disabled={isDeleting}
+                  >
+                    {isDeleting ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-3.5 w-3.5" />
+                    )}
+                  </Button>
+                )}
               </div>
 
               {hasCustomTitle && meeting.platform_specific_id && (
@@ -450,5 +504,37 @@ export function MeetingCard({ meeting }: MeetingCardProps) {
         </div>
       </Card>
     </Link>
+
+    <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>会議を削除しますか？</AlertDialogTitle>
+          <AlertDialogDescription>
+            「{displayTitle}」の文字起こしを削除し、会議データを匿名化します。この操作は取り消せません。
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isDeleting}>キャンセル</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={(event) => {
+              event.preventDefault();
+              handleDelete();
+            }}
+            disabled={isDeleting}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            {isDeleting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                削除中...
+              </>
+            ) : (
+              "削除"
+            )}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }

@@ -42,12 +42,37 @@ describe("会議一覧カード", () => {
   it("タイトルクリックは詳細遷移、編集は専用の鉛筆ボタンだけにする", () => {
     expect(cardSource).toContain('aria-label="タイトルを編集"');
     expect(cardSource).not.toContain("<button");
-    expect(cardSource).toContain("isEditingTitle && event.preventDefault()");
+    expect(cardSource).toContain(
+      "(isEditingTitle || isDeleteDialogOpen) && event.preventDefault()",
+    );
   });
 
   it("メモがある会議にはメモインジケータと先頭100文字のツールチップを出す", () => {
     expect(cardSource).toContain("<span>メモ</span>");
     expect(cardSource).toContain("meeting.data.notes.substring(0, 100)");
+  });
+
+  it("削除ボタンは完了・失敗の会議にだけ出す（他はAPIが409を返すため）", () => {
+    expect(cardSource).toContain(
+      'meeting.status === "completed" || meeting.status === "failed"',
+    );
+    expect(cardSource).toContain("{canDelete && (");
+    expect(cardSource).toContain('aria-label="会議を削除"');
+  });
+
+  it("削除は確認ダイアログを挟み、カードの詳細遷移を巻き込まない", () => {
+    expect(cardSource).toContain("会議を削除しますか？");
+    expect(cardSource).toContain("この操作は取り消せません");
+    // トリガーは Link のナビゲーションを止めてからダイアログを開く
+    expect(cardSource).toContain("onClick={handleOpenDeleteDialog}");
+    expect(cardSource).toContain("setIsDeleteDialogOpen(true)");
+  });
+
+  it("削除は store 経由で meeting.id まで渡す（同一コードの重複会議で409を避ける）", () => {
+    expect(cardSource).toContain("state.deleteMeeting");
+    expect(cardSource).toContain(
+      "deleteMeeting(meeting.platform, meeting.platform_specific_id, meeting.id)",
+    );
   });
 
   it("1列から5列までのレスポンシブgridを維持する", () => {
