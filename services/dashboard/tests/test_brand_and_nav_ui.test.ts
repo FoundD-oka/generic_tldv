@@ -69,15 +69,26 @@ describe("カレンダーコールバック画面", () => {
 });
 
 describe("サイドバー導線", () => {
-  it("プロフィール・Webhook・MCP・設定への導線を持つ", () => {
-    for (const [href, label] of [
-      ['href: "/profile"', "copy.nav.profile"],
-      ['href: "/webhooks"', "copy.nav.webhooks"],
-      ['href: "/mcp"', "copy.nav.mcpSetup"],
-      ['href: "/settings"', "copy.nav.settings"],
-    ]) {
-      expect(sidebarSource).toContain(href);
-      expect(sidebarSource).toContain(label);
+  it("設定への導線を持つ", () => {
+    expect(sidebarSource).toContain('href: "/settings"');
+    expect(sidebarSource).toContain("copy.nav.settings");
+  });
+
+  it("削除済みのプロフィールへの導線を持たない", () => {
+    expect(sidebarSource).not.toContain('href: "/profile"');
+    expect(existsSync("src/app/profile")).toBe(false);
+    expect(existsSync("src/app/api/profile")).toBe(false);
+  });
+
+  // 開発者向けページ（上流Vexa由来）は社内利用者に見せないが、
+  // Webhookは下流のAI要約層への受け渡し経路なのでページ自体は残す。
+  it("開発者向けページへの導線を持たないが、ページ本体は残す", () => {
+    for (const href of ['href: "/webhooks"', 'href: "/mcp"']) {
+      expect(sidebarSource).not.toContain(href);
     }
+    for (const page of ["src/app/webhooks/page.tsx", "src/app/mcp/page.tsx"]) {
+      expect(existsSync(page)).toBe(true);
+    }
+    expect(existsSync("src/app/api/webhooks/config/route.ts")).toBe(true);
   });
 });
