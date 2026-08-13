@@ -252,15 +252,7 @@ export function JoinModal() {
   const handleBrowserSession = useCallback(async () => {
     setIsSubmitting(true);
     try {
-      const body: Record<string, string> = { mode: "browser_session" };
-      try {
-        const git = JSON.parse(localStorage.getItem("vexa-browser-git") || "{}");
-        if (git.repo && git.token) {
-          body.workspaceGitRepo = git.repo;
-          body.workspaceGitToken = git.token;
-          body.workspaceGitBranch = git.branch || "main";
-        }
-      } catch {}
+      const body = { mode: "browser_session" };
       const response = await fetch(withBasePath("/api/vexa/bots"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },

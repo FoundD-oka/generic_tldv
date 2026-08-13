@@ -14,9 +14,6 @@ import {
   Bug,
   BookOpenText,
   AudioLines,
-  User,
-  Webhook,
-  Plug,
   Settings,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -125,9 +122,6 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     ...(process.env.NEXT_PUBLIC_TRACKER_ENABLED === "true"
       ? [{ name: copy.nav.tracker, href: "/tracker", icon: Zap }]
       : []),
-    { name: copy.nav.profile, href: "/profile", icon: User },
-    { name: copy.nav.webhooks, href: "/webhooks", icon: Webhook },
-    { name: copy.nav.mcpSetup, href: "/mcp", icon: Plug },
     { name: copy.nav.settings, href: "/settings", icon: Settings },
   ];
 

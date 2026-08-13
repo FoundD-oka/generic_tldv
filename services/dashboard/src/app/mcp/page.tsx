@@ -90,7 +90,7 @@ export default function MCPPage() {
 
   const handleCursorInstall = () => {
     if (!config?.authToken) {
-      toast.error("APIトークンがありません。先にプロフィールでAPIキーを作成してください。");
+      toast.error("APIトークンがありません。ログインし直してください。");
       return;
     }
 
@@ -133,7 +133,7 @@ export default function MCPPage() {
 
   const handleVSCodeInstall = () => {
     if (!config?.authToken) {
-      toast.error("APIトークンがありません。先にプロフィールでAPIキーを作成してください。");
+      toast.error("APIトークンがありません。ログインし直してください。");
       return;
     }
 
