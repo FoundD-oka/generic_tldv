@@ -1,0 +1,10 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {"level": "S", "reason": "必須ゴールと禁止事項が明文化済みで、ループ機構もソースで特定済み。"},
+    "technical_unknown": {"level": "M", "reason": "RF-04Aから最小サブセットだけを現mainへ適合させる判断とzustand migrate実挙動の確認が必要。"},
+    "impact_opacity": {"level": "M", "reason": "auth-storeは中枢で、GitNexusが不調のため影響範囲はGrep概算。AT-101で補う。"},
+    "verifiability": {"level": "M", "reason": "unit/APIは決定的だがlegacyブラウザ状態と稼働環境のサンプリングを要する。"}
+  },
+  "overall_reason": "3軸がM、LなしのためM。Fable契約レビュー必須。"
+}
