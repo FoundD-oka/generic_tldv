@@ -1,0 +1,16 @@
+transcription-worker-1-cpu	transcription-service-transcription-worker-1	Up 8 hours (healthy)	127.0.0.1:8092->8000/tcp
+vexa-admin-api-1	vexaai/admin-api:0.10.6.3.14-260810-0156	Up 7 hours (healthy)	127.0.0.1:8057->8001/tcp
+vexa-api-gateway-1	vexaai/api-gateway:0.10.6.3.14-260810-0156	Up 7 hours (healthy)	0.0.0.0:8056->8000/tcp, [::]:8056->8000/tcp
+vexa-calendar-service-1	vexaai/calendar-service:latest	Up 8 hours	0.0.0.0:8050->8050/tcp, [::]:8050->8050/tcp
+vexa-dashboard-1	vexaai/dashboard:fix-auth-loop-20260815-002312-d698db4	Up 18 seconds (health: starting)	0.0.0.0:3001->3000/tcp, [::]:3001->3000/tcp
+vexa-kabosu-dashboard-1	vexaai/dashboard:fix-auth-loop-20260815-002312-d698db4	Up 18 seconds (health: starting)	0.0.0.0:3002->3000/tcp, [::]:3002->3000/tcp
+vexa-mcp-1	vexaai/mcp:0.10.6.3.14-260810-0156	Up 8 hours (healthy)	127.0.0.1:18888->18888/tcp
+vexa-meeting-api-1	vexaai/meeting-api:0.10.6.3.14-260810-0156	Up 7 hours (healthy)	8080/tcp
+vexa-minio-1	minio/minio:latest	Up 8 hours (healthy)	127.0.0.1:9000-9001->9000-9001/tcp
+vexa-postgres-1	postgres:17-alpine	Up 8 hours (healthy)	127.0.0.1:5458->5432/tcp
+vexa-redis-1	redis:7.0-alpine	Up 8 hours (healthy)	6379/tcp
+vexa-runtime-api-1	vexaai/runtime-api:0.10.6.3.14-260810-0156	Up 7 hours (healthy)	127.0.0.1:8090->8090/tcp
+vexa-tts-service-1	vexaai/tts-service:latest	Up 8 hours	127.0.0.1:8002->8002/tcp
+vexa-voiceprint-service-1	vexaai/voiceprint-service:latest	Up 8 hours (healthy)	8000/tcp
+vexa-wake-orchestrator-1	vexaai/wake-orchestrator:latest	Up 8 hours	
+vexa-wake-stt-1	vexaai/wake-stt:latest	Up 7 hours (healthy)	127.0.0.1:8058->8058/tcp

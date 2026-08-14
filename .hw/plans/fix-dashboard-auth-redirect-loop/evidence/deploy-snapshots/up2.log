@@ -1,0 +1,9 @@
+time="2026-08-15T00:25:41+09:00" level=warning msg="The \"AGENT_IMAGE\" variable is not set. Defaulting to a blank string."
+ Container vexa-kabosu-dashboard-1 Recreate 
+ Container vexa-dashboard-1 Recreate 
+ Container vexa-dashboard-1 Recreated 
+ Container vexa-kabosu-dashboard-1 Recreated 
+ Container vexa-kabosu-dashboard-1 Starting 
+ Container vexa-dashboard-1 Starting 
+ Container vexa-dashboard-1 Started 
+ Container vexa-kabosu-dashboard-1 Started 
