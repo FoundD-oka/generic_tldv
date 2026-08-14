@@ -1,0 +1,7 @@
+case=shared-login-500 seedLegacy=false sharedLoginForced500=true duration=60s
+t=00s url=/login (初期)
+遷移回数(初期表示を除く)=0
+最終URL=/login
+エラー文言あり=true
+再試行ボタンあり=true
+スピナーのみで停止していない=true

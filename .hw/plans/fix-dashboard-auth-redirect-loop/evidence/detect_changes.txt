@@ -1,0 +1,27 @@
+# GitNexus detect_changes — commit 前
+# date: 2026-08-14T15:22:29Z
+# CLI: /Users/bonginkan-3-gouki/.npm/_npx/e46929201c1128dd/node_modules/.bin/gitnexus (1.6.9)
+
+Changes: 6 files, 13 symbols
+Affected processes: 3
+Risk level: medium
+
+Changed symbols:
+  Symbol LoginPage → services/dashboard/src/app/login/page.tsx
+  Symbol parsedInput → services/dashboard/src/app/login/page.tsx
+  Symbol checkHostedMode → services/dashboard/src/app/login/page.tsx
+  Symbol checkHealth → services/dashboard/src/app/login/page.tsx
+  Symbol handleMeetingContinue → services/dashboard/src/app/login/page.tsx
+  Symbol AuthProvider → services/dashboard/src/components/auth/auth-provider.tsx
+  Symbol authenticateOrRedirect → services/dashboard/src/components/auth/auth-provider.tsx
+  Symbol AuthState → services/dashboard/src/stores/auth-store.ts
+  Symbol useAuthStore → services/dashboard/src/stores/auth-store.ts
+  Symbol sendMagicLink → services/dashboard/src/stores/auth-store.ts
+  Symbol signInSharedDashboard → services/dashboard/src/stores/auth-store.ts
+  Symbol setAuth → services/dashboard/src/stores/auth-store.ts
+  Symbol checkAuth → services/dashboard/src/stores/auth-store.ts
+
+Affected execution flows:
+  • LoginPage → WithBasePath (4 steps) — changed: LoginPage
+  • RootLayout → SavePendingMeetingUrl (4 steps) — changed: AuthProvider
+  • RootLayout → AuthenticateOrRedirect (4 steps) — changed: authenticateOrRedirect, AuthProvider

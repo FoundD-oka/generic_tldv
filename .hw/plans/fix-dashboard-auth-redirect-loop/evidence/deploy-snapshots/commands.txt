@@ -1,0 +1,7 @@
+# 実行コマンド記録(FP-003: make -C deploy/compose up は未実行)
+# TAG=fix-auth-loop-20260815-002312-d698db4
+IMAGE_TAG=fix-auth-loop-20260815-002312-d698db4 docker compose -f deploy/compose/docker-compose.yml build dashboard
+IMAGE_TAG=fix-auth-loop-20260815-002312-d698db4 docker compose -f deploy/compose/docker-compose.yml up -d --no-deps --pull never --force-recreate dashboard kabosu-dashboard
+# 訂正: 初回は --env-file を付けず compose の既定 project dir(deploy/compose)を見てしまい
+#       ADMIN_API_TOKEN 等が既定値へフォールバックした。Makefile と同じ --env-file <repo>/.env で再実行。
+IMAGE_TAG=fix-auth-loop-20260815-002312-d698db4 docker compose --env-file .env -f deploy/compose/docker-compose.yml up -d --no-deps --pull never --force-recreate dashboard kabosu-dashboard

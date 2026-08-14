@@ -1,0 +1,20 @@
+# FP-002 テスト削除/skip/期待値緩和がないことの差分監査
+# base: db823063f083bc66cfb6f95ac1c7e3bd9d92298c
+
+## tests/ 配下の変更ファイル(新規追加のみのはず)
+?? services/dashboard/tests/test_auth_redirect_loop.test.ts
+?? services/dashboard/tests/test_login_shared_auth.test.tsx
+
+## 既存テストからの削除行(- で始まる行)
+0
+
+## skip / only / todo の混入検査
+該当なし
+
+## テスト件数
+after : 38 files / 294 tests(全緑、npm test)
+新規  : test_auth_redirect_loop.test.ts 7件 + test_login_shared_auth.test.tsx 6件 = 13件
+既存  : 281件を変更なしで維持(既存テストファイルの差分は 0 行)
+
+## 結論
+既存テストの削除・skip・期待値緩和は無し。追加のみ。
