@@ -1,4 +1,5 @@
 .PHONY: all lite build up down lite-down docs docs-dev smoke test what-changed full \
+       docker-audit \
        collect score bot-debug \
        vm-compose vm-lite vm-destroy vm-ssh \
        deploy validate provision teardown promote publish-packages helm-upgrade-safe \
@@ -54,6 +55,9 @@ what-changed:                      ## show which tests would run (dry-run)
 
 full:                              ## run everything
 	@$(MAKE) --no-print-directory -C tests3 full
+
+docker-audit:                      ## read-only Docker resource audit (DOCKER_AUDIT_ARGS="--json"); exit 1=warn 2=critical 3=error
+	@python3 deploy/compose/scripts/docker_resource_audit.py $(DOCKER_AUDIT_ARGS)
 
 # ═══ Data collection ════════════════════════════════════════════
 
