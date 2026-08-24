@@ -59,8 +59,11 @@ REQUIRED_TEST_FRAGMENTS = {
     "meeting-api": ["localhost:8080/readyz"],
     "runtime-api": ["localhost:8090/health"],
     "mcp": ["localhost:18888/health"],
-    "dashboard": ["localhost:3000/api/health"],
-    "kabosu-dashboard": ["localhost:3000/api/health"],
+    # 127.0.0.1 (not localhost): busybox wget resolves localhost to ::1 first in
+    # the container, and the Next.js server listens on IPv4 only, so the probe
+    # connected to ::1, got connection refused, and reported a false unhealthy.
+    "dashboard": ["127.0.0.1:3000/api/health"],
+    "kabosu-dashboard": ["127.0.0.1:3000/api/health"],
     "tts-service": ["localhost:8002/health"],
     "wake-stt": ["localhost:8058/health"],
     "calendar-service": ["localhost:8050/health"],

@@ -569,7 +569,7 @@ services:
       # node:20-alpine ships busybox wget (no curl). /api/health re-validates the
       # server config and internally fetches admin-api and api-gateway with a 5s
       # timeout each, so allow 15s before calling the probe timed out.
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
       interval: 30s
       timeout: 15s
       retries: 3
@@ -624,7 +624,7 @@ services:
       - DASHBOARD_SHARED_AUTH_NAME=${KABOSU_DASHBOARD_SHARED_AUTH_NAME:-カボス運用}
     healthcheck:
       # Same image as `dashboard`: busybox wget, /api/health, 15s budget.
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
       interval: 30s
       timeout: 15s
       retries: 3

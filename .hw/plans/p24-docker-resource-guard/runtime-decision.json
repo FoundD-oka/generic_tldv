@@ -1,0 +1,10 @@
+{
+  "runtime": "inline",
+  "axes": {
+    "duration": false,
+    "state_volume": false,
+    "delegation": false,
+    "recurrence": false
+  },
+  "reason": "compose 2行修正+単一の新規 stdlib スクリプト+unit test+Make 配線であり、想定所要は数時間以内で1セッションに収まる。作業状態は差分とテスト結果のみでコンテキストに十分載る。並行委譲は不要。反復手順は Make target と CI への配線自体が資産化であり Prime のワークフロー資産化は不要。全軸非該当のため既定どおり inline(Opus 5 implementer)へ倒す。"
+}
