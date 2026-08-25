@@ -1,0 +1,40 @@
+{
+  "schema_version": "1.0",
+  "task_id": "poc-kabosu-drive-discord-routing",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "67ea03210c2de4c8723780402d302948b138d939",
+  "reviewed_commit": "cfcb492d3cbf77f8adb38649158f1c3d67be2d14",
+  "target_sha256": "sha256:7c476929b8afc5e026c9b5e1ac8309469ff6ee6eae046d1d0b7695d8c44abcdd",
+  "contract_sha256": "sha256:d0e534b7310ad3e8d6d6a7685473a14b4dafe1e326ff289aa2579823455cb21e",
+  "prompt_sha256": "sha256:ccbc8ba3b7ee0e13c31694ed61d69e44ddb40068011164cb08880297175885f1",
+  "response_sha256": "sha256:bd52dae9d097fcac123bddcb27f61331ef93942928ccfb0099c6821cf2efefda",
+  "created_at": "2026-08-25T19:15:45.778950+00:00",
+  "verdict": "READY",
+  "summary": "base 67ea032..HEAD cfcb492 の差分を検証契約(AT-001〜010 / FP-001〜010 / NFT-001〜006 / RF-001〜003)に静的に照合し、契約 ID に対応する違反は 0 件。送信側は done 確定 commit 後のみ決定的 event_id(event_key)で build_envelope/deliver_with_result を使いフック送信、rerun 分岐では送らない。ドメイン権限は permissions API を 1 回だけ発行し permission_id を保存、失敗時は failed に file_id を保存しフック未送信。受信側は毎回 Guild チャンネル取得・type 0/5 候補化・厳格 JSON パース・閾値 0.85 境界・全失敗系の default フォールバック・403/404 の 1 回再投稿・default 失敗 502・HMAC fail-closed(503/401/400)・duplicate 0 回を満たすテストが揃っている。差分ファイルは .hw/plans 除き 8 件、新規依存なし、禁止ファイル(webhooks.py / webhook_url.py / meetings.py / api-gateway / .env / deploy gcp・helm・lite / AGENTS.md / CLAUDE.md)は含まれず、既存テストファイルの削除行なし。response_format はリクエスト body に含まれない(RF-003)。pytest / compose config / verify.sh の実行証拠は pr-ready-gate と CI で確定させること。",
+  "confidence": "high",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "Guild チャンネル一覧取得の失敗が 500 になる",
+      "file": "services/calendar-service/app/discord_notify.py",
+      "detail": "handle_drive_export_completed 内で discord.list_guild_channels() は try の外にあり、非 2xx の DiscordHTTPError は DiscordDeliveryError に包まれずに route へ伝播し、FastAPI 既定の 500 になる。契約 FP-005 は default 投稿失敗のみ 502 を要求しているので契約外だが、送信側リトライへ委ねる意図なら DiscordDeliveryError に包んで 502 に統一する(または list 失敗時に候補空・default 投稿へ倒す)方が一貫する。再現: FakeDiscord.list_guild_channels が DiscordHTTPError(500) を raise → route が 500。"
+    },
+    {
+      "title": "duplicate / meeting_not_found 経路で with_for_update の行ロックを commit/rollback せずに返す",
+      "file": "services/calendar-service/app/discord_notify.py",
+      "detail": "SELECT ... FOR UPDATE 後に duplicate 判定で早期 return しており、トランザクション終了は get_db のセッション close に依存する。現状は問題にならないが、get_db の実装が変わると再送が並行した際にロック保持時間が伸びる。契約外(AT-007 は create_message 0 回と status のみ)。"
+    },
+    {
+      "title": "hook 失敗は warning ログのみで export 結果に反映されない",
+      "file": "services/meeting-api/meeting_api/drive_export.py",
+      "detail": "契約(AT-001)どおり done 確定後にフックを送るため、deliver_with_result の failed/queued は outbound_events ledger にだけ残り drive_export 状態には現れない。運用で通知欠落を追う際は ledger(channel=drive_export_hooks)を参照する旨を README か運用メモに記載すると良い。"
+    },
+    {
+      "title": "証拠パック(pytest / compose config / verify.sh / GitNexus impact)の添付を gate で確認",
+      "detail": "本レビューは差分の静的照合のみ。NFT-002〜006 と各 pytest 出力は PR 本文または .hw/plans/poc-kabosu-drive-discord-routing/evidence/ に貼り、pr-ready-gate と CI で確定させること。"
+    }
+  ]
+}
