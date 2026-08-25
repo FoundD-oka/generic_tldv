@@ -169,13 +169,26 @@ def build_message(
     else:
         when = start or end or "不明"
 
-    lines = [
-        f"カボス議事録: {title}",
-        f"日時: {when}",
-        f"{web_view_link}",
-    ]
-    if reason:
-        lines.append(f"(既定チャンネルへ通知: {reason})")
+    # The Drive link must survive the 2000 char limit, so the variable length
+    # header (title / 日時) is trimmed to whatever budget the fixed parts leave
+    # instead of slicing the joined message at the end.
+    link_line = str(web_view_link or "")
+    reason_line = f"(既定チャンネルへ通知: {reason})" if reason else ""
+    header = f"カボス議事録: {title}\n日時: {when}"
+
+    remaining = DISCORD_MESSAGE_LIMIT - len(link_line)
+    trailing: List[str] = []
+    if reason_line and remaining >= len(reason_line) + 1:
+        trailing.append(reason_line)
+        remaining -= len(reason_line) + 1
+
+    header_budget = remaining - 1  # newline between header and link line
+    if header_budget <= 0:
+        header = ""
+    elif len(header) > header_budget:
+        header = header[: header_budget - 1] + "…"
+
+    lines = ([header] if header else []) + [link_line] + trailing
     content = "\n".join(lines)[:DISCORD_MESSAGE_LIMIT]
     return {"content": content, "allowed_mentions": {"parse": []}}
 
