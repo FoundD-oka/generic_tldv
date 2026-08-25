@@ -38,8 +38,8 @@ compose 内の `http://calendar-service:8050` は private IP に解決される�
 
 ## How(実装者向け)
 
-変更対象は 9 ファイル以内。製品コード: meeting-api 1 + calendar-service 3、
-テスト 2、配備定義 2、README 1。新規依存なし(httpx / fastapi / sqlalchemy は既存)。
+変更対象は 9 ファイル以内(`.hw/plans/<task-id>/` の計画成果物は数えない)。
+製品コード: meeting-api 1 + calendar-service 3、テスト 2、配備定義 2、README 1。新規依存なし(httpx / fastapi / sqlalchemy は既存)。
 
 ### 0. 事前・事後の GitNexus
 
@@ -152,7 +152,8 @@ compose 内の `http://calendar-service:8050` は private IP に解決される�
   - `content` は日本語で「カボス議事録: {title}」「日時」「{web_view_link}」を含む。
     2000 文字以内に切る。返却 `{"content": ..., "allowed_mentions": {"parse": []}}`。
 - `async def select_channel_with_model(title: str, context: str, candidates: list[dict], *, client: httpx.AsyncClient) -> dict | None`
-  - `POST {GROQ_API_BASE}/chat/completions` に `{"model", "temperature": 0, "stream": False, "reasoning_format": "hidden", "response_format": {"type": "json_object"}, "max_completion_tokens": 256, "messages": [system, user]}`。
+  - `POST {GROQ_API_BASE}/chat/completions` に `{"model", "temperature": 0, "stream": False, "reasoning_format": "hidden", "max_completion_tokens": 256, "messages": [system, user]}`。
+    **`response_format` は渡さない**(RF-003 実測: `openai/gpt-oss-20b` では reasoning が枠を使い切り HTTP 400 `json_validate_failed`)。JSON 強制は strict system prompt と `parse_model_selection` の厳格 parse で担保する。
     system: 「候補チャンネルから 1 つ選び `{"channel_id","confidence","reason"}` の JSON のみ返す。候補外 id を返さない」。
     user: title / `context[:CONTEXT_CHARS]` / 候補の `id/name/topic/category` を JSON で列挙。
   - `httpx.TimeoutException` / `httpx.HTTPError` / `raise_for_status` 失敗 / 応答構造不正 → None(ログ warning)。
@@ -248,7 +249,7 @@ compose 内の `http://calendar-service:8050` は private IP に解決される�
 python3.11 -m venv /tmp/kabosu-venv && . /tmp/kabosu-venv/bin/activate
 pip install -e libs/admin-models/ -e services/meeting-api/ -r services/calendar-service/requirements.txt \
     pytest pytest-asyncio httpx psycopg2-binary
-pytest services/meeting-api/tests/test_drive_export.py services/meeting-api/tests/test_post_meeting_idempotency.py services/meeting-api/tests/contracts -q
+pytest services/meeting-api/tests/test_drive_export.py services/meeting-api/tests/test_post_meeting_idempotency.py services/meeting-api/tests/test_webhooks.py -q
 pytest services/meeting-api/tests/ -q --ignore=services/meeting-api/tests/test_integration_live.py
 (cd services/calendar-service && PYTHONPATH=. pytest tests -q)
 docker compose -f deploy/compose/docker-compose.yml --profile calendar config -q
@@ -267,7 +268,7 @@ bash .hw/verify.sh
 | Discord `GET /guilds/{id}/channels` は threads を含まず、text(0)/announcement(5) の絞り込みで投稿候補が得られる | 公式 docs(2026-08-26 確認、依頼文所与) | 高 | 新 channel type の追加。→ 既知 type のみ許容するので新 type は自動除外(安全側) |
 | Create Message は `allowed_mentions.parse=[]` で全メンション抑止 | 公式 docs 所与 | 高 | — |
 | Drive `permissions.create` で `type=domain, role=reader, allowFileDiscovery=false` は My Drive / Shared Drive 双方で `supportsAllDrives=true` 付きで動く | 公式 docs 所与。Shared Drive では組織ポリシーで domain 共有が禁止され 403 になり得る(未検証) | 中 | Workspace 管理ポリシーで外部/ドメイン共有制限 → 403 は retryable 扱いで sweep が再試行し続ける。運用で `KABOSU_DRIVE_SHARE_DOMAIN` を空にすれば通知経路を止めずに回避可能(権限ステップだけスキップ) |
-| Groq OpenAI 互換 API は `response_format={"type":"json_object"}` を `openai/gpt-oss-20b` で受け付ける | wake-orchestrator は未使用(自由文)。Groq docs では JSON mode 対応モデルあり(未実測) | 中 | 400 が返る場合 → `select_channel_with_model` は None を返し default へフォールバックするので機能は止まらない。実測で 400 なら `response_format` を外し system prompt のみで JSON を要求する(契約 AT-005 の parse 経路は不変) |
+| Groq OpenAI 互換 API は `response_format={"type":"json_object"}` を `openai/gpt-oss-20b` で受け付ける | **実測済み(2026-08-26、覆った)**: `response_format=json_object` + `max_completion_tokens=256` で reasoning が枠を使い切り HTTP 400 `json_validate_failed`。`response_format` を外すと同 256 tokens で `{"channel_id":"222","confidence":0.95,...}` を取得 | 高(実測) | 覆る条件どおり `response_format` **不採用**。strict system prompt + `parse_model_selection` の厳格 parse + default fallback で JSON 契約を担保(AT-004/005 不変)。モデルが JSON 以外を返す場合は parse None → default へフォールバックし機能は止まらない |
 | `validate_webhook_url` は compose 内部宛先を拒否する | `webhook_url.py` 現物確認(private IP 全拒否・Docker 名ブロック) | 高 | — (そのため内部フック経路を採用) |
 
 ## Why(実装者に渡さない)
