@@ -20,6 +20,7 @@ logger = logging.getLogger("meeting_api.drive_export")
 
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 DRIVE_UPLOAD_URL = "https://www.googleapis.com/upload/drive/v3/files"
+DRIVE_FILES_URL = "https://www.googleapis.com/drive/v3/files"
 DRIVE_EXPORT_MAX_ATTEMPTS = int(
     os.getenv("KABOSU_DRIVE_EXPORT_MAX_ATTEMPTS", os.getenv("DRIVE_EXPORT_MAX_ATTEMPTS", "24"))
 )
@@ -217,6 +218,11 @@ async def run_drive_export(
     )
     await db.commit()
 
+    # Bound before the try so a failure after a successful upload still records
+    # the Drive file id (the retry then PATCHes that file instead of creating a
+    # duplicate one).
+    upload_file_id: Optional[str] = None
+    permission = dict(current.get("domain_permission") or {})
     try:
         transcripts = (await db.execute(
             select(Transcription)
@@ -228,6 +234,16 @@ async def run_drive_export(
         # Re-exports (speaker rename etc.) update the existing Drive file
         # in place instead of creating a duplicate.
         upload = await upload_markdown_to_drive(filename, content, file_id=current.get("file_id"))
+        upload_file_id = upload.get("id")
+        share_domain = os.getenv("KABOSU_DRIVE_SHARE_DOMAIN", "").strip()
+        if share_domain and not permission.get("permission_id"):
+            granted = await grant_domain_reader_permission(upload_file_id)
+            if not granted.get("skipped"):
+                permission = {
+                    "domain": share_domain,
+                    "permission_id": granted.get("id"),
+                    "granted_at": _utcnow_iso(),
+                }
     except DriveExportError as exc:
         _set_drive_export_state(
             meeting,
@@ -237,6 +253,7 @@ async def run_drive_export(
             attempts=attempts,
             last_error=str(exc),
             retryable=exc.retryable,
+            **({"file_id": upload_file_id} if upload_file_id else {}),
         )
         await db.commit()
         raise
@@ -249,6 +266,7 @@ async def run_drive_export(
             attempts=attempts,
             last_error=str(exc),
             retryable=True,
+            **({"file_id": upload_file_id} if upload_file_id else {}),
         )
         await db.commit()
         raise DriveExportError(f"Drive export failed: {exc}") from exc
@@ -281,6 +299,7 @@ async def run_drive_export(
             filename=filename,
             last_error=None,
             retryable=True,
+            **({"domain_permission": permission} if permission else {}),
         )
         await db.commit()
         logger.info(
@@ -301,9 +320,24 @@ async def run_drive_export(
         filename=filename,
         last_error=None,
         retryable=False,
+        **({"domain_permission": permission} if permission else {}),
     )
     await db.commit()
     logger.info("Drive export succeeded for meeting %s file=%s", meeting_id, upload.get("id"))
+    try:
+        await send_drive_export_completed_hook(
+            meeting_id,
+            db,
+            file_id=upload.get("id"),
+            web_view_link=upload.get("webViewLink"),
+            filename=filename,
+            content=content,
+            calendar_event=calendar_event,
+        )
+    except Exception as exc:
+        logger.warning(
+            "Drive export completion hook failed for meeting %s: %s", meeting_id, exc
+        )
     return {"status": "done", "filename": filename, **upload}
 
 
@@ -413,6 +447,146 @@ async def upload_markdown_to_drive(
             retryable=_retryable_google_status(resp.status_code),
         )
     return resp.json()
+
+
+async def grant_domain_reader_permission(
+    file_id: str,
+    *,
+    access_token: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Give everyone in KABOSU_DRIVE_SHARE_DOMAIN read access to one file.
+
+    No-op (``{"skipped": True}``) when KABOSU_DRIVE_SHARE_DOMAIN is unset, so
+    existing deployments keep the current Drive export behavior.
+    """
+    domain = os.getenv("KABOSU_DRIVE_SHARE_DOMAIN", "").strip()
+    if not domain:
+        return {"skipped": True}
+
+    if access_token is None:
+        access_token = await refresh_google_access_token()
+    timeout = float(os.getenv("KABOSU_DRIVE_UPLOAD_TIMEOUT_SECONDS", "60"))
+
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        resp = await client.post(
+            f"{DRIVE_FILES_URL}/{file_id}/permissions",
+            params={
+                # Required when the file lives in a Shared Drive.
+                "supportsAllDrives": "true",
+                "fields": "id,type,role,domain",
+            },
+            json={
+                "type": "domain",
+                "role": "reader",
+                "domain": domain,
+                "allowFileDiscovery": False,
+            },
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+    if resp.status_code >= 400:
+        raise DriveExportError(
+            f"Drive permission failed: {resp.status_code} {resp.text[:300]}",
+            retryable=_retryable_google_status(resp.status_code),
+        )
+    return resp.json()
+
+
+async def send_drive_export_completed_hook(
+    meeting_id: int,
+    db: AsyncSession,
+    *,
+    file_id: Optional[str],
+    web_view_link: Optional[str],
+    filename: str,
+    content: str,
+    calendar_event: Dict[str, Any],
+) -> Optional[str]:
+    """Notify the configured internal hook that a Drive export finished.
+
+    Operator-configured internal destination (same pattern as
+    POST_MEETING_HOOKS): the outbound_events ledger makes the delivery
+    duplicate-safe and the envelope/HMAC are the shared webhook ones. Returns
+    ``None`` when KABOSU_DRIVE_EXPORT_WEBHOOK_URL is unset.
+    """
+    url = os.getenv("KABOSU_DRIVE_EXPORT_WEBHOOK_URL", "").strip()
+    if not url:
+        return None
+    secret = os.getenv("KABOSU_DRIVE_EXPORT_WEBHOOK_SECRET", "").strip()
+
+    from .outbound_events import claim_outbound_event, event_key, mark_outbound_event
+    from .webhook_delivery import build_envelope, deliver_with_result
+
+    meeting = (await db.execute(
+        select(Meeting).where(Meeting.id == meeting_id)
+    )).scalars().first()
+    calendar_event = dict(calendar_event or {})
+    native_meeting_id = getattr(meeting, "platform_specific_id", None) if meeting else None
+    title = str(
+        calendar_event.get("title")
+        or native_meeting_id
+        or f"meeting-{meeting_id}"
+    )
+    context_chars = int(os.getenv("KABOSU_DRIVE_EXPORT_CONTEXT_CHARS", "3000"))
+    start_time = getattr(meeting, "start_time", None) if meeting else None
+    end_time = getattr(meeting, "end_time", None) if meeting else None
+
+    data = {
+        "meeting": {
+            "id": meeting_id,
+            "platform": getattr(meeting, "platform", None) if meeting else None,
+            "native_meeting_id": native_meeting_id,
+            "status": getattr(meeting, "status", None) if meeting else None,
+            "start_time": start_time.isoformat() if isinstance(start_time, datetime) else None,
+            "end_time": end_time.isoformat() if isinstance(end_time, datetime) else None,
+        },
+        "calendar_event": calendar_event,
+        "title": title,
+        "drive_export": {
+            "file_id": file_id,
+            "web_view_link": web_view_link,
+            "filename": filename,
+            "completed_at": _utcnow_iso(),
+        },
+        "context_excerpt": content[:context_chars],
+    }
+
+    key = event_key("drive_export_hooks", "drive_export.completed", meeting_id, url)
+    payload = build_envelope("drive_export.completed", data, event_id=key)
+    key, ledger_event, should_deliver = await claim_outbound_event(
+        db,
+        meeting_id=meeting_id,
+        channel="drive_export_hooks",
+        event_type="drive_export.completed",
+        destination=url,
+        payload=payload,
+    )
+    if not should_deliver:
+        logger.info(
+            "send_drive_export_completed_hook: meeting %s event %s already %s; skipping",
+            meeting_id,
+            key,
+            ledger_event.get("status"),
+        )
+        return None
+
+    result = await deliver_with_result(
+        url=url,
+        payload=payload,
+        webhook_secret=secret or None,
+        timeout=30.0,
+        label=f"drive-export-hook meeting={meeting_id}",
+        metadata={"meeting_id": meeting_id, "outbound_event_key": key},
+    )
+    await mark_outbound_event(
+        db,
+        meeting_id=meeting_id,
+        key=key,
+        status=result.status,
+        attempts=int(ledger_event.get("attempts") or 0) + 1,
+        error=result.error,
+        status_code=result.response.status_code if result.response is not None else None,
+    )
+    return result.status
 
 
 async def refresh_google_access_token() -> str:
