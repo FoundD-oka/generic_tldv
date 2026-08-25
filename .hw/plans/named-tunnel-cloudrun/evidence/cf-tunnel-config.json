@@ -1,0 +1,25 @@
+{
+  "success": true,
+  "errors": [],
+  "messages": [],
+  "result": {
+    "tunnel_id": "f8532500-4a46-4f94-b3c2-31ff3c0e012d",
+    "version": 1,
+    "config": {
+      "ingress": [
+        {
+          "service": "http://127.0.0.1:8056",
+          "hostname": "kabosu-api.bonginkan.com"
+        },
+        {
+          "service": "http_status:404"
+        }
+      ],
+      "warp-routing": {
+        "enabled": false
+      }
+    },
+    "source": "cloudflare",
+    "created_at": "2026-08-25T14:32:02.056905Z"
+  }
+}

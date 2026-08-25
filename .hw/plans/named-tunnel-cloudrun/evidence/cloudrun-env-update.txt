@@ -1,0 +1,7 @@
+Revision: kabosu-dashboard-00066-fgk
+Traffic: 100%
+VEXA_API_URL: https://kabosu-api.bonginkan.com
+VEXA_ADMIN_API_URL: https://kabosu-api.bonginkan.com
+VEXA_PUBLIC_API_URL: https://kabosu-api.bonginkan.com
+Command used: gcloud run services update ... --update-env-vars (他envを保持)
+Immediate health: adminApi.reachable=true, vexaApi.reachable=true

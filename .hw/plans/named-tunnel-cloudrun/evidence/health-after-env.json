@@ -1,0 +1,12 @@
+{
+  "status": "ok",
+  "authMode": "direct",
+  "checks": {
+    "smtp": {"configured": false, "optional": true, "error": "SMTP not configured; direct login explicitly enabled"},
+    "googleOAuth": {"configured": false, "optional": true, "error": "Google OAuth not configured"},
+    "azureAdOAuth": {"configured": false, "optional": true, "error": "Azure AD OAuth not configured"},
+    "adminApi": {"configured": true, "reachable": true},
+    "vexaApi": {"configured": true, "reachable": true}
+  },
+  "missingConfig": []
+}

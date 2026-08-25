@@ -1,0 +1,7 @@
+Task diff root allowlist:
+- .hw/plans/named-tunnel-cloudrun/**
+- docs/ops/cloudflare-named-tunnel.md
+
+Application code: unchanged
+CI / Dockerfile / cloudbuild config: unchanged
+AGENTS.md / CLAUDE.md: pre-existing user changes, not staged and not included in this task commit

@@ -1,0 +1,8 @@
+Label: com.bonginkan.kabosu-api-tunnel
+Domain: gui/501
+State: running
+RunAtLoad: true
+KeepAlive: true
+Program: /opt/homebrew/bin/cloudflared tunnel run --token-file <protected-file-path>
+Token file mode: 600
+既存 ai.bonginkan.pm-tunnel は変更していない。

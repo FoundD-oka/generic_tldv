@@ -1,0 +1,4 @@
+POST /api/auth/shared-login: HTTP success
+body.user: present
+body.token: present (value not recorded)
+body.error: null

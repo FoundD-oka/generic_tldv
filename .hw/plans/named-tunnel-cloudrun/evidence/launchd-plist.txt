@@ -1,0 +1,98 @@
+# launchd 方式の事実記録(pm-assist-tunnel)と新 tunnel 用テンプレート
+
+状態: 新 tunnel の plist は **未作成・未起動**。以下は
+ (A) 既存 pm-assist-tunnel の実測(読み取りのみ、変更なし)
+ (B) それを複製した新 tunnel 用テンプレート(後続の実行者が使う)
+token の値は (A)(B) いずれにも含まれない。参照するのはファイルパスのみ。
+
+====================================================================
+## (A) 既存 pm-assist-tunnel の実測
+
+launchctl list の該当行:
+  760   0   ai.bonginkan.pm-tunnel
+  (PID=760 で稼働中、最終終了ステータス=0)
+
+plist パス:
+  /Users/bonginkan-3-gouki/Library/LaunchAgents/ai.bonginkan.pm-tunnel.plist
+
+plist 本体(そのまま。token 値は元から含まれない):
+
+  <?xml version="1.0" encoding="UTF-8"?>
+  <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+  <plist version="1.0">
+  <dict>
+      <key>Label</key>
+      <string>ai.bonginkan.pm-tunnel</string>
+      <key>ProgramArguments</key>
+      <array>
+          <string>/opt/homebrew/bin/cloudflared</string>
+          <string>tunnel</string>
+          <string>run</string>
+          <string>--token-file</string>
+          <string>/Users/bonginkan-3-gouki/.cloudflared/pm-assist-tunnel.token</string>
+      </array>
+      <key>RunAtLoad</key>
+      <true/>
+      <key>KeepAlive</key>
+      <true/>
+      <key>StandardOutPath</key>
+      <string>/Users/bonginkan-3-gouki/Library/Logs/pm-tunnel.log</string>
+      <key>StandardErrorPath</key>
+      <string>/Users/bonginkan-3-gouki/Library/Logs/pm-tunnel.log</string>
+  </dict>
+  </plist>
+
+読み取れた事実:
+  1. 常駐方式は user LaunchAgent(gui/$(id -u) ドメイン)。system LaunchDaemon ではない。
+     → Mac にログインしていない状態では起動しない(単一障害点)。
+  2. cloudflared は Homebrew 版 /opt/homebrew/bin/cloudflared。
+  3. token は `--token-file` でファイル参照。プロセス引数にも plist にも token 値は出ない。
+  4. token ファイルは ~/.cloudflared/ 配下、tunnel ごとに 1 ファイル。
+     現存するのは pm-assist-tunnel.token のみ(Glob で確認)。
+  5. ~/.cloudflared/config.yml と cert.pem は存在しない。
+     → ingress は Cloudflare ダッシュボード側の remote-managed configuration。
+       ローカルに ingress 定義を置く必要はない。
+  6. KeepAlive=true / RunAtLoad=true。プロセス死亡時は launchd が自動再起動する。
+  7. ログは ~/Library/Logs/ 配下に stdout/stderr 合流で 1 ファイル。
+
+  ※ pm-assist-tunnel.token のパーミッション(mode)は未取得。
+    `ls -l` / `stat` がこのセッションのサンドボックスで拒否されたため。
+    値そのものは読んでいない。
+
+====================================================================
+## (B) 新 tunnel 用テンプレート(未適用)
+
+配置先: /Users/bonginkan-3-gouki/Library/LaunchAgents/com.bonginkan.kabosu-api-tunnel.plist
+
+  <?xml version="1.0" encoding="UTF-8"?>
+  <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+  <plist version="1.0">
+  <dict>
+      <key>Label</key>
+      <string>com.bonginkan.kabosu-api-tunnel</string>
+      <key>ProgramArguments</key>
+      <array>
+          <string>/opt/homebrew/bin/cloudflared</string>
+          <string>tunnel</string>
+          <string>run</string>
+          <string>--token-file</string>
+          <string>/Users/bonginkan-3-gouki/.cloudflared/kabosu-api-tunnel.token</string>
+      </array>
+      <key>RunAtLoad</key>
+      <true/>
+      <key>KeepAlive</key>
+      <true/>
+      <key>StandardOutPath</key>
+      <string>/Users/bonginkan-3-gouki/Library/Logs/kabosu-api-tunnel.log</string>
+      <key>StandardErrorPath</key>
+      <string>/Users/bonginkan-3-gouki/Library/Logs/kabosu-api-tunnel.log</string>
+  </dict>
+  </plist>
+
+適用コマンド(未実行):
+  launchctl bootstrap gui/$(id -u) /Users/bonginkan-3-gouki/Library/LaunchAgents/com.bonginkan.kabosu-api-tunnel.plist
+
+前提: /Users/bonginkan-3-gouki/.cloudflared/kabosu-api-tunnel.token を先に作り chmod 600 する。
+禁止: `cloudflared service install <token>` および `--token <値>`(token が引数に露出する)。
+禁止: `cloudflared tunnel login`(cert.pem = アカウント全体権限の証明書を端末に置かない)。
+不干渉: ai.bonginkan.pm-tunnel の plist・token・launchd 状態は一切変更しない。

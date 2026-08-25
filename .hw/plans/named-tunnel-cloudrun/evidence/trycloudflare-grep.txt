@@ -1,0 +1,3 @@
+Post-cutover scope checked: cloudrun-after.json, health-after.json, config-after.json, shared-login.txt, browser-network.txt, restart-test.txt, docs/ops/cloudflare-named-tunnel.md
+trycloudflare matches: 0
+Baseline exception: cloudrun-before.json and health-before.json intentionally retain the expired hostname as AT-001 evidence.
