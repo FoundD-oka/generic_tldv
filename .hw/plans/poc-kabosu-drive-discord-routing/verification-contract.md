@@ -14,7 +14,7 @@
 | AT-005 | `confidence >= 0.85` かつ候補内 id → そのチャンネルへ投稿。それ以外(low_confidence / unknown_channel / model_unavailable)→ default | unit: `resolve_target` 境界(0.85 採用・0.849 default) + handler で選択チャンネルに `create_message` 1 回 | pytest 出力 |
 | AT-006 | 投稿 body に `web_view_link` を含み `allowed_mentions == {"parse": []}` | unit: FakeDiscord が受けた message を assert | pytest 出力 |
 | AT-007 | 同一 `event_id` の再送は `create_message` 0 回、`status="duplicate"` | unit: `meeting.data.discord_notify.event_id` 既存で handler 呼び出し | pytest 出力 |
-| AT-008 | 送信側 envelope は `build_envelope`、署名は `build_headers`(`sha256=HMAC(secret, ts.body)`)を使い、受信側は同一式で検証し不一致/ts 期限切れ/欠落を 401 で拒否 | unit: `verify_webhook_signature` 4 ケース + route 401 テスト。送信側は `services/meeting-api/tests/contracts` が無改変で通る | pytest 出力 |
+| AT-008 | 送信側 envelope は `build_envelope`、署名は `build_headers`(`sha256=HMAC(secret, ts.body)`)を使い、受信側は同一式で検証し不一致/ts 期限切れ/欠落を 401 で拒否 | unit: `verify_webhook_signature` 4 ケース + route 401 テスト。送信側は既存 envelope/HMAC/outbound event 契約テスト `services/meeting-api/tests/test_webhooks.py` と `services/meeting-api/tests/test_post_meeting_idempotency.py` が無改変で通る(`git diff base-commit..HEAD -- <両ファイル>` が空) | pytest 出力 + diff |
 | AT-009 | `event_id` は `event_key("drive_export_hooks","drive_export.completed",meeting_id,url)` で決定的。送信側 ledger が delivered/queued/pending なら再送しない | unit: 2 回呼んで `deliver_with_result` 1 回、`event_id` が一致 | pytest 出力 |
 | AT-010 | config 未設定(`KABOSU_DRIVE_SHARE_DOMAIN`・`KABOSU_DRIVE_EXPORT_WEBHOOK_URL` 空)で既存 drive export テストが無改変で全通過し、permission/hook の外部呼び出しが 0 回 | `pytest services/meeting-api/tests/test_drive_export.py -q` + `git diff base-commit..HEAD -- services/meeting-api/tests/test_drive_export.py` に削除行(既存 assert の削除)が無い | pytest 出力 + diff |
 
@@ -37,7 +37,7 @@
 
 | ID | Requirement | Method | Evidence |
 |---|---|---|---|
-| NFT-001 | 変更ファイル数 ≤ 12、新規 pip 依存なし | `git diff --name-only base-commit..HEAD \| wc -l`、requirements/pyproject の diff が無い | 出力 |
+| NFT-001 | `.hw/plans/<task-id>/` を除いた実装差分ファイル数 ≤ 9、新規 pip 依存なし | `git diff --name-only base-commit..HEAD -- . ':(exclude).hw/plans/poc-kabosu-drive-discord-routing' \| wc -l` が 9 以下、`git diff --name-only base-commit..HEAD -- '**/requirements*.txt' '**/pyproject.toml'` が空 | 出力 |
 | NFT-002 | compose 定義が有効で calendar profile を含む | `docker compose -f deploy/compose/docker-compose.yml --profile calendar config -q` exit 0 | 出力 |
 | NFT-003 | hw 機械検証通過 | `bash .hw/verify.sh` exit 0(baseline 以外の新規失敗なし) | 出力末尾 `[hw][verify] ok` |
 | NFT-004 | meeting-api 全テスト通過(CI と同条件) | `pytest services/meeting-api/tests/ -q --ignore=services/meeting-api/tests/test_integration_live.py` exit 0 | 出力 |
@@ -65,4 +65,4 @@
 |---|---|---|---|
 | RF-001 | Discord channel type 0/5 が投稿候補、Get Guild Channels が threads を含まない | source check(公式 docs、2026-08-26 所与) | plan.md リサーチ記録 |
 | RF-002 | Drive permissions.create の domain/allowFileDiscovery パラメータ | source check(公式 docs 所与) | plan.md リサーチ記録 |
-| RF-003 | Groq `response_format=json_object` の `openai/gpt-oss-20b` 対応 | 実環境で 1 回手動確認(400 なら plan の覆る条件に従い response_format を外す。契約 AT-004/005 は不変) | 手動メモ(PR 本文) |
+| RF-003 | Groq `response_format=json_object` の `openai/gpt-oss-20b` 対応 | **実測済み(2026-08-26)**: `response_format` 指定で HTTP 400 `json_validate_failed`、外すと同 256 tokens で有効 JSON 取得。plan の覆る条件に従い `response_format` 不採用。`grep -n response_format services/calendar-service/app/discord_notify.py` がリクエスト body に含めていないこと(コメントのみ)を確認。契約 AT-004/005 は不変 | 実測メモ(PR 本文)+ grep 出力 |
