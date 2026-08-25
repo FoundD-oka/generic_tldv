@@ -474,6 +474,56 @@ async def test_run_drive_export_permission_failure_marks_failed_with_file_id(mon
     assert delivered.await_count == 0
 
 
+@pytest.mark.asyncio
+async def test_run_drive_export_regrants_permission_when_file_recreated(monkeypatch):
+    """Drive 404 on the recorded file -> new file, so the old grant no longer applies."""
+    monkeypatch.setenv("KABOSU_DRIVE_SHARE_DOMAIN", "bonginkan.ai")
+    monkeypatch.delenv("KABOSU_DRIVE_EXPORT_WEBHOOK_URL", raising=False)
+    meeting = make_meeting(
+        id=TEST_MEETING_ID,
+        status=MeetingStatus.COMPLETED.value,
+        data={
+            "calendar_event": _calendar_event(),
+            "drive_export": {
+                "status": "queued",
+                "attempts": 0,
+                "file_id": "deleted-file",
+                "domain_permission": {
+                    "domain": "bonginkan.ai",
+                    "permission_id": "perm-old",
+                    "granted_at": "2026-07-03T01:00:00Z",
+                },
+            },
+        },
+        created_at=datetime(2026, 7, 3, 1, 0, 0),
+    )
+    db = AsyncMock()
+    db.execute = AsyncMock(side_effect=[
+        MockResult([meeting]),
+        MockResult([]),
+        MockResult([meeting]),
+    ])
+    db.commit = AsyncMock()
+    # upload_markdown_to_drive answers a PATCH 404 by creating a fresh file.
+    uploaded = AsyncMock(return_value={"id": "recreated-file", "webViewLink": "https://drive/new"})
+    client, ctx = _permission_client(body={"id": "perm-new", "type": "domain", "role": "reader"})
+
+    with patch("meeting_api.drive_export.attributes.flag_modified", new=MagicMock()), \
+         patch("meeting_api.drive_export.upload_markdown_to_drive", new=uploaded), \
+         patch("meeting_api.drive_export.refresh_google_access_token", new=AsyncMock(return_value="tok")), \
+         patch("meeting_api.drive_export.httpx.AsyncClient", return_value=ctx):
+        await run_drive_export(TEST_MEETING_ID, db)
+
+    assert uploaded.await_args.kwargs["file_id"] == "deleted-file"
+    assert client.post.await_count == 1
+    assert client.post.await_args.args[0].endswith("/drive/v3/files/recreated-file/permissions")
+    state = meeting.data["drive_export"]
+    assert state["status"] == "done"
+    assert state["file_id"] == "recreated-file"
+    assert state["web_view_link"] == "https://drive/new"
+    assert state["domain_permission"]["permission_id"] == "perm-new"
+
+
 # ---------------------------------------------------------------------------
 # drive_export.completed internal hook
 # ---------------------------------------------------------------------------

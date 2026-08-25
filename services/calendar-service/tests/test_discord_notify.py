@@ -183,6 +183,21 @@ def test_build_message_suppresses_mentions_and_includes_link():
     assert len(message["content"]) <= 2000
 
 
+def test_build_message_keeps_full_link_for_very_long_title():
+    link = "https://drive.google.com/file/d/" + "l" * 120 + "/view?usp=drivesdk"
+    message = build_message(
+        "長い議題" * 800,
+        link,
+        {"start_time": "2026-07-03T10:00:00+09:00", "end_time": "2026-07-03T11:00:00+09:00"},
+        "low_confidence",
+    )
+    assert len(message["content"]) <= 2000
+    assert link in message["content"]
+    assert message["content"].startswith("カボス議事録: ")
+    assert "(既定チャンネルへ通知: low_confidence)" in message["content"]
+    assert message["allowed_mentions"] == {"parse": []}
+
+
 # ---------------------------------------------------------------------------
 # Model router
 # ---------------------------------------------------------------------------

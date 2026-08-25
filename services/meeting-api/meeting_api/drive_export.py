@@ -233,8 +233,14 @@ async def run_drive_export(
         content = build_drive_markdown(meeting, calendar_event, transcripts)
         # Re-exports (speaker rename etc.) update the existing Drive file
         # in place instead of creating a duplicate.
-        upload = await upload_markdown_to_drive(filename, content, file_id=current.get("file_id"))
+        existing_file_id = current.get("file_id")
+        upload = await upload_markdown_to_drive(filename, content, file_id=existing_file_id)
         upload_file_id = upload.get("id")
+        if existing_file_id and upload_file_id != existing_file_id:
+            # The PATCH hit 404 and a fresh file was created: the recorded
+            # permission belongs to the old file, so the new one needs its own
+            # domain reader grant.
+            permission = {}
         share_domain = os.getenv("KABOSU_DRIVE_SHARE_DOMAIN", "").strip()
         if share_domain and not permission.get("permission_id"):
             granted = await grant_domain_reader_permission(upload_file_id)
