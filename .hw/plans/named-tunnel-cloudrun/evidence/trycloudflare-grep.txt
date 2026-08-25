@@ -1,3 +1,20 @@
-Post-cutover scope checked: cloudrun-after.json, health-after.json, config-after.json, shared-login.txt, browser-network.txt, restart-test.txt, docs/ops/cloudflare-named-tunnel.md
-trycloudflare matches: 0
-Baseline exception: cloudrun-before.json and health-before.json intentionally retain the expired hostname as AT-001 evidence.
+AT-006 post-cutover scope checked:
+- cloudrun-after.json
+- health-after-env.json
+- health-after.json
+- config-after.json
+- shared-login.txt
+- browser-network.txt
+- restart-test.txt
+- pm-assist-after.txt
+- cloudbuild.txt
+- docs/ops/cloudflare-named-tunnel.md
+
+Legacy Quick Tunnel hostname suffix matches in post-cutover scope: 0
+
+Full evidence tree non-zero files measured before this report was rewritten:
+- cloudrun-before.json: 3
+- revisions-before.json: 36
+- preflight.txt: 5
+
+The three non-zero files are intentional AT-001/preflight baseline evidence. health-before.json has 0 matches. No post-cutover artifact has a match.
