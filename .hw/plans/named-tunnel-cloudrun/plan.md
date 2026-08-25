@@ -172,7 +172,7 @@ gcloud builds submit . --project pm-qe-mgmt-20260624 --config deploy/gcp/cloudbu
 ### 4. 検証(verification-contract.md の AT を全て実行し evidence に保存)
 
 - `/api/health`、`/api/config`、`POST /api/auth/shared-login`(curl)。
-- **ブラウザ使用は本項のみ**(Cloudflare 側の操作・確認にブラウザは使わない): Cloud Run URL を開き、共有ログイン後 `/meetings` 到達をスクリーンショット(`evidence/browser-meetings.png`)。DevTools Network で `trycloudflare` へのリクエストが 0 件であることを `evidence/browser-network.txt` に記録。
+- **ブラウザ使用は本項のみ**(Cloudflare 側の操作・確認にブラウザは使わない): Cloud Run URL を開き、共有ログイン後 `/meetings` 到達をスクリーンショット(`evidence/browser-meetings.png`)。Playwright `request` event または DevTools Network で実リクエストを捕捉し、`trycloudflare` へのリクエストが 0 件であることを `evidence/browser-network.txt` に記録。
 - 再起動耐性: `launchctl kickstart -k gui/$(id -u)/com.bonginkan.kabosu-api-tunnel` → 90秒以内に `https://kabosu-api.bonginkan.com/` が `<500` に戻り、Cloud Run `/api/health` の両 reachable が `true`(env 変更なし)。`evidence/restart-test.txt`。
 - 既存 `pm.bonginkan.com` の応答が手順0と同一。
 

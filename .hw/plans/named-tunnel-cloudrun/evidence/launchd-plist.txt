@@ -1,6 +1,6 @@
 # launchd 方式の事実記録(pm-assist-tunnel)と新 tunnel 用テンプレート
 
-状態: 新 tunnel の plist は **未作成・未起動**。以下は
+状態: このファイルの本文は切替前preflight時点の記録。後続手順で plist を作成・起動済みであり、最終状態は `evidence/launchd-status.txt` と `evidence/restart-test.txt` を正とする。以下は
  (A) 既存 pm-assist-tunnel の実測(読み取りのみ、変更なし)
  (B) それを複製した新 tunnel 用テンプレート(後続の実行者が使う)
 token の値は (A)(B) いずれにも含まれない。参照するのはファイルパスのみ。
@@ -62,7 +62,7 @@ plist 本体(そのまま。token 値は元から含まれない):
 ====================================================================
 ## (B) 新 tunnel 用テンプレート(未適用)
 
-配置先: /Users/bonginkan-3-gouki/Library/LaunchAgents/com.bonginkan.kabosu-api-tunnel.plist
+配置先: /Users/bonginkan-3-gouki/Library/LaunchAgents/com.bonginkan.kabosu-api-tunnel.plist（後続手順で適用済み）
 
   <?xml version="1.0" encoding="UTF-8"?>
   <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -89,7 +89,7 @@ plist 本体(そのまま。token 値は元から含まれない):
   </dict>
   </plist>
 
-適用コマンド(未実行):
+適用コマンド(preflight時点では未実行、後続手順で成功):
   launchctl bootstrap gui/$(id -u) /Users/bonginkan-3-gouki/Library/LaunchAgents/com.bonginkan.kabosu-api-tunnel.plist
 
 前提: /Users/bonginkan-3-gouki/.cloudflared/kabosu-api-tunnel.token を先に作り chmod 600 する。

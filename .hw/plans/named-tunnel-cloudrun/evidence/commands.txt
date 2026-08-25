@@ -6,4 +6,4 @@ Reachability: curl fixed tunnel root and dummy-key admin endpoint
 Cloud Run: gcloud run services update --update-env-vars
 Cloud Build: clean detached worktree; gcloud builds submit with fixed VEXA_API_URL
 Verification: redacted /api/health, /api/config, shared-login; in-app browser /meetings
-Prohibited commands used: none (--set-env-vars, service delete, cloudflared login, cloudflared service install)
+禁止コマンド: いずれも未使用(一覧は plan.md 参照)

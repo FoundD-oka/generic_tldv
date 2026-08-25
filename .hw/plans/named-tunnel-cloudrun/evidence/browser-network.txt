@@ -2,5 +2,10 @@ Browser final URL: https://kabosu-dashboard-yye63pfv3a-an.a.run.app/meetings
 Meetings heading rendered: true
 Automatic shared sign-in: success
 Configured apiUrl/publicApiUrl/wsUrl: fixed kabosu-api.bonginkan.com host
-trycloudflare request/config reference: 0
-Note: browser performance resource enumeration was unavailable in the in-app browser; the zero count is corroborated by the redacted /api/config response, fixed-image tag, and post-build source/config scan.
+Capture method: Playwright request event, headless Google Chrome, fresh browser context
+Total requests captured: 81
+Host counts:
+- kabosu-dashboard-yye63pfv3a-an.a.run.app: 80
+- blog.vexa.ai: 1
+Legacy Quick Tunnel hostname suffix matches: 0
+判定: 実リクエスト捕捉で旧Quick Tunnelへの通信が0件であることを確認。
