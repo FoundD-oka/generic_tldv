@@ -1,0 +1,20 @@
+{
+  "success": true,
+  "errors": [],
+  "messages": [],
+  "result": {
+    "id": "f8532500-4a46-4f94-b3c2-31ff3c0e012d",
+    "account_tag": "<ACCOUNT_ID>",
+    "created_at": "2026-08-25T14:32:00.733181Z",
+    "deleted_at": null,
+    "name": "kabosu-api-tunnel",
+    "connections": [],
+    "conns_active_at": null,
+    "conns_inactive_at": "2026-08-25T14:32:00.733181Z",
+    "tun_type": "cfd_tunnel",
+    "metadata": {},
+    "status": "inactive",
+    "remote_config": true,
+    "config_src": "cloudflare"
+  }
+}

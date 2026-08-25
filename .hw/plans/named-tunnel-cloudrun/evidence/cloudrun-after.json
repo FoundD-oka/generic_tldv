@@ -1,0 +1,14 @@
+{
+  "service": "kabosu-dashboard",
+  "project": "pm-qe-mgmt-20260624",
+  "region": "asia-northeast1",
+  "latestReadyRevisionName": "kabosu-dashboard-00067-tf4",
+  "traffic": [{"revisionName": "kabosu-dashboard-00067-tf4", "percent": 100}],
+  "image": "asia-northeast1-docker.pkg.dev/pm-qe-mgmt-20260624/pm-qe-management/kabosu-dashboard:manual-named-tunnel-202608252335",
+  "env": [
+    {"name": "VEXA_API_URL", "value": "https://kabosu-api.bonginkan.com"},
+    {"name": "VEXA_ADMIN_API_URL", "value": "https://kabosu-api.bonginkan.com"},
+    {"name": "VEXA_PUBLIC_API_URL", "value": "https://kabosu-api.bonginkan.com"}
+  ],
+  "secrets": "<redacted>"
+}

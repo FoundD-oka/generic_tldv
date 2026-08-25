@@ -1,0 +1,24 @@
+{
+  "task_id": "named-tunnel-cloudrun",
+  "size": "L",
+  "axes": {
+    "requirement_ambiguity": {
+      "level": "S",
+      "reason": "Named Tunnel 新設、固定ホスト名→127.0.0.1:8056、Cloud Run の3URL切替、trycloudflare 排除、health/shared-login/meetings 検証、再起動耐性、SPOF 明記と、要求は明示的かつ合意済み。Cloudflare 操作は v4 API(Account ID + Bearer API Token)で行い Access Key ID は使わないことも明示済み。reframe なし。"
+    },
+    "technical_unknown": {
+      "level": "M",
+      "reason": "提供された API Token の権限スコープは verify と読み取りプローブでしか事前検査できず、書き込み権限不足は最初の書き込みで初めて判明する(STOP-1c + 補償で吸収)。zone のアカウント一致、同名 tunnel / DNS の既存有無、pm-assist-tunnel の launchd 方式を確認する。API endpoint の応答形は RF-003 で実行時に確認。image に焼き込まれた rewrites 先の再ビルド要否は確定。"
+    },
+    "impact_scope": {
+      "level": "M",
+      "reason": "本番外部状態(Cloudflare アカウントの tunnel・DNS・Cloud Run 本番サービス)を変更する。リポジトリコードは無変更で gitnexus 影響分析の対象シンボルなし。既存 pm-assist-tunnel と同一アカウント・zone を共有するため、不干渉を名前ガードと補償台帳で契約化。"
+    },
+    "verifiability": {
+      "level": "L",
+      "reason": "Cloudflare 側は redact 済み API 応答 JSON で機械検査可能になったが、主要検証(Cloud Run /meetings のブラウザ到達・外部到達・tunnel 再起動)は依然として手動証跡で CI で再実行できない。ロールバック先 00065-954 は切替前の壊れた状態であり『元に戻せば安全』が成立しない。fail-closed で L。"
+    }
+  },
+  "review": "fable-contract-review",
+  "note": "1軸(verifiability)が L 相当のため全体 L。迷ったら上へ倒す規律に従う。plan revision(UI→API)で size・runtime・base-commit は変更なし。"
+}

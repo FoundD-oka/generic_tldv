@@ -1,0 +1,220 @@
+{
+  "apiVersion": "serving.knative.dev/v1",
+  "kind": "Service",
+  "metadata": {
+    "annotations": {
+      "run.googleapis.com/client-name": "gcloud",
+      "run.googleapis.com/client-version": "573.0.0",
+      "run.googleapis.com/ingress": "all",
+      "run.googleapis.com/ingress-status": "all",
+      "run.googleapis.com/maxScale": "20",
+      "run.googleapis.com/operation-id": "7a0c03fd-9f97-4d82-beaa-f44097a86180",
+      "run.googleapis.com/urls": "[\"https://kabosu-dashboard-127347460378.asia-northeast1.run.app\",\"https://kabosu-dashboard-yye63pfv3a-an.a.run.app\"]",
+      "serving.knative.dev/creator": "okada@bonginkan.ai",
+      "serving.knative.dev/lastModifier": "okada@bonginkan.ai"
+    },
+    "creationTimestamp": "2026-06-25T03:01:56.311175Z",
+    "generation": 65,
+    "labels": {
+      "cloud.googleapis.com/location": "asia-northeast1"
+    },
+    "name": "kabosu-dashboard",
+    "namespace": "127347460378",
+    "resourceVersion": "AAZZBIILZQk",
+    "selfLink": "/apis/serving.knative.dev/v1/namespaces/127347460378/services/kabosu-dashboard",
+    "uid": "f8dc5bff-815b-47c9-94e4-a6f922804d52"
+  },
+  "spec": {
+    "template": {
+      "metadata": {
+        "annotations": {
+          "autoscaling.knative.dev/maxScale": "3",
+          "run.googleapis.com/client-name": "gcloud",
+          "run.googleapis.com/client-version": "573.0.0",
+          "run.googleapis.com/startup-cpu-boost": "true"
+        },
+        "labels": {
+          "client.knative.dev/nonce": "ffnnswtdgs",
+          "run.googleapis.com/startupProbeType": "Default"
+        }
+      },
+      "spec": {
+        "containerConcurrency": 80,
+        "containers": [
+          {
+            "env": [
+              {
+                "name": "VEXA_API_URL",
+                "value": "https://kent-ping-lung-treasury.trycloudflare.com"
+              },
+              {
+                "name": "VEXA_ADMIN_API_URL",
+                "value": "https://kent-ping-lung-treasury.trycloudflare.com"
+              },
+              {
+                "name": "VEXA_ALLOW_DIRECT_LOGIN",
+                "value": "true"
+              },
+              {
+                "name": "DASHBOARD_SHARED_AUTH_ENABLED",
+                "value": "true"
+              },
+              {
+                "name": "DASHBOARD_SHARED_AUTH_EMAIL",
+                "value": "tech@bonginkan.ai"
+              },
+              {
+                "name": "DASHBOARD_SHARED_AUTH_NAME",
+                "value": "カボス運用"
+              },
+              {
+                "name": "DASHBOARD_BRAND_NAME",
+                "value": "カボス"
+              },
+              {
+                "name": "DASHBOARD_BRAND_SHORT_NAME",
+                "value": "カボス"
+              },
+              {
+                "name": "DASHBOARD_BRAND_SLUG",
+                "value": "kabosu"
+              },
+              {
+                "name": "DASHBOARD_LOCALE",
+                "value": "ja"
+              },
+              {
+                "name": "DASHBOARD_BRAND_LOGO_DARK",
+                "value": "/icons/kabosu.svg"
+              },
+              {
+                "name": "DASHBOARD_BRAND_LOGO_LIGHT",
+                "value": "/icons/kabosu.svg"
+              },
+              {
+                "name": "DEFAULT_BOT_NAME",
+                "value": "カボス"
+              },
+              {
+                "name": "NEXT_PUBLIC_APP_URL",
+                "value": "https://kabosu-dashboard-127347460378.asia-northeast1.run.app"
+              },
+              {
+                "name": "NEXTAUTH_URL",
+                "value": "https://kabosu-dashboard-127347460378.asia-northeast1.run.app"
+              },
+              {
+                "name": "DASHBOARD_URL",
+                "value": "https://kabosu-dashboard-127347460378.asia-northeast1.run.app"
+              },
+              {
+                "name": "VEXA_AUTH_COOKIE_NAME",
+                "value": "kabosu-token-cloudrun"
+              },
+              {
+                "name": "VEXA_USER_INFO_COOKIE_NAME",
+                "value": "kabosu-user-info-cloudrun"
+              },
+              {
+                "name": "VEXA_ADMIN_API_KEY",
+                "valueFrom": {
+                  "secretKeyRef": {
+                    "key": "latest",
+                    "name": "kabosu-dashboard-admin-api-key"
+                  }
+                },
+                "value": "<redacted>"
+              },
+              {
+                "name": "JWT_SECRET",
+                "valueFrom": {
+                  "secretKeyRef": {
+                    "key": "latest",
+                    "name": "kabosu-dashboard-jwt-secret"
+                  }
+                },
+                "value": "<redacted>"
+              },
+              {
+                "name": "NEXTAUTH_SECRET",
+                "valueFrom": {
+                  "secretKeyRef": {
+                    "key": "latest",
+                    "name": "kabosu-dashboard-jwt-secret"
+                  }
+                },
+                "value": "<redacted>"
+              },
+              {
+                "name": "VEXA_PUBLIC_API_URL",
+                "value": "https://executive-leaving-tubes-wind.trycloudflare.com"
+              }
+            ],
+            "image": "asia-northeast1-docker.pkg.dev/pm-qe-mgmt-20260624/pm-qe-management/kabosu-dashboard:d5c324f7e75a8662f743de087a08242e33716828-quick-20260815-0132",
+            "ports": [
+              {
+                "containerPort": 3000,
+                "name": "http1"
+              }
+            ],
+            "resources": {
+              "limits": {
+                "cpu": "1",
+                "memory": "1Gi"
+              }
+            },
+            "startupProbe": {
+              "failureThreshold": 1,
+              "periodSeconds": 240,
+              "tcpSocket": {
+                "port": 3000
+              },
+              "timeoutSeconds": 240
+            }
+          }
+        ],
+        "serviceAccountName": "127347460378-compute@developer.gserviceaccount.com",
+        "timeoutSeconds": 300
+      }
+    },
+    "traffic": [
+      {
+        "latestRevision": true,
+        "percent": 100
+      }
+    ]
+  },
+  "status": {
+    "address": {
+      "url": "https://kabosu-dashboard-yye63pfv3a-an.a.run.app"
+    },
+    "conditions": [
+      {
+        "lastTransitionTime": "2026-08-14T16:42:36.790025Z",
+        "status": "True",
+        "type": "Ready"
+      },
+      {
+        "lastTransitionTime": "2026-08-14T16:42:30.002112Z",
+        "status": "True",
+        "type": "ConfigurationsReady"
+      },
+      {
+        "lastTransitionTime": "2026-08-14T16:42:36.763660Z",
+        "status": "True",
+        "type": "RoutesReady"
+      }
+    ],
+    "latestCreatedRevisionName": "kabosu-dashboard-00065-954",
+    "latestReadyRevisionName": "kabosu-dashboard-00065-954",
+    "observedGeneration": 65,
+    "traffic": [
+      {
+        "latestRevision": true,
+        "percent": 100,
+        "revisionName": "kabosu-dashboard-00065-954"
+      }
+    ],
+    "url": "https://kabosu-dashboard-yye63pfv3a-an.a.run.app"
+  }
+}

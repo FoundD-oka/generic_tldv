@@ -1,0 +1,33 @@
+{
+  "_note": "curl -s https://kabosu-dashboard-yye63pfv3a-an.a.run.app/api/health(切替前・2026-08-25 取得)",
+  "status": "error",
+  "authMode": "direct",
+  "checks": {
+    "smtp": {
+      "configured": false,
+      "optional": true,
+      "error": "SMTP not configured; direct login explicitly enabled"
+    },
+    "googleOAuth": {
+      "configured": false,
+      "optional": true,
+      "error": "Google OAuth not configured"
+    },
+    "azureAdOAuth": {
+      "configured": false,
+      "optional": true,
+      "error": "Azure AD OAuth not configured"
+    },
+    "adminApi": {
+      "configured": true,
+      "reachable": false,
+      "error": "Cannot reach API: fetch failed"
+    },
+    "vexaApi": {
+      "configured": true,
+      "reachable": false,
+      "error": "Cannot reach API: fetch failed"
+    }
+  },
+  "missingConfig": []
+}
