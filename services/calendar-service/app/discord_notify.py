@@ -221,7 +221,10 @@ async def select_channel_with_model(
         "temperature": 0,
         "stream": False,
         "reasoning_format": "hidden",
-        "response_format": {"type": "json_object"},
+        # response_format=json_object は openai/gpt-oss-20b + max_completion_tokens=256
+        # では reasoning がトークンを食い切って空生成になり 400
+        # (json_validate_failed) を返す(2026-08-26 実測)。JSON は system prompt で
+        # 要求し、崩れた出力は parse_model_selection が None にして default へ倒す。
         "max_completion_tokens": 256,
         "messages": [
             {"role": "system", "content": _ROUTER_SYSTEM_PROMPT},
