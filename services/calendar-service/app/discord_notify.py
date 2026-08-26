@@ -339,7 +339,19 @@ async def handle_drive_export_completed(
 
     drive_export = data.get("drive_export") or {}
     calendar_event = data.get("calendar_event") or {}
-    title = str(data.get("title") or f"meeting-{meeting_id}")
+    if not isinstance(calendar_event, dict):
+        calendar_event = {}
+
+    # カレンダー登録のタイトルと payload の title が前後空白除去後に完全一致する
+    # ときだけ通知する。欠落・空・不一致では外部 I/O も DB 更新も行わない。
+    calendar_title = str(calendar_event.get("title") or "").strip()
+    if not calendar_title:
+        return {"status": "skipped", "reason": "calendar_title_missing"}
+    payload_title = str(data.get("title") or "").strip()
+    if calendar_title != payload_title:
+        return {"status": "skipped", "reason": "calendar_title_mismatch"}
+
+    title = calendar_title
     web_view_link = str(drive_export.get("web_view_link") or "")
     context_excerpt = str(data.get("context_excerpt") or "")
 
