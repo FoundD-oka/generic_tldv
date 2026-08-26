@@ -206,6 +206,7 @@ def test_build_message_keeps_full_link_for_very_long_title():
 @pytest.mark.asyncio
 async def test_select_channel_with_model_sends_title_and_candidates(monkeypatch):
     monkeypatch.setenv("GROQ_API_KEY", "gk")
+    monkeypatch.setenv("KABOSU_DISCORD_ROUTER_MAX_COMPLETION_TOKENS", "640")
     captured = {}
 
     class FakeResponse:
@@ -234,6 +235,7 @@ async def test_select_channel_with_model_sends_title_and_candidates(monkeypatch)
     user_prompt = captured["json"]["messages"][-1]["content"]
     assert "週次定例" in user_prompt
     assert '"id": "1"' in user_prompt
+    assert captured["json"]["max_completion_tokens"] == 640
 
 
 @pytest.mark.asyncio

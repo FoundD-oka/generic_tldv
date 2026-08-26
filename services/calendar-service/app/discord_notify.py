@@ -220,6 +220,9 @@ async def select_channel_with_model(
     model = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b").strip() or "openai/gpt-oss-20b"
     timeout = float(os.getenv("KABOSU_DISCORD_ROUTER_TIMEOUT_SECONDS", "8"))
     context_chars = int(os.getenv("KABOSU_DISCORD_ROUTER_CONTEXT_CHARS", "3000"))
+    max_completion_tokens = int(
+        os.getenv("KABOSU_DISCORD_ROUTER_MAX_COMPLETION_TOKENS", "768")
+    )
 
     user_prompt = json.dumps(
         {
@@ -234,11 +237,13 @@ async def select_channel_with_model(
         "temperature": 0,
         "stream": False,
         "reasoning_format": "hidden",
-        # response_format=json_object は openai/gpt-oss-20b + max_completion_tokens=256
-        # では reasoning がトークンを食い切って空生成になり 400
+        # response_format=json_object は openai/gpt-oss-20b では reasoning が
+        # トークン枠を食い切って空生成になり 400
         # (json_validate_failed) を返す(2026-08-26 実測)。JSON は system prompt で
         # 要求し、崩れた出力は parse_model_selection が None にして default へ倒す。
-        "max_completion_tokens": 256,
+        # ライブの多数チャンネルでは reasoning だけで 220 tokens 前後を使うため、
+        # 256 固定だと有効 JSON の末尾が切れる。既定値を十分に確保し調整可能にする。
+        "max_completion_tokens": max_completion_tokens,
         "messages": [
             {"role": "system", "content": _ROUTER_SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt},
