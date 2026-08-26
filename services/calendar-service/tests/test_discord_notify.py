@@ -503,6 +503,176 @@ async def test_handle_skips_when_meeting_missing(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# Handler: calendar title gate
+# ---------------------------------------------------------------------------
+
+
+class CountingModel:
+    """select_channel_with_model の呼び出し回数と渡されたタイトルを記録する。"""
+
+    def __init__(self, selection=None):
+        self.selection = selection
+        self.calls = 0
+        self.titles = []
+
+    async def __call__(self, title, context, candidates, *, client):
+        self.calls += 1
+        self.titles.append(title)
+        return self.selection
+
+
+def _install_counted_fakes(monkeypatch, fake_discord, selection=None):
+    monkeypatch.setattr(discord_notify, "DiscordClient", lambda client, **kwargs: fake_discord)
+    model = CountingModel(selection)
+    monkeypatch.setattr(discord_notify, "select_channel_with_model", model)
+    return model
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "calendar_event",
+    [
+        None,
+        {"start_time": "2026-07-03T10:00:00+09:00"},
+        {"title": "  ", "start_time": "2026-07-03T10:00:00+09:00"},
+        "週次定例",
+    ],
+    ids=["missing_key", "no_title", "blank_title", "not_a_dict"],
+)
+async def test_handle_skips_when_calendar_title_missing(monkeypatch, calendar_event):
+    _configure_discord(monkeypatch)
+    meeting = SimpleNamespace(id=42, data={})
+    db = _fake_db(meeting)
+    fake = FakeDiscord(_channels())
+    model = _install_counted_fakes(
+        monkeypatch, fake, {"channel_id": "1", "confidence": 0.95, "reason": "定例"}
+    )
+    factory = FakeClientFactory()
+    envelope = _envelope()
+    if calendar_event is None:
+        envelope["data"].pop("calendar_event")
+    else:
+        envelope["data"]["calendar_event"] = calendar_event
+
+    result = await handle_drive_export_completed(db, envelope, http_client_factory=factory)
+
+    assert result == {"status": "skipped", "reason": "calendar_title_missing"}
+    assert factory.calls == 0
+    assert fake.list_calls == 0
+    assert fake.posts == []
+    assert model.calls == 0
+    assert "discord_notify" not in meeting.data
+    assert db.commit.await_count == 0
+
+
+@pytest.mark.asyncio
+async def test_handle_skips_when_calendar_title_mismatches(monkeypatch):
+    _configure_discord(monkeypatch)
+    meeting = SimpleNamespace(id=42, data={})
+    db = _fake_db(meeting)
+    fake = FakeDiscord(_channels())
+    model = _install_counted_fakes(
+        monkeypatch, fake, {"channel_id": "1", "confidence": 0.95, "reason": "定例"}
+    )
+    factory = FakeClientFactory()
+    envelope = _envelope()
+    envelope["data"]["calendar_event"] = {
+        "title": "週次定例",
+        "start_time": "2026-07-03T10:00:00+09:00",
+    }
+    envelope["data"]["title"] = "meeting-42"
+
+    result = await handle_drive_export_completed(db, envelope, http_client_factory=factory)
+
+    assert result == {"status": "skipped", "reason": "calendar_title_mismatch"}
+    assert factory.calls == 0
+    assert fake.list_calls == 0
+    assert fake.posts == []
+    assert model.calls == 0
+    assert "discord_notify" not in meeting.data
+    assert db.commit.await_count == 0
+
+
+@pytest.mark.asyncio
+async def test_handle_posts_when_calendar_title_matches_after_strip(monkeypatch):
+    _configure_discord(monkeypatch)
+    meeting = SimpleNamespace(id=42, data={})
+    db = _fake_db(meeting)
+    fake = FakeDiscord(_channels())
+    model = _install_counted_fakes(
+        monkeypatch, fake, {"channel_id": "1", "confidence": 0.92, "reason": "定例"}
+    )
+    envelope = _envelope()
+    envelope["data"]["calendar_event"]["title"] = "  週次定例  "
+    envelope["data"]["title"] = "週次定例 "
+
+    result = await handle_drive_export_completed(
+        db, envelope, http_client_factory=FakeClientFactory()
+    )
+
+    assert result == {"status": "posted", "channel_id": "1", "fallback_reason": None}
+    assert model.titles == ["週次定例"]
+    assert len(fake.posts) == 1
+    channel_id, message = fake.posts[0]
+    assert channel_id == "1"
+    assert "カボス議事録: 週次定例\n" in message["content"]
+    assert "カボス議事録:   週次定例" not in message["content"]
+    assert meeting.data["discord_notify"]["status"] == "posted"
+    assert db.commit.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_handle_title_gate_runs_after_existing_checks(monkeypatch):
+    _configure_discord(monkeypatch)
+    fake = FakeDiscord(_channels())
+    model = _install_counted_fakes(
+        monkeypatch, fake, {"channel_id": "1", "confidence": 0.95, "reason": "定例"}
+    )
+    envelope = _envelope()
+    envelope["data"]["title"] = "meeting-42"  # calendar_event.title と不一致
+
+    # meeting 無し + 不一致 → meeting_not_found(ゲートより前)
+    missing_db = _fake_db(None)
+    missing = await handle_drive_export_completed(
+        missing_db, envelope, http_client_factory=FakeClientFactory()
+    )
+    assert missing == {"status": "skipped", "reason": "meeting_not_found"}
+    assert missing_db.execute.await_count == 1
+
+    # duplicate + 不一致 → duplicate(ゲートより前)
+    duplicate_meeting = SimpleNamespace(
+        id=42,
+        data={
+            "discord_notify": {
+                "event_id": envelope["event_id"],
+                "status": "posted",
+                "channel_id": "1",
+            }
+        },
+    )
+    duplicate_db = _fake_db(duplicate_meeting)
+    duplicate = await handle_drive_export_completed(
+        duplicate_db, envelope, http_client_factory=FakeClientFactory()
+    )
+    assert duplicate == {"status": "duplicate", "channel_id": "1"}
+
+    # env 未設定 + 不一致 → discord_not_configured かつ DB 取得 0 回
+    monkeypatch.delenv("KABOSU_DISCORD_BOT_TOKEN", raising=False)
+    monkeypatch.delenv("KABOSU_DISCORD_GUILD_ID", raising=False)
+    monkeypatch.delenv("KABOSU_DISCORD_DEFAULT_CHANNEL_ID", raising=False)
+    unconfigured_db = _fake_db(SimpleNamespace(id=42, data={}))
+    unconfigured = await handle_drive_export_completed(
+        unconfigured_db, envelope, http_client_factory=FakeClientFactory()
+    )
+    assert unconfigured == {"status": "skipped", "reason": "discord_not_configured"}
+    assert unconfigured_db.execute.await_count == 0
+
+    assert fake.list_calls == 0
+    assert fake.posts == []
+    assert model.calls == 0
+
+
+# ---------------------------------------------------------------------------
 # Route
 # ---------------------------------------------------------------------------
 
