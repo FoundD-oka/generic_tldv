@@ -6,35 +6,46 @@
   "model": "fable",
   "review_mode": "contract",
   "reviewed_base": "67ea03210c2de4c8723780402d302948b138d939",
-  "reviewed_commit": "cfcb492d3cbf77f8adb38649158f1c3d67be2d14",
-  "target_sha256": "sha256:7c476929b8afc5e026c9b5e1ac8309469ff6ee6eae046d1d0b7695d8c44abcdd",
+  "reviewed_commit": "9ed15ccbd927f36daa0dda8f7df376efe81d33ff",
+  "target_sha256": "sha256:f5b3210615b5716ac3e14d13070aeba125d74dbdf2b72aa0c3f429cf096d5753",
   "contract_sha256": "sha256:d0e534b7310ad3e8d6d6a7685473a14b4dafe1e326ff289aa2579823455cb21e",
-  "prompt_sha256": "sha256:ccbc8ba3b7ee0e13c31694ed61d69e44ddb40068011164cb08880297175885f1",
-  "response_sha256": "sha256:bd52dae9d097fcac123bddcb27f61331ef93942928ccfb0099c6821cf2efefda",
-  "created_at": "2026-08-25T19:15:45.778950+00:00",
+  "prompt_sha256": "sha256:5ca1d83d775519d818ae994be5f34b310013a3d74972a62ae0c2b8e867813b75",
+  "response_sha256": "sha256:22f0d511e38380365a26cde5a8706a9aefa9cbb38a951bbe1413672013a13df4",
+  "created_at": "2026-08-26T05:53:45.999219+00:00",
   "verdict": "READY",
-  "summary": "base 67ea032..HEAD cfcb492 の差分を検証契約(AT-001〜010 / FP-001〜010 / NFT-001〜006 / RF-001〜003)に静的に照合し、契約 ID に対応する違反は 0 件。送信側は done 確定 commit 後のみ決定的 event_id(event_key)で build_envelope/deliver_with_result を使いフック送信、rerun 分岐では送らない。ドメイン権限は permissions API を 1 回だけ発行し permission_id を保存、失敗時は failed に file_id を保存しフック未送信。受信側は毎回 Guild チャンネル取得・type 0/5 候補化・厳格 JSON パース・閾値 0.85 境界・全失敗系の default フォールバック・403/404 の 1 回再投稿・default 失敗 502・HMAC fail-closed(503/401/400)・duplicate 0 回を満たすテストが揃っている。差分ファイルは .hw/plans 除き 8 件、新規依存なし、禁止ファイル(webhooks.py / webhook_url.py / meetings.py / api-gateway / .env / deploy gcp・helm・lite / AGENTS.md / CLAUDE.md)は含まれず、既存テストファイルの削除行なし。response_format はリクエスト body に含まれない(RF-003)。pytest / compose config / verify.sh の実行証拠は pr-ready-gate と CI で確定させること。",
-  "confidence": "high",
+  "summary": "base 67ea032..9ed15cc の差分を検証契約(AT-001〜010 / FP-001〜010 / NFT-001〜006 / RF-003)と照合した。送信側(drive_export.py)は done 分岐の commit 後にのみ内部フックを送り、event_id は event_key(...) で決定的、ledger の should_deliver を尊重、queued 分岐では送らない。ドメイン閲覧権限は KABOSU_DRIVE_SHARE_DOMAIN 設定時のみ 1 回 POST し permission_id を保存、失敗時は failed に file_id を残しフック未送信。受信側(discord_notify.py / main.py)は HMAC 検証(secret 未設定 503 / 不一致・期限切れ・欠落 401 / Bearer のみ 401)、event_type 不一致 400、毎回 Guild チャンネル取得→type 0/5 のみ候補化、厳格 JSON パース、閾値 0.85 境界、403/404 で default へ 1 回だけ再投稿、default 失敗で DiscordDeliveryError→502、同一 event_id は duplicate、Discord env 未設定は skipped。各契約 ID に対応するテストが差分内に存在し、既存テストの削除行なし、実装差分ファイル数 8(≤9)、pip 依存追加なし、webhooks.py / webhook_url.py / meetings.py / api-gateway / .env / deploy/gcp / helm / lite / AGENTS.md / CLAUDE.md は差分に含まれない。response_format はコメントのみでリクエスト body に含まれない。契約違反は検出されなかったため READY。実行系証拠(pytest / compose config / verify.sh / GitNexus)は差分外(PR 本文)に依存する。",
+  "confidence": "medium",
   "violations": [],
   "advisory": [
     {
-      "title": "Guild チャンネル一覧取得の失敗が 500 になる",
-      "file": "services/calendar-service/app/discord_notify.py",
-      "detail": "handle_drive_export_completed 内で discord.list_guild_channels() は try の外にあり、非 2xx の DiscordHTTPError は DiscordDeliveryError に包まれずに route へ伝播し、FastAPI 既定の 500 になる。契約 FP-005 は default 投稿失敗のみ 502 を要求しているので契約外だが、送信側リトライへ委ねる意図なら DiscordDeliveryError に包んで 502 に統一する(または list 失敗時に候補空・default 投稿へ倒す)方が一貫する。再現: FakeDiscord.list_guild_channels が DiscordHTTPError(500) を raise → route が 500。"
+      "title": "KABOSU_DISCORD_ROUTER_MAX_COMPLETION_TOKENS が未文書化",
+      "detail": "9ed15cc で追加された env(既定 768)が README の環境変数表・compose・env-example のいずれにも無い。運用者が調整可能であることが分からないので、README 表と compose の calendar-service.environment に追記を推奨(契約外)。",
+      "file": "services/calendar-service/app/discord_notify.py"
     },
     {
-      "title": "duplicate / meeting_not_found 経路で with_for_update の行ロックを commit/rollback せずに返す",
-      "file": "services/calendar-service/app/discord_notify.py",
-      "detail": "SELECT ... FOR UPDATE 後に duplicate 判定で早期 return しており、トランザクション終了は get_db のセッション close に依存する。現状は問題にならないが、get_db の実装が変わると再送が並行した際にロック保持時間が伸びる。契約外(AT-007 は create_message 0 回と status のみ)。"
+      "title": "with_for_update の行ロックを外部 I/O(Groq + Discord)の間保持している",
+      "detail": "handle_drive_export_completed は Meeting 行を FOR UPDATE で取得したまま、モデル呼び出し(最大 8s)と Discord 投稿(最大 10s×2)を行う。同時刻に sweep が同じ meeting.data を更新しようとするとロック待ちになる。PoC としては二重投稿防止に有効だが、本番化時は「ロックなしで読む→投稿→短いトランザクションで再確認して書く」への変更を検討。",
+      "file": "services/calendar-service/app/discord_notify.py"
     },
     {
-      "title": "hook 失敗は warning ログのみで export 結果に反映されない",
-      "file": "services/meeting-api/meeting_api/drive_export.py",
-      "detail": "契約(AT-001)どおり done 確定後にフックを送るため、deliver_with_result の failed/queued は outbound_events ledger にだけ残り drive_export 状態には現れない。運用で通知欠落を追う際は ledger(channel=drive_export_hooks)を参照する旨を README か運用メモに記載すると良い。"
+      "title": "outbound_events の claim/mark は完全にモックされており、実シグネチャ不一致は単体テストで検出されない",
+      "detail": "send_drive_export_completed_hook の失敗は run_drive_export 側で warning に握りつぶされるため、claim_outbound_event / mark_outbound_event の引数名や戻り値タプルが実装と食い違っていても通知が静かに送られないだけで気付きにくい。build_envelope / build_headers は実物を使った検証があるが、ledger 関数についても実物+db モックの 1 ケース、もしくはライブ smoke を PR 本文の証拠に残すことを推奨。",
+      "file": "services/meeting-api/meeting_api/drive_export.py"
     },
     {
-      "title": "証拠パック(pytest / compose config / verify.sh / GitNexus impact)の添付を gate で確認",
-      "detail": "本レビューは差分の静的照合のみ。NFT-002〜006 と各 pytest 出力は PR 本文または .hw/plans/poc-kabosu-drive-discord-routing/evidence/ に貼り、pr-ready-gate と CI で確定させること。"
+      "title": "送信側 URL 設定・secret 未設定の組み合わせが静かに失敗する",
+      "detail": "KABOSU_DRIVE_EXPORT_WEBHOOK_URL だけ設定し KABOSU_DRIVE_EXPORT_WEBHOOK_SECRET が空だと、受信側は 503 を返し続け、送信側は warning ログのみで通知が届かない(fail-closed 自体は契約どおり)。起動時または初回送信時に「URL あり・secret なし」を明示的に warn すると運用で気付きやすい。",
+      "file": "services/meeting-api/meeting_api/drive_export.py"
+    },
+    {
+      "title": "選択先チャンネルが 403/404 以外(429/5xx)を返した場合は default へ倒さず 502 になる",
+      "detail": "契約 FP-004 は 403/404 のみ規定しており適合しているが、Discord のレート制限(429)や一時障害では default 再投稿ではなく送信側リトライ(モデル再呼び出しを伴う)に委ねられる。挙動として意図どおりなら README のフォールバック規則に一行追記しておくと運用時の混乱を防げる。",
+      "file": "services/calendar-service/app/discord_notify.py"
+    },
+    {
+      "title": "実行系証拠(NFT-002〜006)は差分に含まれていない",
+      "detail": "pytest 出力・compose config -q・verify.sh・GitNexus impact/detect_changes の出力は .hw/plans/<task>/evidence/ に無く、PR 本文への貼付に依存する。pr-ready-gate で PR 本文の証拠有無を確認すること。本 READY は差分の契約適合性に基づく判定で、ランタイム結果の再実行はしていない。",
+      "file": ".hw/plans/poc-kabosu-drive-discord-routing/verification-contract.md"
     }
   ]
 }
