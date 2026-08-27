@@ -37,12 +37,13 @@ Idempotency:
 """
 
 import asyncio
+import copy
 import io
 import logging
 import os
 import struct
 import uuid
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -562,8 +563,8 @@ async def finalize_recording_master(meeting_id: int, db: AsyncSession) -> None:
     the change.
     """
     storage = create_storage_client()
-    finalized_any = False
 
+    # (R) read phase --------------------------------------------------------
     meeting_q = await db.execute(
         select(Meeting)
         .where(Meeting.id == meeting_id)
@@ -609,6 +610,16 @@ async def finalize_recording_master(meeting_id: int, db: AsyncSession) -> None:
             "[FINALIZER] meeting_id=%s — recovered %d recording entr(ies) inline before finalize",
             meeting_id, len(rec_list),
         )
+
+    # Work on a private copy and end the transaction: master assembly below
+    # downloads/uploads whole recordings, which routinely outlives Postgres'
+    # idle-in-transaction timeout. Nothing is written until the (W) phase.
+    rec_list = copy.deepcopy(rec_list)
+    await db.rollback()
+
+    # (I/O) master assembly — no transaction held ---------------------------
+    # (recording_id, media_file_id, original_storage_path, master_key)
+    finalized: List[Tuple[Any, Any, str, str]] = []
 
     for rec_idx, rec_payload in enumerate(rec_list):
         if not isinstance(rec_payload, dict):
@@ -669,6 +680,42 @@ async def finalize_recording_master(meeting_id: int, db: AsyncSession) -> None:
                 # Idempotent re-run.
                 continue
 
+            finalized.append((rec_payload.get("id"), mf_id, mf_path, master_key))
+            logger.info(
+                "[FINALIZER] [DATA] meeting_id=%s mf_id=%s storage_path → master: %s",
+                meeting_id, mf_id, master_key,
+            )
+
+    # (W) write phase — re-lock, re-read, apply by identity -----------------
+    await db.refresh(meeting, with_for_update=True)
+    meeting_data = dict(meeting.data or {})
+    rec_list = list(meeting_data.get("recordings") or [])
+    # Key on (recording id, media_file id) so a concurrent writer that
+    # reordered media_files cannot make us update the wrong entry. Entries
+    # without an id fall back to the storage_path we read in the I/O phase.
+    updates = {
+        (recording_id, mf_id if mf_id is not None else original_path): master_key
+        for recording_id, mf_id, original_path, master_key in finalized
+    }
+    finalized_any = False
+
+    for rec_idx, rec_payload in enumerate(rec_list):
+        if not isinstance(rec_payload, dict):
+            continue
+        media_files = list(rec_payload.get("media_files") or [])
+        recording_id = rec_payload.get("id")
+
+        for mf_idx, mf in enumerate(media_files):
+            if not isinstance(mf, dict):
+                continue
+            mf_key = mf.get("id") if mf.get("id") is not None else mf.get("storage_path")
+            master_key = updates.get((recording_id, mf_key))
+            if master_key is None:
+                continue
+            if mf.get("storage_path") == master_key:
+                # Someone else already wrote the master path.
+                continue
+
             mf["storage_path"] = master_key
             mf["finalized_at"] = mf.get("finalized_at") or _now_iso()
             mf["finalized_by"] = "recording_finalizer.master"
@@ -682,10 +729,6 @@ async def finalize_recording_master(meeting_id: int, db: AsyncSession) -> None:
             mf["is_final"] = True
             media_files[mf_idx] = mf
             finalized_any = True
-            logger.info(
-                "[FINALIZER] [DATA] meeting_id=%s mf_id=%s storage_path → master: %s",
-                meeting_id, mf_id, master_key,
-            )
 
         rec_payload["media_files"] = media_files
 
@@ -697,7 +740,6 @@ async def finalize_recording_master(meeting_id: int, db: AsyncSession) -> None:
         # The URL is stable (a route, not a presigned URL); the backend
         # endpoint at /recordings/<id>/master resolves to a fresh
         # presigned URL on each fetch.
-        recording_id = rec_payload.get("id")
         if recording_id is not None:
             has_audio_master = any(
                 mf.get("type") == "audio" and mf.get("finalized_by") == "recording_finalizer.master"
@@ -730,6 +772,9 @@ async def finalize_recording_master(meeting_id: int, db: AsyncSession) -> None:
             "[FINALIZER] meeting_id=%s — committed master storage_path update(s) to meeting.data",
             meeting_id,
         )
+    else:
+        # Nothing to write — release the row lock taken by the refresh above.
+        await db.rollback()
 
 
 async def finalize_recording_master_job(meeting_id: int) -> None:
