@@ -411,11 +411,15 @@ async def recover_recordings_jsonb_from_storage(
     if data.get("recording_enabled") is False:
         return False
 
+    meeting_id = meeting.id
+    user_id = meeting.user_id
+
     sessions = (await db.execute(
-        select(MeetingSession).where(MeetingSession.meeting_id == meeting.id)
+        select(MeetingSession).where(MeetingSession.meeting_id == meeting_id)
     )).scalars().all()
     if not sessions:
         return False
+    session_snapshots = [(s.session_uid, s.session_start_time) for s in sessions]
 
     storage = None
     now = datetime.utcnow().isoformat()
@@ -425,12 +429,17 @@ async def recover_recordings_jsonb_from_storage(
         for rec in recordings
         if isinstance(rec, dict) and rec.get("session_uid")
     }
-    changed = False
 
-    for session in sessions:
-        if session.session_uid in existing_sessions:
+    # Close the read transaction before the storage listing below: Postgres
+    # disconnects idle-in-transaction sessions and the listing is unbounded
+    # in time. Only snapshots may be used until the write phase re-reads.
+    await db.rollback()
+
+    recovered: list = []
+    for session_uid, session_start_time in session_snapshots:
+        if session_uid in existing_sessions:
             continue
-        prefix = f"recordings/{meeting.user_id}/"
+        prefix = f"recordings/{user_id}/"
         try:
             if storage is None:
                 storage = _get_default_storage_client()
@@ -438,13 +447,13 @@ async def recover_recordings_jsonb_from_storage(
         except Exception as e:
             logger.warning(
                 "[finalizer-recovery] storage list failed meeting_id=%s prefix=%s error=%s",
-                meeting.id, prefix, str(e)[:200],
+                meeting_id, prefix, str(e)[:200],
             )
             continue
 
-        grouped: dict[tuple[int, str, str], list[str]] = {}
+        grouped: dict = {}
         for key in keys:
-            parsed = _parse_recording_chunk_key(meeting.user_id, session.session_uid, key)
+            parsed = _parse_recording_chunk_key(user_id, session_uid, key)
             if parsed is None:
                 continue
             grouped.setdefault(parsed, []).append(key)
@@ -467,7 +476,7 @@ async def recover_recordings_jsonb_from_storage(
                     "[finalizer-recovery] lane identity metadata lost for recovered "
                     "entry meeting_id=%s media_type=%s — recovered from storage keys "
                     "alone, no lane_label available (issue #25 BUG-014)",
-                    meeting.id, media_type,
+                    meeting_id, media_type,
                 )
             media_files.append({
                 "id": _new_recording_numeric_id(),
@@ -480,7 +489,7 @@ async def recover_recordings_jsonb_from_storage(
                 "chunk_count": len(chunk_keys),
                 "duration_seconds": None,
                 "chunk_seq": len(chunk_keys) - 1,
-                "first_chunk_at": getattr(session.session_start_time, "isoformat", lambda: now)(),
+                "first_chunk_at": getattr(session_start_time, "isoformat", lambda: now)(),
                 "metadata": {},
                 "created_at": now,
                 "is_final": False,
@@ -489,31 +498,47 @@ async def recover_recordings_jsonb_from_storage(
             })
         if recording_id is None or not media_files:
             continue
-        recordings.append({
+        recovered.append({
             "id": recording_id,
-            "meeting_id": meeting.id,
-            "user_id": meeting.user_id,
-            "session_uid": session.session_uid,
+            "meeting_id": meeting_id,
+            "user_id": user_id,
+            "session_uid": session_uid,
             "source": "bot",
             "status": "completed",
             "created_at": now,
             "completed_at": now,
             "media_files": media_files,
         })
-        existing_sessions.add(session.session_uid)
-        changed = True
+        existing_sessions.add(session_uid)
         logger.info(
             "[finalizer-recovery] recovered JSONB metadata meeting_id=%s recording_id=%s session_uid=%s media_files=%s",
-            meeting.id, recording_id, session.session_uid, len(media_files),
+            meeting_id, recording_id, session_uid, len(media_files),
         )
 
-    if changed:
-        data["recordings"] = recordings
-        meeting.data = data
-        attributes.flag_modified(meeting, "data")
-        await db.commit()
+    if not recovered:
+        return False
 
-    return changed
+    # Write phase: re-lock, re-read, merge by session_uid.
+    await db.refresh(meeting, with_for_update=True)
+    current = dict(meeting.data or {}) if isinstance(meeting.data, dict) else {}
+    current_recordings = list(current.get("recordings") or [])
+    already_present = {
+        rec.get("session_uid")
+        for rec in current_recordings
+        if isinstance(rec, dict) and rec.get("session_uid")
+    }
+    to_add = [rec for rec in recovered if rec["session_uid"] not in already_present]
+    if not to_add:
+        await db.rollback()
+        return False
+
+    current_recordings.extend(to_add)
+    current["recordings"] = current_recordings
+    meeting.data = current
+    attributes.flag_modified(meeting, "data")
+    await db.commit()
+
+    return True
 
 
 async def _sweep_unfinalized_recordings(
@@ -549,6 +574,12 @@ async def _sweep_unfinalized_recordings(
 
         for row in id_rows:
             meeting_id = row[0]
+            # --- phase 1: claim/read transaction -------------------------
+            # Read everything the storage phase needs, then end the
+            # transaction. Postgres kills idle-in-transaction sessions after
+            # 60s, and the storage listing below can take longer than that;
+            # holding the row lock across that I/O is what made the sweep
+            # die mid-run.
             meeting = (await db.execute(
                 select(Meeting)
                 .where(Meeting.id == meeting_id)
@@ -556,12 +587,15 @@ async def _sweep_unfinalized_recordings(
                 .execution_options(populate_existing=True)
             )).scalar_one_or_none()
             if meeting is None:
+                await db.rollback()
                 continue
 
             data = dict(meeting.data or {}) if isinstance(meeting.data, dict) else {}
             if data.get("recording_enabled") is False:
+                await db.rollback()
                 continue
 
+            user_id = meeting.user_id
             recordings = list(data.get("recordings") or [])
             has_unfinalized_jsonb = any(
                 isinstance(rec, dict)
@@ -574,10 +608,12 @@ async def _sweep_unfinalized_recordings(
                 for rec in recordings
             )
 
-            changed = False
             sessions = (await db.execute(
-                select(MeetingSession).where(MeetingSession.meeting_id == meeting.id)
+                select(MeetingSession).where(MeetingSession.meeting_id == meeting_id)
             )).scalars().all()
+            session_snapshots = [
+                (s.session_uid, s.session_start_time) for s in sessions
+            ]
 
             existing_sessions = {
                 rec.get("session_uid")
@@ -585,11 +621,18 @@ async def _sweep_unfinalized_recordings(
                 if isinstance(rec, dict) and rec.get("session_uid")
             }
 
-            for session in sessions:
-                if session.session_uid in existing_sessions:
+            # Release the row lock and close the transaction before any I/O.
+            # Only snapshots (plain values) may be used from here on — ORM
+            # attributes are expired by the rollback.
+            await db.rollback()
+
+            # --- phase 2: storage I/O, no transaction held ---------------
+            recovered: list = []
+            for session_uid, session_start_time in session_snapshots:
+                if session_uid in existing_sessions:
                     continue
 
-                prefix = f"recordings/{meeting.user_id}/"
+                prefix = f"recordings/{user_id}/"
                 try:
                     if storage is None:
                         storage = _get_default_storage_client()
@@ -598,13 +641,13 @@ async def _sweep_unfinalized_recordings(
                     logger.warning(
                         "[sweep] unfinalized-recordings storage list failed "
                         "meeting_id=%s prefix=%s error=%s",
-                        meeting.id, prefix, str(e)[:200],
+                        meeting_id, prefix, str(e)[:200],
                     )
                     continue
 
-                grouped: dict[tuple[int, str, str], list[str]] = {}
+                grouped: dict = {}
                 for key in keys:
-                    parsed = _parse_recording_chunk_key(meeting.user_id, session.session_uid, key)
+                    parsed = _parse_recording_chunk_key(user_id, session_uid, key)
                     if parsed is None:
                         continue
                     grouped.setdefault(parsed, []).append(key)
@@ -627,7 +670,7 @@ async def _sweep_unfinalized_recordings(
                             "for recovered entry meeting_id=%s media_type=%s — recovered "
                             "from storage keys alone, no lane_label available "
                             "(issue #25 BUG-014)",
-                            meeting.id, media_type,
+                            meeting_id, media_type,
                         )
                     media_files.append({
                         "id": _new_recording_numeric_id(),
@@ -640,7 +683,7 @@ async def _sweep_unfinalized_recordings(
                         "chunk_count": len(chunk_keys),
                         "duration_seconds": None,
                         "chunk_seq": len(chunk_keys) - 1,
-                        "first_chunk_at": getattr(session.session_start_time, "isoformat", lambda: now)(),
+                        "first_chunk_at": getattr(session_start_time, "isoformat", lambda: now)(),
                         "metadata": {},
                         "created_at": now,
                         "is_final": False,
@@ -651,44 +694,61 @@ async def _sweep_unfinalized_recordings(
                 if recording_id is None or not media_files:
                     continue
 
-                recordings.append({
+                recovered.append({
                     "id": recording_id,
-                    "meeting_id": meeting.id,
-                    "user_id": meeting.user_id,
-                    "session_uid": session.session_uid,
+                    "meeting_id": meeting_id,
+                    "user_id": user_id,
+                    "session_uid": session_uid,
                     "source": "bot",
                     "status": "completed",
                     "created_at": now,
                     "completed_at": now,
                     "media_files": media_files,
                 })
-                existing_sessions.add(session.session_uid)
-                changed = True
+                existing_sessions.add(session_uid)
                 logger.warning(
                     "[sweep] unfinalized-recordings recovered JSONB metadata "
                     "meeting_id=%s recording_id=%s session_uid=%s media_files=%s",
-                    meeting.id, recording_id, session.session_uid, len(media_files),
+                    meeting_id, recording_id, session_uid, len(media_files),
                 )
 
-            if changed:
-                data["recordings"] = recordings
-                meeting.data = data
-                attributes.flag_modified(meeting, "data")
-                await db.commit()
+            # --- phase 3: write transaction ------------------------------
+            # Re-lock and re-read, then merge by session_uid so a writer that
+            # landed during the I/O phase is not clobbered.
+            changed = False
+            if recovered:
+                await db.refresh(meeting, with_for_update=True)
+                current = dict(meeting.data or {}) if isinstance(meeting.data, dict) else {}
+                current_recordings = list(current.get("recordings") or [])
+                already_present = {
+                    rec.get("session_uid")
+                    for rec in current_recordings
+                    if isinstance(rec, dict) and rec.get("session_uid")
+                }
+                to_add = [rec for rec in recovered if rec["session_uid"] not in already_present]
+                if to_add:
+                    current_recordings.extend(to_add)
+                    current["recordings"] = current_recordings
+                    meeting.data = current
+                    attributes.flag_modified(meeting, "data")
+                    await db.commit()
+                    changed = True
+                else:
+                    await db.rollback()
 
             if changed or has_unfinalized_jsonb:
                 try:
-                    await finalize_recording_master(meeting.id, db)
+                    await finalize_recording_master(meeting_id, db)
                     swept += 1
                     logger.warning(
                         "[sweep] unfinalized-recordings finalized meeting_id=%s "
                         "changed=%s had_unfinalized_jsonb=%s",
-                        meeting.id, changed, has_unfinalized_jsonb,
+                        meeting_id, changed, has_unfinalized_jsonb,
                     )
                 except Exception as e:
                     logger.error(
                         "[sweep] unfinalized-recordings finalize failed meeting_id=%s: %s",
-                        meeting.id, str(e)[:200], exc_info=True,
+                        meeting_id, str(e)[:200], exc_info=True,
                     )
                     await db.rollback()
 

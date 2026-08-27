@@ -136,6 +136,18 @@ async def test_finalize_meeting_builds_lane_master_but_no_lane_playback_url():
 
     db.commit = _commit
 
+    # The finalizer now closes the read transaction before storage I/O and
+    # re-locks the row for the write phase.
+    async def _rollback():
+        return None
+
+    db.rollback = _rollback
+
+    async def _refresh(obj, **kwargs):
+        return None
+
+    db.refresh = _refresh
+
     with patch.object(fin, "create_storage_client", return_value=storage), \
          patch("sqlalchemy.orm.attributes.flag_modified", new=MagicMock()):
         await fin.finalize_recording_master(meeting.id, db)
