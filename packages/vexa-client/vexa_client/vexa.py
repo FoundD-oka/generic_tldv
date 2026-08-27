@@ -256,14 +256,87 @@ class VexaClient:
 
     # --- Transcriptions ---
 
-    def get_meetings(self) -> List[Dict[str, Any]]:
+    def get_meetings_page(self,
+                          limit: Optional[int] = None,
+                          offset: Optional[int] = None,
+                          status: Optional[str] = None,
+                          platform: Optional[str] = None,
+                          include_data: bool = False) -> Dict[str, Any]:
         """
-        Retrieves the list of meetings initiated by the user associated with the API key.
-        
-        Each meeting includes metadata such as:
+        Retrieves one page of the user's meetings.
+
+        Args:
+            limit: Page size (server default 50, max 100). None → server default.
+            offset: Rows to skip. None → server default (0).
+            status: Optional status filter (active, completed, failed).
+            platform: Optional platform filter (google_meet, teams, zoom).
+            include_data: True → ask the API for the full `data` JSONB instead
+                of the default list summary.
+
+        Returns:
+            {"meetings": List[Dict[str, Any]], "has_more": bool}
+        """
+        params: Dict[str, Any] = {}
+        if limit is not None:
+            params["limit"] = limit
+        if offset is not None:
+            params["offset"] = offset
+        if status is not None:
+            params["status"] = status
+        if platform is not None:
+            params["platform"] = platform
+        if include_data:
+            params["include"] = "data"
+
+        response = self._request("GET", "/meetings", api_type='user',
+                                 params=params or None)
+        meetings = response.get("meetings", [])
+
+        # Ensure each meeting has a data field (backward compatibility)
+        for meeting in meetings:
+            if "data" not in meeting:
+                meeting["data"] = {}
+
+        return {"meetings": meetings, "has_more": bool(response.get("has_more", False))}
+
+    def get_meetings(self,
+                     limit: Optional[int] = None,
+                     offset: Optional[int] = None,
+                     status: Optional[str] = None,
+                     platform: Optional[str] = None,
+                     include_data: bool = False) -> List[Dict[str, Any]]:
+        """
+        Retrieves a page of meetings initiated by the user associated with the API key.
+
+        Called without arguments this returns the server default page (50 most
+        recent meetings, `data` as the list summary). Use `get_meetings_page`
+        when you need the `has_more` flag for pagination.
+
+        Each meeting includes:
         - Basic meeting info (id, platform, status, timestamps, etc.)
-        - Meeting data (name, participants, languages, notes) in the 'data' field
-        - Auto-collected participants and languages (populated when meeting completes)
+        - `data`: by default the list summary
+          {
+              "name": str | None,
+              "calendar_title": str | None,
+              "final_transcription": {"status": str} | None,
+              "final_transcription_status": str | None,
+              "completion_reason": str | None,
+              "participants": List[str] (first 3),
+              "participants_count": int,
+              "notes_preview": str | None (first 120 chars),
+              "languages": List[str] | None,
+              "last_transition": dict | None,
+              "has_recording": bool
+          }
+          Pass include_data=True for the full `data` JSONB (name, participants,
+          languages, notes, recordings, status_transition, ...).
+
+        Args:
+            limit: Page size (server default 50, max 100).
+            offset: Rows to skip.
+            status: Optional status filter.
+            platform: Optional platform filter.
+            include_data: True → full `data` instead of the summary.
 
         Returns:
             List of dictionaries, each representing a Meeting object with the following structure:
@@ -274,45 +347,45 @@ class VexaClient:
                 "status": str,
                 "start_time": str (ISO datetime),
                 "end_time": str (ISO datetime),
-                "data": {
-                    "name": str (optional),
-                    "participants": List[str] (optional, auto-collected from transcripts),
-                    "languages": List[str] (optional, auto-collected from transcripts),  
-                    "notes": str (optional)
-                },
+                "data": {...},
                 "created_at": str (ISO datetime),
                 "updated_at": str (ISO datetime),
                 ...
             }
         """
-        response = self._request("GET", "/meetings", api_type='user')
-        # The API returns a dict {"meetings": [...]}, extract the list.
-        meetings = response.get("meetings", [])
-        
-        # Ensure each meeting has a data field (backward compatibility)
-        for meeting in meetings:
-            if "data" not in meeting:
-                meeting["data"] = {}
-                
-        return meetings
+        return self.get_meetings_page(
+            limit=limit,
+            offset=offset,
+            status=status,
+            platform=platform,
+            include_data=include_data,
+        )["meetings"]
 
     def get_meeting_by_id(self, platform: str, native_meeting_id: str) -> Optional[Dict[str, Any]]:
         """
         Retrieves a specific meeting by platform and native ID from the user's meetings list.
-        
+
+        Walks the paginated list (100 per page, full `data`) until the meeting
+        is found or the server reports no further pages.
+
         Args:
             platform: Platform identifier (e.g., 'google_meet', 'teams'). Note: Zoom is not currently supported.
             native_meeting_id: The platform-specific meeting identifier.
-            
+
         Returns:
             Dictionary representing the Meeting object, or None if not found.
         """
-        meetings = self.get_meetings()
-        for meeting in meetings:
-            if (meeting.get("platform") == platform and 
-                meeting.get("native_meeting_id") == native_meeting_id):
-                return meeting
-        return None
+        PAGE = 100
+        offset = 0
+        while True:
+            page = self.get_meetings_page(limit=PAGE, offset=offset, include_data=True)
+            for meeting in page["meetings"]:
+                if (meeting.get("platform") == platform and
+                    meeting.get("native_meeting_id") == native_meeting_id):
+                    return meeting
+            if not page["has_more"]:
+                return None
+            offset += PAGE
 
     @staticmethod
     def get_meeting_metadata(meeting: Dict[str, Any]) -> Dict[str, Any]:

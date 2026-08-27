@@ -1128,7 +1128,10 @@ class ErrorResponse(BaseModel):
     detail: str # Standard FastAPI error response uses 'detail'
 
 class MeetingListResponse(BaseModel):
-    meetings: List[MeetingResponse] 
+    meetings: List[MeetingResponse]
+    # Page peek flag (limit + 1 row): True when the caller can advance `offset`.
+    # Defaults to False so existing producers stay valid without changes.
+    has_more: bool = False
 
 # --- ADD Bot Status Schemas ---
 class BotStatus(BaseModel):
