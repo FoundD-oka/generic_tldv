@@ -1,0 +1,22 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {
+      "level": "S",
+      "reason": "要求 1〜10 はクライアント合意済みで閾値・出力形式・フォールバック先・対象外まで明文化されている。reframe は経路選択(SSRF 検証により per-meeting webhook 経路が不成立)だけで、要求自体は変えていない。"
+    },
+    "technical_unknown": {
+      "level": "M",
+      "reason": "Groq の json_object モードが openai/gpt-oss-20b で受け付けられるか、Shared Drive の組織ポリシーで domain 共有が 403 にならないかは未実測。どちらも失敗時は default 投稿 / retryable failed に落ちる設計で機能停止はしないが、ライブ挙動の確信度は中。"
+    },
+    "blast_radius": {
+      "level": "M",
+      "reason": "run_drive_export(sweep から呼ばれる既存経路)に権限付与とフック送信を差し込む。env 未設定時は no-op で既存テスト無改変を契約にしているが、failed 状態への file_id 保存など既存状態遷移に手を入れる。compose の 2 サービスに env 追加。"
+    },
+    "verifiability": {
+      "level": "M",
+      "reason": "失敗系はすべてユニットテストで機械検証できるが、Discord/Drive/Groq の実 API 到達性はローカルで検証不能(ライブは手動確認)。"
+    }
+  },
+  "verdict_reason": "L 相当の軸なし。技術的未知・影響範囲・検証可能性に M が残るため M。Fable 契約レビュー必須。"
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { signIn } from "next-auth/react";
@@ -36,7 +36,7 @@ interface HealthStatus {
 
 export default function LoginPage() {
   const router = useRouter();
-  const { sendMagicLink, isAuthenticated } = useAuthStore();
+  const { sendMagicLink, isAuthenticated, signInSharedDashboard } = useAuthStore();
   const { config } = useRuntimeConfig();
   const brand = config?.brand || DEFAULT_DASHBOARD_BRAND;
   const copy = getDashboardCopy(brand.locale);
@@ -46,6 +46,12 @@ export default function LoginPage() {
   const [meetingInput, setMeetingInput] = useState("");
   const [healthStatus, setHealthStatus] = useState<HealthStatus | null>(null);
   const [healthLoading, setHealthLoading] = useState(true);
+  const [sharedAuthFailed, setSharedAuthFailed] = useState(false);
+  const [sharedAuthPending, setSharedAuthPending] = useState(false);
+  // Shared login is attempted at most once automatically; every further attempt is manual.
+  const sharedLoginAttempted = useRef(false);
+  // Guards against issuing more than one navigation from this page.
+  const navigated = useRef(false);
 
   const parsedInput = useMemo(() => parseMeetingInput(meetingInput), [meetingInput]);
   const isMeetingValid = parsedInput !== null;
@@ -53,8 +59,33 @@ export default function LoginPage() {
   const isSupportedPlatform = parsedInput?.platform === "google_meet" || parsedInput?.platform === "teams";
   const canContinue = isMeetingValid && isSupportedPlatform;
 
+  // Shared-dashboard auto login. Navigating on `sharedAuth.enabled` alone (without
+  // knowing whether the login succeeded) is what bounced this page against the
+  // protected routes forever, so only a confirmed success may navigate.
+  const runSharedLogin = useCallback(async () => {
+    setSharedAuthPending(true);
+    // Claim navigation control before awaiting: a successful sign-in flips
+    // `isAuthenticated` inside the store, which can re-run the effect below before
+    // this continuation resumes. Released again if the attempt turns out to fail.
+    navigated.current = true;
+    try {
+      const result = await signInSharedDashboard();
+      if (result.success) {
+        setSharedAuthFailed(false);
+        router.replace("/meetings");
+        return;
+      }
+      navigated.current = false;
+      setSharedAuthFailed(true);
+    } finally {
+      setSharedAuthPending(false);
+    }
+  }, [signInSharedDashboard, router]);
+
   useEffect(() => {
+    if (navigated.current) return;
     if (isAuthenticated) {
+      navigated.current = true;
       router.push("/");
       return;
     }
@@ -64,7 +95,9 @@ export default function LoginPage() {
         const res = await fetch(withBasePath("/api/config"));
         const config = await res.json();
         if (config.sharedAuth?.enabled) {
-          router.replace("/meetings");
+          if (sharedLoginAttempted.current) return;
+          sharedLoginAttempted.current = true;
+          await runSharedLogin();
           return;
         }
         if (config.hostedMode && config.webappUrl) {
@@ -74,7 +107,7 @@ export default function LoginPage() {
       } catch {}
     };
     checkHostedMode();
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, router, runSharedLogin]);
 
   useEffect(() => {
     const checkHealth = async () => {
@@ -204,6 +237,45 @@ export default function LoginPage() {
   const isMicrosoftAuthEnabled = healthStatus?.checks.azureAdOAuth?.configured === true;
   const isOAuthEnabled = isGoogleAuthEnabled || isMicrosoftAuthEnabled;
   const isEmailAuthEnabled = !isOAuthEnabled && (healthStatus?.authMode === "magic-link" || healthStatus?.authMode === "direct");
+
+  // Shared dashboard auto login failed. Stay put with an explicit error and a manual
+  // retry instead of redirecting — a redirect here would restart the loop.
+  if (sharedAuthFailed) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4">
+        <div className="mb-10 flex flex-col items-center gap-3">
+          <Logo size="lg" showText={false} brand={brand} />
+          <span className="text-lg font-semibold text-foreground">{brand.shortName}</span>
+        </div>
+        <div className="w-full max-w-md p-4 rounded-lg bg-destructive/10 border border-destructive/20">
+          <div className="flex items-start gap-3">
+            <XCircle className="h-5 w-5 text-destructive mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <h3 className="font-medium text-destructive">自動サインインに失敗しました</h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                共有ダッシュボードの認証に失敗しました。ネットワークとサーバーの状態を確認してから再試行してください。
+              </p>
+            </div>
+          </div>
+        </div>
+        <Button
+          variant="outline"
+          className="mt-6 w-full max-w-md"
+          onClick={runSharedLogin}
+          disabled={sharedAuthPending}
+        >
+          {sharedAuthPending ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              再試行しています
+            </>
+          ) : (
+            "再試行"
+          )}
+        </Button>
+      </div>
+    );
+  }
 
   // Landing page onboarding state
   if (state === "onboarding") {

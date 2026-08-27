@@ -1,0 +1,7 @@
+{
+  "apiUrl": "https://kabosu-api.bonginkan.com",
+  "publicApiUrl": "https://kabosu-api.bonginkan.com",
+  "wsUrl": "wss://kabosu-api.bonginkan.com/ws",
+  "sharedAuth": {"enabled": true},
+  "credentialValues": "<redacted>"
+}

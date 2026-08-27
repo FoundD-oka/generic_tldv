@@ -1,0 +1,231 @@
+# GitNexus impact (upstream) — fix-dashboard-auth-redirect-loop
+# date: 2026-08-14T15:15:08Z
+# HEAD: db823063f083bc66cfb6f95ac1c7e3bd9d92298c
+# CLI: /Users/bonginkan-3-gouki/.npm/_npx/e46929201c1128dd/node_modules/.bin/gitnexus (1.6.9)
+# 注記: .gitnexus/run.cjs ラッパーは pnpm 選択待ちで停止するため直接CLIを使用
+# 注記: 複数リポ索引のため --repo generic_tldv と --file で曖昧性を除去
+
+===== impact useAuthStore (src/stores/auth-store.ts) =====
+{
+  "target": {
+    "id": "Const:services/dashboard/src/stores/auth-store.ts:useAuthStore",
+    "name": "useAuthStore",
+    "type": "",
+    "filePath": "services/dashboard/src/stores/auth-store.ts"
+  },
+  "direction": "upstream",
+  "impactedCount": 0,
+  "risk": "LOW",
+  "epistemic": "exact",
+  "summary": {
+    "direct": 0,
+    "processes_affected": 0,
+    "modules_affected": 0
+  },
+  "byDepthCounts": {},
+  "affected_processes": [],
+  "affected_modules": [],
+  "byDepth": {}
+}
+
+===== impact LoginPage (src/app/login/page.tsx) =====
+{
+  "target": {
+    "id": "Function:services/dashboard/src/app/login/page.tsx:LoginPage",
+    "name": "LoginPage",
+    "type": "Function",
+    "filePath": "services/dashboard/src/app/login/page.tsx"
+  },
+  "direction": "upstream",
+  "impactedCount": 0,
+  "risk": "LOW",
+  "epistemic": "exact",
+  "summary": {
+    "direct": 0,
+    "processes_affected": 0,
+    "modules_affected": 0
+  },
+  "byDepthCounts": {},
+  "affected_processes": [],
+  "affected_modules": [],
+  "byDepth": {}
+}
+
+===== impact AuthProvider (src/components/auth/auth-provider.tsx) =====
+{
+  "target": {
+    "id": "Function:services/dashboard/src/components/auth/auth-provider.tsx:AuthProvider",
+    "name": "AuthProvider",
+    "type": "Function",
+    "filePath": "services/dashboard/src/components/auth/auth-provider.tsx"
+  },
+  "direction": "upstream",
+  "impactedCount": 2,
+  "risk": "LOW",
+  "epistemic": "exact",
+  "summary": {
+    "direct": 1,
+    "processes_affected": 1,
+    "modules_affected": 2
+  },
+  "byDepthCounts": {
+    "1": 1,
+    "2": 1
+  },
+  "affected_processes": [
+    {
+      "name": "RootLayout",
+      "type": "Function",
+      "filePath": "services/dashboard/src/app/layout.tsx",
+      "affected_process_count": 10,
+      "total_hits": 18,
+      "earliest_broken_step": 1
+    }
+  ],
+  "affected_modules": [
+    {
+      "name": "Meetings",
+      "hits": 1,
+      "impact": "direct"
+    },
+    {
+      "name": "Layout",
+      "hits": 1,
+      "impact": "indirect"
+    }
+  ],
+  "byDepth": {
+    "1": [
+      {
+        "depth": 1,
+        "id": "Function:services/dashboard/src/components/layout/app-layout.tsx:AppLayout",
+        "name": "AppLayout",
+        "filePath": "services/dashboard/src/components/layout/app-layout.tsx",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_91_rootlayout",
+            "label": "RootLayout → SavePendingMeetingUrl",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_96_rootlayout",
+            "label": "RootLayout → GetDismissedIds",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_97_rootlayout",
+            "label": "RootLayout → FetchNotifications",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_98_rootlayout",
+            "label": "RootLayout → Dismiss",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_92_rootlayout",
+            "label": "RootLayout → AuthenticateOrRedirect",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_95_rootlayout",
+            "label": "RootLayout → Cn",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_94_rootlayout",
+            "label": "RootLayout → UseJoinModalStore",
+            "processType": "cross_community",
+            "step": 2
+          },
+          {
+            "id": "proc_93_rootlayout",
+            "label": "RootLayout → GetDashboardCopy",
+            "processType": "cross_community",
+            "step": 2
+          }
+        ]
+      }
+    ],
+    "2": [
+      {
+        "depth": 2,
+        "id": "Function:services/dashboard/src/app/layout.tsx:RootLayout",
+        "name": "RootLayout",
+        "filePath": "services/dashboard/src/app/layout.tsx",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": [
+          {
+            "id": "proc_98_rootlayout",
+            "label": "RootLayout → Dismiss",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_94_rootlayout",
+            "label": "RootLayout → UseJoinModalStore",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_96_rootlayout",
+            "label": "RootLayout → GetDismissedIds",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_240_rootlayout",
+            "label": "RootLayout → ApplyTitle",
+            "processType": "intra_community",
+            "step": 1
+          },
+          {
+            "id": "proc_28_rootlayout",
+            "label": "RootLayout → WithBasePath",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_91_rootlayout",
+            "label": "RootLayout → SavePendingMeetingUrl",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_97_rootlayout",
+            "label": "RootLayout → FetchNotifications",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_93_rootlayout",
+            "label": "RootLayout → GetDashboardCopy",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_92_rootlayout",
+            "label": "RootLayout → AuthenticateOrRedirect",
+            "processType": "cross_community",
+            "step": 1
+          },
+          {
+            "id": "proc_95_rootlayout",
+            "label": "RootLayout → Cn",
+            "processType": "cross_community",
+            "step": 1
+          }
+        ]
+      }
+    ]
+  }
+}

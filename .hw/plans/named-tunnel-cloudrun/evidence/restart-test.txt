@@ -1,0 +1,7 @@
+Action: launchctl kickstart -k gui/501/com.bonginkan.kabosu-api-tunnel
+Recovery: attempt 2 (約5秒)
+Tunnel root HTTP: 200
+Tunnel admin endpoint with dummy key HTTP: 403
+Cloud Run adminApi.reachable: true
+Cloud Run vexaApi.reachable: true
+Cloud Run env change during test: none

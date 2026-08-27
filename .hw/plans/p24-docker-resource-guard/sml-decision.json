@@ -1,0 +1,22 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {
+      "level": "S",
+      "reason": "実装方針は合意済みとして明文化されており(読み取り専用・fail-closed・閾値上書き・未制限≠無駄・destructive禁止)、reframe の余地はほぼない。"
+    },
+    "technical_unknown": {
+      "level": "M",
+      "reason": "docker CLI の JSON 出力形式・単位表記(SI/binary 混在)・バージョン差・locale 差に軽微な未知が残る。公式ドキュメントと実測(Docker Desktop 29.5.3)で裏取り済みだが、パーサ実装で想定外の表記に遭遇する可能性がある。fail-closed 設計で誤判定は防げるが未知ゼロではない。"
+    },
+    "impact_scope": {
+      "level": "S",
+      "reason": "healthcheck 修正は compose 2行+静的検証フラグメント2件で、既存 CI が回帰を検知する。監査 CLI は新規ファイルで既存コードへの侵襲がなく、Makefile と .hw/verify.sh への追記のみ。"
+    },
+    "verifiability": {
+      "level": "S",
+      "reason": "全要求が fixture + FakeRunner の unit test と既存静的検証で機械検証可能。ライブ daemon 依存は evidence gate に分離済みで、契約の全項目にコマンドベースの証拠取得手順がある。"
+    }
+  },
+  "overall_reason": "技術的未知の軸が M 相当(docker CLI 出力のパース周りに残る未知)のため、fail-closed 原則に従い M と判定。M ルーティングにより Fable 契約レビューを必須とする。"
+}

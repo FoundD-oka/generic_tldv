@@ -36,6 +36,12 @@ if [ -f .hw/tests/prime-worktree-guard.test.sh ]; then
   bash .hw/tests/prime-worktree-guard.test.sh .hw/prime_run.py || exit 1
 fi
 
+# docker 資源監査 CLI の unit test。FakeRunner だけで動くのでライブ daemon を要求せず、
+# 監査が「異常を正常扱いしない(fail-closed)」性質の退行をここで捕まえる。
+if [ -d deploy/compose/scripts/tests ]; then
+  python3 -m unittest discover -s deploy/compose/scripts/tests || exit 1
+fi
+
 # checks/run は失敗を "  <赤>CHECK_ID<リセット>" の行で出す。集計行("3 failed out of
 # 97 checks")は数字始まりなのでこのパターンに合わない。
 failed="$(printf '%s\n' "$output" | python3 -c '

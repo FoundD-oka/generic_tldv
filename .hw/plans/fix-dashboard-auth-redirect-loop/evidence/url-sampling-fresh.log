@@ -1,0 +1,8 @@
+case=fresh seedLegacy=false sharedLoginForced500=false duration=60s
+t=00s url=/login (初期)
+t=01s url=/meetings <-- 遷移
+遷移回数(初期表示を除く)=1
+最終URL=/meetings
+エラー文言あり=false
+再試行ボタンあり=false
+スピナーのみで停止していない=true

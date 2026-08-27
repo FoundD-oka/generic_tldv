@@ -12,12 +12,74 @@ interface LoginResult {
   isNewUser?: boolean;
 }
 
+/**
+ * Why the last auth attempt did not end in an authenticated session.
+ * Consumers use this to pick a terminal UI state instead of redirecting blindly,
+ * which is what turned a failed shared login into a /login ↔ /meetings loop.
+ */
+export type AuthErrorReason = "none" | "shared_login_failed" | "network" | "unauthorized";
+
+/**
+ * Credential-shaped keys written by older Dashboard releases. They are never read
+ * by the current code, but their presence lets a stale browser look "logged in".
+ * `vexa-auth` itself is not listed: the persist `migrate` below rewrites it.
+ */
+export const LEGACY_BROWSER_AUTH_KEYS = [
+  "vexa-token",
+  "vexa-user",
+  "vexa_user",
+  "authToken",
+  "api_key",
+  "vexa-api-key",
+] as const;
+
+/** Drop legacy browser-readable auth artifacts from local/session storage. */
+export function removeLegacyBrowserAuthState(): void {
+  const storages: Array<Storage | undefined> = [
+    typeof localStorage === "undefined" ? undefined : localStorage,
+    typeof sessionStorage === "undefined" ? undefined : sessionStorage,
+  ];
+
+  for (const storage of storages) {
+    if (!storage) continue;
+    for (const key of LEGACY_BROWSER_AUTH_KEYS) {
+      try {
+        storage.removeItem(key);
+      } catch {
+        // Storage can be unavailable (private mode / disabled cookies) — ignore.
+      }
+    }
+  }
+}
+
+// Run before zustand hydrates so no legacy artifact can survive into this session.
+removeLegacyBrowserAuthState();
+
+/**
+ * Persisted auth state that is safe to trust before the server has confirmed it.
+ * `token` and `isAuthenticated` are deliberately dropped: a rehydrated browser must
+ * never be able to claim a session on its own.
+ */
+function keepServerVerifiableFields(persistedState: unknown): PersistedAuthState {
+  const legacy = (persistedState ?? {}) as Partial<AuthState>;
+  return {
+    user: legacy.user ?? null,
+    didLogout: legacy.didLogout ?? false,
+  };
+}
+
+interface PersistedAuthState {
+  user: VexaUser | null;
+  didLogout: boolean;
+}
+
 interface AuthState {
   user: VexaUser | null;
   token: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
   didLogout: boolean; // true after explicit logout — prevents SSO redirect loop
+  authError: AuthErrorReason;
 
   // Actions
   sendMagicLink: (email: string) => Promise<LoginResult>;
@@ -37,6 +99,7 @@ export const useAuthStore = create<AuthState>()(
       isLoading: true, // Start true so auth-provider waits for checkAuth() before redirecting
       isAuthenticated: false,
       didLogout: false,
+      authError: "none",
 
       sendMagicLink: async (email: string): Promise<LoginResult> => {
         set({ isLoading: true });
@@ -63,6 +126,7 @@ export const useAuthStore = create<AuthState>()(
               isAuthenticated: true,
               isLoading: false,
               didLogout: false,
+              authError: "none",
             });
 
             return {
@@ -95,7 +159,7 @@ export const useAuthStore = create<AuthState>()(
           const data = await response.json().catch(() => ({}));
 
           if (!response.ok || !data.user || !data.token) {
-            set({ isLoading: false });
+            set({ isLoading: false, authError: "shared_login_failed" });
             return {
               success: false,
               error: data.error || "Shared dashboard auth is not available",
@@ -108,6 +172,7 @@ export const useAuthStore = create<AuthState>()(
             isAuthenticated: true,
             isLoading: false,
             didLogout: false,
+            authError: "none",
           });
 
           return {
@@ -118,7 +183,7 @@ export const useAuthStore = create<AuthState>()(
             isNewUser: data.isNewUser,
           };
         } catch (error) {
-          set({ isLoading: false });
+          set({ isLoading: false, authError: "shared_login_failed" });
           return { success: false, error: (error as Error).message };
         }
       },
@@ -130,6 +195,7 @@ export const useAuthStore = create<AuthState>()(
           isAuthenticated: true,
           isLoading: false,
           didLogout: false,
+          authError: "none",
         });
       },
 
@@ -142,6 +208,7 @@ export const useAuthStore = create<AuthState>()(
           token: null,
           isAuthenticated: false,
           didLogout: true,
+          authError: "none",
         });
         // In hosted mode: redirect to webapp signout immediately
         // Don't wait for React re-render — avoids flash of "Invalid API token"
@@ -179,6 +246,7 @@ export const useAuthStore = create<AuthState>()(
                 isAuthenticated: true,
                 isLoading: false,
                 didLogout: false,
+                authError: "none",
               });
               return;
             }
@@ -196,6 +264,7 @@ export const useAuthStore = create<AuthState>()(
                       isAuthenticated: true,
                       isLoading: false,
                       didLogout: false,
+                      authError: "none",
                     });
                     return;
                   }
@@ -208,31 +277,49 @@ export const useAuthStore = create<AuthState>()(
             // Only keep isAuthenticated if we already have local user+token
             const current = get();
             if (current.user && current.token) {
-              set({ isAuthenticated: true, isLoading: false, didLogout: false });
+              set({ isAuthenticated: true, isLoading: false, didLogout: false, authError: "none" });
             } else {
-              set({ user: null, token: null, isAuthenticated: false, isLoading: false });
+              set({
+                user: null,
+                token: null,
+                isAuthenticated: false,
+                isLoading: false,
+                authError: "unauthorized",
+              });
             }
           } else {
-            // Server returned 401 or error — clear stale localStorage
-            set({ user: null, token: null, isAuthenticated: false, isLoading: false });
+            // Server returned 401 or error — clear stale local state.
+            set({
+              user: null,
+              token: null,
+              isAuthenticated: false,
+              isLoading: false,
+              authError: "unauthorized",
+            });
           }
         } catch {
-          // Network error — if we have local data, keep it as fallback
-          const current = get();
-          if (current.user && current.token) {
-            set({ isAuthenticated: true, isLoading: false });
-          } else {
-            set({ user: null, token: null, isAuthenticated: false, isLoading: false });
-          }
+          // Network error. Never fall back to "authenticated" from unverified local
+          // state — that is what let a stale browser bounce between /login and /meetings.
+          set({ isAuthenticated: false, isLoading: false, authError: "network" });
         }
       },
     }),
     {
       name: "vexa-auth",
+      version: 2,
+      // v0/v1 persisted `token` and `isAuthenticated`, so a rehydrated browser
+      // could claim to be logged in before the server ever confirmed it.
+      // Keep only the fields that are safe without server verification.
+      migrate: (persistedState) => keepServerVerifiableFields(persistedState),
+      // `migrate` only runs when the stored payload carries a numeric `version`.
+      // Releases before v2 wrote no version at all, so the sanitising has to happen
+      // in `merge` as well — that is exactly the browser state that loops today.
+      merge: (persistedState, currentState) => ({
+        ...currentState,
+        ...keepServerVerifiableFields(persistedState),
+      }),
       partialize: (state) => ({
         user: state.user,
-        token: state.token,
-        isAuthenticated: state.isAuthenticated,
         didLogout: state.didLogout,
       }),
     }

@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "task_id": "p24-docker-resource-guard",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "d5c324f7e75a8662f743de087a08242e33716828",
+  "reviewed_commit": "ed5a4020048e416ac7fbd61b156a31ab1b781cff",
+  "target_sha256": "sha256:c7f1f7735e33bdb618ca17337136da5b2b2dfabaad33b27fa4a4497b99229dc7",
+  "contract_sha256": "sha256:3fa916c54d79ce3548ef63849770ee4fccb1f14b2280322f71205df0919a493c",
+  "prompt_sha256": "sha256:0550bdfd39d5aed15bac67fc34dccecb5c8e7ede4170eda9cbc055e2a07217b7",
+  "response_sha256": "sha256:84d0a1187edbb4a1ac7a58db3f32aa5244b205dd0fe38ccc41fcfc9432bdf152",
+  "created_at": "2026-08-24T00:21:09.201933+00:00",
+  "verdict": "READY",
+  "summary": "p24-docker-resource-guard の base d5c324f..ed5a402 差分を契約 R0〜R9 と静的照合した。変更スコープは許可ファイルのみ(R0)、healthcheck 2箇所と REQUIRED_TEST_FRAGMENTS の 127.0.0.1 化(R1)、allowlist ゲート経由のみの読み取り専用 docker 呼び出しと FakeRunner による argv 検査(R2)、DOCKER_AUDIT_ARGS 透過の Make target(R3)、5 異常シナリオ全てが exit 3 に収束する fail-closed(R4)、schema v1 の必須キーと status/exit 対応(R5)、契約どおりのデフォルト閾値・>=発火・境界/実測 fixture・CLI 上書き(R6)、inspect 正の limit 判定と unlimited=info(R7)、稼働0件・SI/binary 換算・LC_ALL/LANG=C・非断定文言(R8)、stdlib 限定と .hw/verify.sh 配線・daemon 非依存(R9)をいずれも実装とテストで確認。契約違反は0件。Bash 実行がセッションで無効のためコマンドベースの証拠は再実行しておらず、CI/pr-ready-gate を最終権威とする。.hw/gates のライブ証拠はローカル採取扱いでコミット不要と解釈した。",
+  "confidence": "high",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "collect_containers が inspect 行数と ps -q の ID 数を突き合わせていない",
+      "file": "deploy/compose/scripts/docker_resource_audit.py",
+      "detail": "docker inspect が rc=0 のまま ps -q の ID 数より少ない行を返した場合(通常は起こらないが、コンテナ名に想定外文字が入る等の異常系)、欠けたコンテナが黙って評価対象から落ち、部分読み取りが ok として報告され得る。stats 側の突き合わせは inspect が列挙した名前しか検査しないため補完されない。len(limits) == len(ids) の検査を1行足すと fail-closed の網がさらに閉じる。契約 R4 の列挙シナリオは全て満たしており違反ではない。"
+    },
+    {
+      "title": "parse_size が負のサイズ文字列を受理する",
+      "file": "deploy/compose/scripts/docker_resource_audit.py",
+      "detail": "SIZE_RE が `-?` を許すため \"-5GB\" などが負の bytes に変換され、閾値判定を常に ok 側へ倒す。docker CLI が負値を出すことは通常ないため実害は考えにくいが、fail-closed の趣旨からは負値も AuditError にする方が一貫する。"
+    }
+  ]
+}

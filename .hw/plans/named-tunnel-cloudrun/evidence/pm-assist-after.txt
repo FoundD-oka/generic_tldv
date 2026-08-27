@@ -1,0 +1,2 @@
+HTTP/2 302
+判定: 切替前と同一。既存 pm-assist-tunnel は変更なし。

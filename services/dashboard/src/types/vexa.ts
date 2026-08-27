@@ -143,6 +143,7 @@ export interface CreateBotRequest {
   voice_agent_enabled?: boolean;
   video?: boolean;
   video_receive_enabled?: boolean;
+  meeting_title?: string;
 }
 
 export interface BotConfigUpdate {

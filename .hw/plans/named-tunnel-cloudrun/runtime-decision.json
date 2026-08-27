@@ -1,0 +1,1 @@
+{"runtime": "inline", "axes": {"duration": false, "state_volume": false, "delegation": false, "recurrence": false}, "reason": "想定所要は1〜2時間で1セッションに収まる。扱う状態は Cloud Run describe JSON と curl 出力程度でコンテキストに載る。並行委譲は不要。tunnel 再起動・ロールバック手順は runbook として docs に残すが毎週反復する自動化対象ではない。加えて Cloudflare と GCP の資格情報を扱うため、ユーザー権限で任意コードを実行する Prime Agent へは倒さず inline(Opus 5 implementer)とする。"}

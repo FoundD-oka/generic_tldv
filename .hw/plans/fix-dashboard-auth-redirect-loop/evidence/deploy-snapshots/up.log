@@ -1,0 +1,13 @@
+time="2026-08-15T00:24:20+09:00" level=warning msg="The \"AGENT_IMAGE\" variable is not set. Defaulting to a blank string."
+time="2026-08-15T00:24:20+09:00" level=warning msg="The \"BROWSER_IMAGE\" variable is not set. Defaulting to a blank string."
+time="2026-08-15T00:24:20+09:00" level=warning msg="The \"CLAUDE_CREDENTIALS_PATH\" variable is not set. Defaulting to a blank string."
+time="2026-08-15T00:24:20+09:00" level=warning msg="The \"CLAUDE_JSON_PATH\" variable is not set. Defaulting to a blank string."
+time="2026-08-15T00:24:20+09:00" level=warning msg="The \"BROWSER_IMAGE\" variable is not set. Defaulting to a blank string."
+ Container vexa-kabosu-dashboard-1 Recreate 
+ Container vexa-dashboard-1 Recreate 
+ Container vexa-dashboard-1 Recreated 
+ Container vexa-kabosu-dashboard-1 Recreated 
+ Container vexa-kabosu-dashboard-1 Starting 
+ Container vexa-dashboard-1 Starting 
+ Container vexa-dashboard-1 Started 
+ Container vexa-kabosu-dashboard-1 Started 

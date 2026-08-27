@@ -1,0 +1,16 @@
+{
+  "task_id": "poc-manual-join-title-discord",
+  "generated_by": "fable",
+  "base_commit": "0ce72b26872269c80df47844978b0672b285b5b1",
+  "decided_at": "2026-08-27",
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {"level": "S", "reason": "保存キー・優先順・skip条件・上限まで確定。"},
+    "technical_unknown": {"level": "M", "reason": "pydantic正規化順と既存DB fixture補完を実装時に検証する。"},
+    "blast_radius": {"level": "M", "reason": "dashboard/meeting-api/calendar-service横断。optional型追加だが広範import。"},
+    "verifiability": {"level": "S", "reason": "単体テストと静的検査で判定可能。"}
+  },
+  "rule": "1軸でもMならM。L相当なし。fail-closedでM。",
+  "review": "fable_contract_review_required"
+}
+

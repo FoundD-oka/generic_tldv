@@ -1,0 +1,236 @@
+time="2026-08-15T00:23:12+09:00" level=warning msg="The \"BROWSER_IMAGE\" variable is not set. Defaulting to a blank string."
+time="2026-08-15T00:23:12+09:00" level=warning msg="The \"AGENT_IMAGE\" variable is not set. Defaulting to a blank string."
+time="2026-08-15T00:23:12+09:00" level=warning msg="The \"BROWSER_IMAGE\" variable is not set. Defaulting to a blank string."
+time="2026-08-15T00:23:12+09:00" level=warning msg="The \"CLAUDE_CREDENTIALS_PATH\" variable is not set. Defaulting to a blank string."
+time="2026-08-15T00:23:12+09:00" level=warning msg="The \"CLAUDE_JSON_PATH\" variable is not set. Defaulting to a blank string."
+ Image vexaai/api-gateway:fix-auth-loop-20260815-002312-d698db4 Building 
+ Image vexaai/admin-api:fix-auth-loop-20260815-002312-d698db4 Building 
+ Image vexaai/runtime-api:fix-auth-loop-20260815-002312-d698db4 Building 
+ Image vexaai/meeting-api:fix-auth-loop-20260815-002312-d698db4 Building 
+ Image vexaai/dashboard:fix-auth-loop-20260815-002312-d698db4 Building 
+#1 [internal] load local bake definitions
+#1 reading from stdin 2.82kB done
+#1 DONE 0.0s
+
+#2 [internal] load build definition from Dockerfile
+#2 transferring dockerfile: 2.58kB done
+#2 DONE 0.0s
+
+#3 [internal] load metadata for docker.io/library/node:20-alpine
+#3 DONE 0.0s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 87B done
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 1.39MB 0.0s done
+#5 DONE 0.0s
+
+#6 [builder  1/15] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+#6 resolve docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 0.0s done
+#6 DONE 0.0s
+
+#7 [builder  3/15] COPY packages/transcript-rendering/package.json /transcript-rendering/package.json
+#7 CACHED
+
+#8 [builder  2/15] WORKDIR /app
+#8 CACHED
+
+#9 [builder  4/15] COPY packages/transcript-rendering/dist/ /transcript-rendering/dist/
+#9 CACHED
+
+#10 [builder  5/15] COPY services/dashboard/package.json ./
+#10 DONE 0.0s
+
+#11 [builder  6/15] RUN sed -i 's|"@vexaai/transcript-rendering": "file:../../packages/transcript-rendering"|"@vexaai/transcript-rendering": "file:/transcript-rendering"|' package.json &&     npm install --ignore-scripts
+#11 44.53 
+#11 44.53 added 733 packages, and audited 735 packages in 44s
+#11 44.53 
+#11 44.53 295 packages are looking for funding
+#11 44.53   run `npm fund` for details
+#11 44.67 
+#11 44.67 14 vulnerabilities (6 low, 1 moderate, 5 high, 2 critical)
+#11 44.67 
+#11 44.67 To address all issues (including breaking changes), run:
+#11 44.67   npm audit fix --force
+#11 44.67 
+#11 44.67 Run `npm audit` for details.
+#11 44.67 npm notice
+#11 44.67 npm notice New major version of npm available! 10.8.2 -> 12.0.2
+#11 44.67 npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.0.2
+#11 44.67 npm notice To update run: npm install -g npm@12.0.2
+#11 44.67 npm notice
+#11 DONE 45.2s
+
+#12 [builder  7/15] RUN rm -rf node_modules/@vexaai/transcript-rendering &&     cp -r /transcript-rendering node_modules/@vexaai/transcript-rendering
+#12 DONE 0.4s
+
+#13 [builder  8/15] COPY services/dashboard/src ./src
+#13 DONE 0.0s
+
+#14 [builder  9/15] COPY services/dashboard/public ./public
+#14 DONE 0.0s
+
+#15 [builder 10/15] COPY services/dashboard/scripts ./scripts
+#15 DONE 0.0s
+
+#16 [builder 11/15] COPY services/dashboard/next.config.ts services/dashboard/tsconfig.json services/dashboard/postcss.config.mjs services/dashboard/eslint.config.mjs ./
+#16 DONE 0.0s
+
+#17 [builder 12/15] COPY services/dashboard/components.json ./
+#17 DONE 0.0s
+
+#18 [builder 13/15] COPY VERSION /repo/VERSION
+#18 DONE 0.0s
+
+#19 [builder 14/15] COPY deploy/helm/charts/vexa/Chart.yaml /repo/deploy/helm/charts/vexa/Chart.yaml
+#19 DONE 0.0s
+
+#20 [builder 15/15] RUN npm run build && npm run assert-release-version
+#20 0.191 
+#20 0.191 > vexa-dashboard@0.1.0 prebuild
+#20 0.191 > npm run sync-packages && node scripts/generate-release-version.js
+#20 0.191 
+#20 0.261 
+#20 0.261 > vexa-dashboard@0.1.0 sync-packages
+#20 0.261 > if [ -d ../../packages/transcript-rendering/dist ]; then rm -rf node_modules/@vexaai/transcript-rendering && mkdir -p node_modules/@vexaai/transcript-rendering && cp ../../packages/transcript-rendering/package.json node_modules/@vexaai/transcript-rendering/package.json && cp -r ../../packages/transcript-rendering/dist node_modules/@vexaai/transcript-rendering/dist; fi
+#20 0.261 
+#20 0.290 [release-version] 0.10.6.3.14 · 2026-08-14 (source: VERSION)
+#20 0.293 
+#20 0.293 > vexa-dashboard@0.1.0 build
+#20 0.293 > next build
+#20 0.293 
+#20 0.551 Attention: Next.js now collects completely anonymous telemetry regarding usage.
+#20 0.551 This information is used to shape Next.js' roadmap and prioritize features.
+#20 0.551 You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+#20 0.551 https://nextjs.org/telemetry
+#20 0.551 
+#20 0.561 ▲ Next.js 16.2.6 (Turbopack)
+#20 0.561 
+#20 0.618   Creating an optimized production build ...
+#20 5.807 ✓ Compiled successfully in 5.1s
+#20 5.845   Running TypeScript ...
+#20 12.88   Finished TypeScript in 7.0s ...
+#20 12.89   Collecting page data using 10 workers ...
+#20 13.51   Generating static pages using 10 workers (0/60) ...
+#20 13.75   Generating static pages using 10 workers (15/60) 
+#20 13.82   Generating static pages using 10 workers (30/60) 
+#20 13.90   Generating static pages using 10 workers (45/60) 
+#20 14.02 ✓ Generating static pages using 10 workers (60/60) in 502ms
+#20 14.02   Finalizing page optimization ...
+#20 14.25 
+#20 14.25 Route (app)
+#20 14.25 ┌ ○ /
+#20 14.25 ├ ○ /_not-found
+#20 14.25 ├ ○ /admin/bots
+#20 14.25 ├ ○ /admin/users
+#20 14.25 ├ ƒ /admin/users/[id]
+#20 14.25 ├ ○ /agent
+#20 14.25 ├ ƒ /api/admin/[...path]
+#20 14.25 ├ ƒ /api/agent/[...path]
+#20 14.25 ├ ƒ /api/ai/chat
+#20 14.25 ├ ƒ /api/ai/config
+#20 14.25 ├ ƒ /api/auth/[...nextauth]
+#20 14.25 ├ ƒ /api/auth/admin-logout
+#20 14.25 ├ ƒ /api/auth/admin-verify
+#20 14.25 ├ ƒ /api/auth/logout
+#20 14.25 ├ ƒ /api/auth/me
+#20 14.25 ├ ƒ /api/auth/oauth-callback
+#20 14.25 ├ ƒ /api/auth/send-magic-link
+#20 14.25 ├ ƒ /api/auth/shared-login
+#20 14.25 ├ ƒ /api/auth/verify
+#20 14.25 ├ ƒ /api/calendar/oauth/complete
+#20 14.25 ├ ƒ /api/calendar/oauth/start
+#20 14.25 ├ ƒ /api/config
+#20 14.25 ├ ƒ /api/health
+#20 14.25 ├ ƒ /api/notifications
+#20 14.25 ├ ƒ /api/vexa/[...path]
+#20 14.25 ├ ƒ /api/webhooks/config
+#20 14.25 ├ ƒ /api/webhooks/deliveries
+#20 14.25 ├ ƒ /api/webhooks/deliveries/[meetingId]
+#20 14.25 ├ ƒ /api/webhooks/rotate-secret
+#20 14.25 ├ ƒ /api/webhooks/test
+#20 14.25 ├ ƒ /api/zoom/oauth/complete
+#20 14.25 ├ ƒ /api/zoom/oauth/start
+#20 14.25 ├ ○ /auth/google-calendar/callback
+#20 14.25 ├ ○ /auth/verify
+#20 14.25 ├ ○ /auth/zoom/callback
+#20 14.25 ├ ○ /dictionary
+#20 14.25 ├ ○ /docs
+#20 14.25 ├ ○ /docs/admin/tokens
+#20 14.25 ├ ○ /docs/admin/users
+#20 14.25 ├ ○ /docs/auth
+#20 14.25 ├ ○ /docs/cookbook/get-status-history
+#20 14.25 ├ ○ /docs/cookbook/get-transcripts
+#20 14.25 ├ ○ /docs/cookbook/live-transcripts
+#20 14.25 ├ ○ /docs/cookbook/rename-meeting
+#20 14.25 ├ ○ /docs/cookbook/share-transcript-url
+#20 14.25 ├ ○ /docs/cookbook/start-transcription
+#20 14.25 ├ ○ /docs/cookbook/stop-bot
+#20 14.25 ├ ○ /docs/cookbook/track-meeting-status
+#20 14.25 ├ ○ /docs/rest/bots
+#20 14.25 ├ ○ /docs/rest/meetings
+#20 14.25 ├ ○ /docs/rest/transcripts
+#20 14.25 ├ ○ /docs/ws
+#20 14.25 ├ ○ /docs/ws/events
+#20 14.25 ├ ○ /docs/ws/subscribe
+#20 14.25 ├ ○ /icon.svg
+#20 14.25 ├ ○ /join
+#20 14.25 ├ ○ /login
+#20 14.25 ├ ○ /mcp
+#20 14.25 ├ ○ /meetings
+#20 14.25 ├ ƒ /meetings/[id]
+#20 14.25 ├ ○ /robots.txt
+#20 14.25 ├ ○ /settings
+#20 14.25 ├ ○ /sitemap.xml
+#20 14.25 ├ ○ /tracker
+#20 14.25 ├ ○ /voiceprints
+#20 14.25 ├ ○ /webhooks
+#20 14.25 └ ○ /workspace
+#20 14.25 
+#20 14.25 
+#20 14.25 ○  (Static)   prerendered as static content
+#20 14.25 ƒ  (Dynamic)  server-rendered on demand
+#20 14.25 
+#20 14.39 
+#20 14.39 > vexa-dashboard@0.1.0 assert-release-version
+#20 14.39 > node scripts/assert-release-version.js
+#20 14.39 
+#20 14.42 [release-version] compiled bundle contains 0.10.6.3.14
+#20 DONE 14.6s
+
+#21 [runner 4/8] RUN adduser --system --uid 1001 nextjs
+#21 CACHED
+
+#22 [runner 3/8] RUN addgroup --system --gid 1001 nodejs
+#22 CACHED
+
+#23 [runner 5/8] COPY --from=builder /app/public ./public
+#23 CACHED
+
+#24 [runner 6/8] COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+#24 DONE 0.2s
+
+#25 [runner 7/8] COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+#25 DONE 0.0s
+
+#26 [runner 8/8] COPY --chown=nextjs:nodejs services/dashboard/docker-entrypoint.sh ./docker-entrypoint.sh
+#26 DONE 0.0s
+
+#27 exporting to image
+#27 exporting layers
+#27 exporting layers 0.8s done
+#27 exporting manifest sha256:262ad3de41d1648fb2ededa82a018de3ac9cac5c8920e040bcda5a891ebc451f
+#27 exporting manifest sha256:262ad3de41d1648fb2ededa82a018de3ac9cac5c8920e040bcda5a891ebc451f done
+#27 exporting config sha256:5a2e514210550203ca996617e215ddf96da09e3e1e6256a900363ba488070ce2 done
+#27 exporting attestation manifest sha256:ff4d08df59f0c8df24643b0b021c9c1ddccc4c40162c24fb5eed0a0ca9349178 done
+#27 exporting manifest list sha256:6a37c90e1638b8c4a3757e374bd25a18ae014f48c89b85efd36afe75141d8000 done
+#27 naming to docker.io/vexaai/dashboard:fix-auth-loop-20260815-002312-d698db4 done
+#27 unpacking to docker.io/vexaai/dashboard:fix-auth-loop-20260815-002312-d698db4
+#27 unpacking to docker.io/vexaai/dashboard:fix-auth-loop-20260815-002312-d698db4 0.3s done
+#27 DONE 1.1s
+
+#28 resolving provenance for metadata file
+#28 DONE 0.0s
+ Image vexaai/dashboard:fix-auth-loop-20260815-002312-d698db4 Built 

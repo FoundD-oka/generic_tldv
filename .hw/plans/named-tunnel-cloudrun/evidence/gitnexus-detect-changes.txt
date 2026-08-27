@@ -1,0 +1,9 @@
+Uncommitted detect_changes:
+- Changes: 2 files, 2 symbols
+- Affected processes: 0
+- Risk level: low
+- Reported files: AGENTS.md / CLAUDE.md (user-owned pre-existing changes; not staged)
+
+This task adds only untracked planning/evidence documentation and docs/ops/cloudflare-named-tunnel.md. No application function, class, method, Dockerfile, CI, or Cloud Build configuration symbol was edited.
+
+Compare-to-main reported medium risk from 65 historical files already present between the task base and current main, including login flows. Those files are outside this task diff and were not edited here.

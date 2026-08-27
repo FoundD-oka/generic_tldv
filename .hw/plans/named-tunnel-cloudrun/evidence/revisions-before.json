@@ -1,0 +1,140 @@
+{
+  "_note": "gcloud run revisions list --service kabosu-dashboard --project pm-qe-mgmt-20260624 --region asia-northeast1 --format=json の射影版。全 65 リビジョン中、新しい順に 12 件を記録。env は VEXA_*_URL のみ抽出(秘密値を含めないため)。",
+  "captured_at": "2026-08-25",
+  "total_revisions": 65,
+  "serving_revision": "kabosu-dashboard-00065-954",
+  "revisions": [
+    {
+      "name": "kabosu-dashboard-00065-954",
+      "created": "2026-08-14T16:42:24.754852Z",
+      "image": "asia-northeast1-docker.pkg.dev/pm-qe-mgmt-20260624/pm-qe-management/kabosu-dashboard@sha256:8761480b4d079d5c2baea0a2e4594bc4fa6b4c1273f4103a3a3882d8af740d71",
+      "active": true,
+      "env_api_urls": [
+        { "name": "VEXA_API_URL", "value": "https://kent-ping-lung-treasury.trycloudflare.com" },
+        { "name": "VEXA_ADMIN_API_URL", "value": "https://kent-ping-lung-treasury.trycloudflare.com" },
+        { "name": "VEXA_PUBLIC_API_URL", "value": "https://executive-leaving-tubes-wind.trycloudflare.com" }
+      ]
+    },
+    {
+      "name": "kabosu-dashboard-00064-k2f",
+      "created": "2026-08-14T16:41:02.101654Z",
+      "image": "asia-northeast1-docker.pkg.dev/pm-qe-mgmt-20260624/pm-qe-management/kabosu-dashboard@sha256:8761480b4d079d5c2baea0a2e4594bc4fa6b4c1273f4103a3a3882d8af740d71",
+      "active": false,
+      "env_api_urls": [
+        { "name": "VEXA_API_URL", "value": "https://kent-ping-lung-treasury.trycloudflare.com" },
+        { "name": "VEXA_ADMIN_API_URL", "value": "https://executive-leaving-tubes-wind.trycloudflare.com" },
+        { "name": "VEXA_PUBLIC_API_URL", "value": "https://executive-leaving-tubes-wind.trycloudflare.com" }
+      ]
+    },
+    {
+      "name": "kabosu-dashboard-00063-jjn",
+      "created": "2026-08-14T16:40:20.438150Z",
+      "image": "asia-northeast1-docker.pkg.dev/pm-qe-mgmt-20260624/pm-qe-management/kabosu-dashboard@sha256:8761480b4d079d5c2baea0a2e4594bc4fa6b4c1273f4103a3a3882d8af740d71",
+      "active": false,
+      "env_api_urls": [
+        { "name": "VEXA_API_URL", "value": "https://executive-leaving-tubes-wind.trycloudflare.com" },
+        { "name": "VEXA_ADMIN_API_URL", "value": "https://executive-leaving-tubes-wind.trycloudflare.com" },
+        { "name": "VEXA_PUBLIC_API_URL", "value": "https://executive-leaving-tubes-wind.trycloudflare.com" }
+      ]
+    },
+    {
+      "name": "kabosu-dashboard-00062-6q5",
+      "created": "2026-08-14T16:08:10.289546Z",
+      "image": "asia-northeast1-docker.pkg.dev/pm-qe-mgmt-20260624/pm-qe-management/kabosu-dashboard@sha256:7ac88ba779f0191f317b876ccf6b404228a9f39b79cbb0e84a5118f0781fdac1",
+      "active": false,
+      "env_api_urls": [
+        { "name": "VEXA_API_URL", "value": "https://executive-leaving-tubes-wind.trycloudflare.com" },
+        { "name": "VEXA_ADMIN_API_URL", "value": "https://executive-leaving-tubes-wind.trycloudflare.com" },
+        { "name": "VEXA_PUBLIC_API_URL", "value": "https://executive-leaving-tubes-wind.trycloudflare.com" }
+      ]
+    },
+    {
+      "name": "kabosu-dashboard-00061-9fb",
+      "created": "2026-08-13T22:54:04.178067Z",
+      "image": "asia-northeast1-docker.pkg.dev/pm-qe-mgmt-20260624/pm-qe-management/kabosu-dashboard@sha256:3177c928d876e80db5acd659ba32cb185c3190a578bf2f5169d65d04a7c49e42",
+      "active": false,
+      "env_api_urls": [
+        { "name": "VEXA_API_URL", "value": "https://executive-leaving-tubes-wind.trycloudflare.com" },
+        { "name": "VEXA_ADMIN_API_URL", "value": "https://executive-leaving-tubes-wind.trycloudflare.com" },
+        { "name": "VEXA_PUBLIC_API_URL", "value": "https://executive-leaving-tubes-wind.trycloudflare.com" }
+      ]
+    },
+    {
+      "name": "kabosu-dashboard-00060-ldf",
+      "created": "2026-08-13T15:45:31.369651Z",
+      "image": "asia-northeast1-docker.pkg.dev/pm-qe-mgmt-20260624/pm-qe-management/kabosu-dashboard@sha256:cb2be6881f2bcde13ba91ef0d92eceac1711d9552f0ce102427a07dba5b6923d",
+      "active": false,
+      "env_api_urls": [
+        { "name": "VEXA_API_URL", "value": "https://executive-leaving-tubes-wind.trycloudflare.com" },
+        { "name": "VEXA_ADMIN_API_URL", "value": "https://executive-leaving-tubes-wind.trycloudflare.com" },
+        { "name": "VEXA_PUBLIC_API_URL", "value": "https://executive-leaving-tubes-wind.trycloudflare.com" }
+      ]
+    },
+    {
+      "name": "kabosu-dashboard-00059-hmn",
+      "created": "2026-08-10T08:39:05.813443Z",
+      "image": "asia-northeast1-docker.pkg.dev/pm-qe-mgmt-20260624/pm-qe-management/kabosu-dashboard@sha256:e9292e7506a4e5d4580107c9ae4a4552c44f32112ea14682a0d913605e462898",
+      "active": false,
+      "env_api_urls": [
+        { "name": "VEXA_API_URL", "value": "https://executive-leaving-tubes-wind.trycloudflare.com" },
+        { "name": "VEXA_ADMIN_API_URL", "value": "https://executive-leaving-tubes-wind.trycloudflare.com" },
+        { "name": "VEXA_PUBLIC_API_URL", "value": "https://executive-leaving-tubes-wind.trycloudflare.com" }
+      ]
+    },
+    {
+      "name": "kabosu-dashboard-00058-ctv",
+      "created": "2026-08-09T16:44:39.287797Z",
+      "image": "asia-northeast1-docker.pkg.dev/pm-qe-mgmt-20260624/pm-qe-management/kabosu-dashboard@sha256:66751be71c13038519691151f69f87de6d1ac2ef6ca38acbdc53dbaf9e3c2847",
+      "active": false,
+      "env_api_urls": [
+        { "name": "VEXA_API_URL", "value": "https://executive-leaving-tubes-wind.trycloudflare.com" },
+        { "name": "VEXA_ADMIN_API_URL", "value": "https://executive-leaving-tubes-wind.trycloudflare.com" },
+        { "name": "VEXA_PUBLIC_API_URL", "value": "https://executive-leaving-tubes-wind.trycloudflare.com" }
+      ]
+    },
+    {
+      "name": "kabosu-dashboard-00057-22j",
+      "created": "2026-08-09T16:00:09.377247Z",
+      "image": "asia-northeast1-docker.pkg.dev/pm-qe-mgmt-20260624/pm-qe-management/kabosu-dashboard@sha256:d73e9e3ab7c3cc4abefec26d9c5cd9c6c9f010991ba4d13a81ed3f7d6195ef1d",
+      "active": false,
+      "env_api_urls": [
+        { "name": "VEXA_API_URL", "value": "https://executive-leaving-tubes-wind.trycloudflare.com" },
+        { "name": "VEXA_ADMIN_API_URL", "value": "https://executive-leaving-tubes-wind.trycloudflare.com" },
+        { "name": "VEXA_PUBLIC_API_URL", "value": "https://executive-leaving-tubes-wind.trycloudflare.com" }
+      ]
+    },
+    {
+      "name": "kabosu-dashboard-00056-vk9",
+      "created": "2026-08-09T15:19:46.631420Z",
+      "image": "asia-northeast1-docker.pkg.dev/pm-qe-mgmt-20260624/pm-qe-management/kabosu-dashboard@sha256:2a775bae36220dc0d1732c0d58eea9bfc42df32cca84897df7b0e0538c9d6601",
+      "active": false,
+      "env_api_urls": [
+        { "name": "VEXA_API_URL", "value": "https://executive-leaving-tubes-wind.trycloudflare.com" },
+        { "name": "VEXA_ADMIN_API_URL", "value": "https://executive-leaving-tubes-wind.trycloudflare.com" },
+        { "name": "VEXA_PUBLIC_API_URL", "value": "https://executive-leaving-tubes-wind.trycloudflare.com" }
+      ]
+    },
+    {
+      "name": "kabosu-dashboard-00055-xpp",
+      "created": "2026-08-09T15:15:34.735649Z",
+      "image": "asia-northeast1-docker.pkg.dev/pm-qe-mgmt-20260624/pm-qe-management/kabosu-dashboard@sha256:bcc841f7c8334eb3108aa8b4e2ae65e0d0e776b929f39d07ac32835b8ec6a6da",
+      "active": false,
+      "env_api_urls": [
+        { "name": "VEXA_API_URL", "value": "https://executive-leaving-tubes-wind.trycloudflare.com" },
+        { "name": "VEXA_ADMIN_API_URL", "value": "https://executive-leaving-tubes-wind.trycloudflare.com" },
+        { "name": "VEXA_PUBLIC_API_URL", "value": "https://executive-leaving-tubes-wind.trycloudflare.com" }
+      ]
+    },
+    {
+      "name": "kabosu-dashboard-00054-whd",
+      "created": "2026-08-09T14:18:45.235173Z",
+      "image": "asia-northeast1-docker.pkg.dev/pm-qe-mgmt-20260624/pm-qe-management/kabosu-dashboard@sha256:c43021f60dc55077903b056052ca4aea1fc614d3a35748b010366cafa828d66c",
+      "active": false,
+      "env_api_urls": [
+        { "name": "VEXA_API_URL", "value": "https://executive-leaving-tubes-wind.trycloudflare.com" },
+        { "name": "VEXA_ADMIN_API_URL", "value": "https://executive-leaving-tubes-wind.trycloudflare.com" },
+        { "name": "VEXA_PUBLIC_API_URL", "value": "https://executive-leaving-tubes-wind.trycloudflare.com" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,77 @@
+{
+  "result": [
+    {
+      "id": "3e2460b0bf9bb0d829b2419d454e1ca4",
+      "name": "bonginkan.com",
+      "status": "active",
+      "paused": false,
+      "type": "full",
+      "development_mode": 0,
+      "name_servers": [
+        "barbara.ns.cloudflare.com",
+        "thomas.ns.cloudflare.com"
+      ],
+      "original_name_servers": [
+        "nelly.ns.cloudflare.com",
+        "olof.ns.cloudflare.com"
+      ],
+      "original_registrar": "gmo internet group, inc. d/b/a (id: 49)",
+      "original_dnshost": null,
+      "modified_on": "2026-07-21T03:44:33.560067Z",
+      "created_on": "2026-07-21T03:27:17.348563Z",
+      "activated_on": "2026-07-21T03:44:33.560067Z",
+      "vanity_name_servers": [],
+      "vanity_name_servers_ips": null,
+      "meta": {
+        "step": 2,
+        "custom_certificate_quota": 0,
+        "page_rule_quota": 3,
+        "phishing_detected": false
+      },
+      "owner": {
+        "id": null,
+        "type": "user",
+        "email": null
+      },
+      "account": {
+        "id": "<ACCOUNT_ID>",
+        "name": "Bonginkan-Corp."
+      },
+      "tenant": {
+        "id": null,
+        "name": null
+      },
+      "tenant_unit": {
+        "id": null
+      },
+      "permissions": [
+        "#zone:read",
+        "#zone_settings:read",
+        "#dns_records:edit",
+        "#dns_records:read"
+      ],
+      "plan": {
+        "id": "0feeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "name": "Free Website",
+        "price": 0,
+        "currency": "USD",
+        "frequency": "",
+        "is_subscribed": false,
+        "can_subscribe": false,
+        "legacy_id": "free",
+        "legacy_discount": false,
+        "externally_managed": false
+      }
+    }
+  ],
+  "result_info": {
+    "page": 1,
+    "per_page": 20,
+    "total_pages": 1,
+    "count": 1,
+    "total_count": 1
+  },
+  "success": true,
+  "errors": [],
+  "messages": []
+}

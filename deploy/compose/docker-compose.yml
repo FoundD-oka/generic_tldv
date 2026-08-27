@@ -397,6 +397,10 @@ services:
       - KABOSU_GOOGLE_REFRESH_TOKEN=${KABOSU_GOOGLE_REFRESH_TOKEN:-}
       - KABOSU_DRIVE_FOLDER_ID=${KABOSU_DRIVE_FOLDER_ID:-}
       - KABOSU_DRIVE_EXPORT_ENABLED=${KABOSU_DRIVE_EXPORT_ENABLED:-true}
+      # Empty = feature off (no domain permission, no completion hook).
+      - KABOSU_DRIVE_SHARE_DOMAIN=${KABOSU_DRIVE_SHARE_DOMAIN:-}
+      - KABOSU_DRIVE_EXPORT_WEBHOOK_URL=${KABOSU_DRIVE_EXPORT_WEBHOOK_URL:-}
+      - KABOSU_DRIVE_EXPORT_WEBHOOK_SECRET=${KABOSU_DRIVE_EXPORT_WEBHOOK_SECRET:-}
       - WAKE_STT_URL=${WAKE_STT_URL:-}
       - WAKE_STT_TOKEN=${WAKE_STT_TOKEN:-}
       - WAKE_STT_API_TOKEN=${WAKE_STT_API_TOKEN:-}
@@ -569,7 +573,7 @@ services:
       # node:20-alpine ships busybox wget (no curl). /api/health re-validates the
       # server config and internally fetches admin-api and api-gateway with a 5s
       # timeout each, so allow 15s before calling the probe timed out.
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
       interval: 30s
       timeout: 15s
       retries: 3
@@ -624,7 +628,7 @@ services:
       - DASHBOARD_SHARED_AUTH_NAME=${KABOSU_DASHBOARD_SHARED_AUTH_NAME:-カボス運用}
     healthcheck:
       # Same image as `dashboard`: busybox wget, /api/health, 15s budget.
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
       interval: 30s
       timeout: 15s
       retries: 3
@@ -855,6 +859,14 @@ services:
       - BOT_API_TOKEN=${BOT_API_TOKEN:-}
       - SYNC_INTERVAL_SECONDS=${CALENDAR_SYNC_INTERVAL:-300}
       - DEFAULT_LEAD_TIME_MINUTES=${CALENDAR_LEAD_TIME:-2}
+      # Drive export 完了 → Discord 通知。すべて空なら通知は無効。
+      - KABOSU_DRIVE_EXPORT_WEBHOOK_SECRET=${KABOSU_DRIVE_EXPORT_WEBHOOK_SECRET:-}
+      - KABOSU_DISCORD_BOT_TOKEN=${KABOSU_DISCORD_BOT_TOKEN:-}
+      - KABOSU_DISCORD_GUILD_ID=${KABOSU_DISCORD_GUILD_ID:-}
+      - KABOSU_DISCORD_DEFAULT_CHANNEL_ID=${KABOSU_DISCORD_DEFAULT_CHANNEL_ID:-}
+      - KABOSU_DISCORD_ROUTER_CONFIDENCE_THRESHOLD=${KABOSU_DISCORD_ROUTER_CONFIDENCE_THRESHOLD:-0.85}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - GROQ_MODEL=${GROQ_MODEL:-openai/gpt-oss-20b}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     healthcheck:
       # python:3.11-slim base (services/calendar-service/Dockerfile) — no curl/wget.

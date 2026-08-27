@@ -1,0 +1,149 @@
+===== npm test (services/dashboard) =====
+
+> vexa-dashboard@0.1.0 test
+> vitest run
+
+
+ RUN  v4.1.0 /Users/bonginkan-3-gouki/project/generic_tldv/services/dashboard
+
+
+ Test Files  38 passed (38)
+      Tests  294 passed (294)
+   Start at  00:21:10
+   Duration  2.08s (transform 1.51s, setup 0ms, import 5.20s, tests 550ms, environment 579ms)
+
+
+EXIT=0
+
+===== npx tsc --noEmit (.next/dev の stale 生成物由来の行は除外) =====
+tsc filtered exit ok
+
+===== lint ratchet =====
+eslint exit=1
+lint-ratchet: current errors=50 warnings=70 fatalErrors=0 / baseline errors=50 warnings=75
+lint-ratchet: 負債が減った。lint-baseline.json を {"errors": 50, "warnings": 70} へ下げて commit すること。
+lint-ratchet: OK (新規増加なし)
+ratchet exit=0
+
+===== npm run build =====
+
+> vexa-dashboard@0.1.0 prebuild
+> npm run sync-packages && node scripts/generate-release-version.js
+
+
+> vexa-dashboard@0.1.0 sync-packages
+> if [ -d ../../packages/transcript-rendering/dist ]; then rm -rf node_modules/@vexaai/transcript-rendering && mkdir -p node_modules/@vexaai/transcript-rendering && cp ../../packages/transcript-rendering/package.json node_modules/@vexaai/transcript-rendering/package.json && cp -r ../../packages/transcript-rendering/dist node_modules/@vexaai/transcript-rendering/dist; fi
+
+[release-version] 0.10.6.3.14 · 2026-08-14 (source: VERSION)
+
+> vexa-dashboard@0.1.0 build
+> next build
+
+⨯ Failed to load next.config.ts, see more info here https://nextjs.org/docs/messages/next-config-error
+
+> Build error occurred
+Error: VEXA_API_URL is required: dashboard rewrites must use the release/deploy SSOT, not a baked fallback
+    at Object.<anonymous> (next.config.compiled.js:40:11)
+BUILD_EXIT=1
+===== npm run build (VEXA_API_URL=http://api-gateway:8000 — compose と同じ値) =====
+
+> vexa-dashboard@0.1.0 prebuild
+> npm run sync-packages && node scripts/generate-release-version.js
+
+
+> vexa-dashboard@0.1.0 sync-packages
+> if [ -d ../../packages/transcript-rendering/dist ]; then rm -rf node_modules/@vexaai/transcript-rendering && mkdir -p node_modules/@vexaai/transcript-rendering && cp ../../packages/transcript-rendering/package.json node_modules/@vexaai/transcript-rendering/package.json && cp -r ../../packages/transcript-rendering/dist node_modules/@vexaai/transcript-rendering/dist; fi
+
+[release-version] 0.10.6.3.14 · 2026-08-14 (source: VERSION)
+
+> vexa-dashboard@0.1.0 build
+> next build
+
+▲ Next.js 16.2.6 (Turbopack)
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 4.1s
+  Running TypeScript ...
+  Finished TypeScript in 5.6s ...
+  Collecting page data using 10 workers ...
+  Generating static pages using 10 workers (0/60) ...
+  Generating static pages using 10 workers (15/60) 
+  Generating static pages using 10 workers (30/60) 
+  Generating static pages using 10 workers (45/60) 
+✓ Generating static pages using 10 workers (60/60) in 317ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ○ /admin/bots
+├ ○ /admin/users
+├ ƒ /admin/users/[id]
+├ ○ /agent
+├ ƒ /api/admin/[...path]
+├ ƒ /api/agent/[...path]
+├ ƒ /api/ai/chat
+├ ƒ /api/ai/config
+├ ƒ /api/auth/[...nextauth]
+├ ƒ /api/auth/admin-logout
+├ ƒ /api/auth/admin-verify
+├ ƒ /api/auth/logout
+├ ƒ /api/auth/me
+├ ƒ /api/auth/oauth-callback
+├ ƒ /api/auth/send-magic-link
+├ ƒ /api/auth/shared-login
+├ ƒ /api/auth/verify
+├ ƒ /api/calendar/oauth/complete
+├ ƒ /api/calendar/oauth/start
+├ ƒ /api/config
+├ ƒ /api/health
+├ ƒ /api/notifications
+├ ƒ /api/vexa/[...path]
+├ ƒ /api/webhooks/config
+├ ƒ /api/webhooks/deliveries
+├ ƒ /api/webhooks/deliveries/[meetingId]
+├ ƒ /api/webhooks/rotate-secret
+├ ƒ /api/webhooks/test
+├ ƒ /api/zoom/oauth/complete
+├ ƒ /api/zoom/oauth/start
+├ ○ /auth/google-calendar/callback
+├ ○ /auth/verify
+├ ○ /auth/zoom/callback
+├ ○ /dictionary
+├ ○ /docs
+├ ○ /docs/admin/tokens
+├ ○ /docs/admin/users
+├ ○ /docs/auth
+├ ○ /docs/cookbook/get-status-history
+├ ○ /docs/cookbook/get-transcripts
+├ ○ /docs/cookbook/live-transcripts
+├ ○ /docs/cookbook/rename-meeting
+├ ○ /docs/cookbook/share-transcript-url
+├ ○ /docs/cookbook/start-transcription
+├ ○ /docs/cookbook/stop-bot
+├ ○ /docs/cookbook/track-meeting-status
+├ ○ /docs/rest/bots
+├ ○ /docs/rest/meetings
+├ ○ /docs/rest/transcripts
+├ ○ /docs/ws
+├ ○ /docs/ws/events
+├ ○ /docs/ws/subscribe
+├ ○ /icon.svg
+├ ○ /join
+├ ○ /login
+├ ○ /mcp
+├ ○ /meetings
+├ ƒ /meetings/[id]
+├ ○ /robots.txt
+├ ○ /settings
+├ ○ /sitemap.xml
+├ ○ /tracker
+├ ○ /voiceprints
+├ ○ /webhooks
+└ ○ /workspace
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+BUILD_EXIT=0
