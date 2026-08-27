@@ -347,13 +347,29 @@ async def run_drive_export(
     return {"status": "done", "filename": filename, **upload}
 
 
+def resolve_export_title(meeting: Meeting, calendar_event: Dict[str, Any]) -> tuple[Optional[str], str]:
+    """Pick an export title using calendar, then manual join metadata."""
+    calendar_title = str((calendar_event or {}).get("title") or "").strip()
+    if calendar_title:
+        return calendar_title, "google_calendar"
+
+    manual = _meeting_data(meeting).get("meeting_title")
+    if isinstance(manual, dict) and manual.get("source") == "manual_join":
+        manual_title = str(manual.get("title") or "").strip()
+        if manual_title:
+            return manual_title, "manual_join"
+
+    return None, "fallback"
+
+
 def drive_export_filename(meeting: Meeting, calendar_event: Dict[str, Any]) -> str:
     start_dt = _parse_datetime(calendar_event.get("start_time")) or meeting.start_time or meeting.created_at
     if isinstance(start_dt, datetime):
         prefix = start_dt.strftime("%Y-%m-%d_%H%M")
     else:
         prefix = datetime.utcnow().strftime("%Y-%m-%d_%H%M")
-    title = str(calendar_event.get("title") or meeting.platform_specific_id or meeting.id)
+    resolved, _ = resolve_export_title(meeting, calendar_event)
+    title = str(resolved or meeting.platform_specific_id or meeting.id)
     return f"{prefix}_{_safe_filename_component(title)}.md"
 
 
@@ -362,7 +378,8 @@ def build_drive_markdown(
     calendar_event: Dict[str, Any],
     transcripts: Iterable[Transcription],
 ) -> str:
-    title = str(calendar_event.get("title") or meeting.platform_specific_id or f"meeting-{meeting.id}")
+    resolved, _ = resolve_export_title(meeting, calendar_event)
+    title = str(resolved or meeting.platform_specific_id or f"meeting-{meeting.id}")
     transcript_rows = list(transcripts)
     participants = _participants(calendar_event, transcript_rows)
     lines = [
@@ -527,11 +544,10 @@ async def send_drive_export_completed_hook(
     )).scalars().first()
     calendar_event = dict(calendar_event or {})
     native_meeting_id = getattr(meeting, "platform_specific_id", None) if meeting else None
-    title = str(
-        calendar_event.get("title")
-        or native_meeting_id
-        or f"meeting-{meeting_id}"
+    resolved, title_source = (
+        resolve_export_title(meeting, calendar_event) if meeting else (None, "fallback")
     )
+    title = str(resolved or native_meeting_id or f"meeting-{meeting_id}")
     context_chars = int(os.getenv("KABOSU_DRIVE_EXPORT_CONTEXT_CHARS", "3000"))
     start_time = getattr(meeting, "start_time", None) if meeting else None
     end_time = getattr(meeting, "end_time", None) if meeting else None
@@ -547,6 +563,7 @@ async def send_drive_export_completed_hook(
         },
         "calendar_event": calendar_event,
         "title": title,
+        "title_source": title_source,
         "drive_export": {
             "file_id": file_id,
             "web_view_link": web_view_link,

@@ -309,6 +309,42 @@ class DiscordClient:
 # ---------------------------------------------------------------------------
 
 
+def _trusted_title(
+    meeting_data: Dict[str, Any],
+    payload_title: str,
+    meeting_info: Dict[str, Any],
+) -> Tuple[Optional[str], Optional[str], Dict[str, Any], Optional[str]]:
+    """Reconcile the payload title against trusted metadata stored in DB."""
+    calendar_event = meeting_data.get("calendar_event")
+    if isinstance(calendar_event, dict) and calendar_event.get("source") == "google_calendar":
+        calendar_title = str(calendar_event.get("title") or "").strip()
+    else:
+        calendar_event = {}
+        calendar_title = ""
+
+    if calendar_title:
+        if calendar_title != payload_title:
+            return None, None, {}, "calendar_title_mismatch"
+        return calendar_title, "google_calendar", dict(calendar_event), None
+
+    manual = meeting_data.get("meeting_title")
+    if isinstance(manual, dict) and manual.get("source") == "manual_join":
+        manual_title = str(manual.get("title") or "").strip()
+    else:
+        manual_title = ""
+
+    if manual_title:
+        if manual_title != payload_title:
+            return None, None, {}, "manual_title_mismatch"
+        metadata = {
+            "start_time": meeting_info.get("start_time") or "",
+            "end_time": meeting_info.get("end_time") or "",
+        }
+        return manual_title, "manual_join", metadata, None
+
+    return None, None, {}, "calendar_title_missing"
+
+
 async def handle_drive_export_completed(
     db: AsyncSession,
     envelope: Dict[str, Any],
@@ -338,20 +374,13 @@ async def handle_drive_export_completed(
         return {"status": "duplicate", "channel_id": notify.get("channel_id")}
 
     drive_export = data.get("drive_export") or {}
-    calendar_event = data.get("calendar_event") or {}
-    if not isinstance(calendar_event, dict):
-        calendar_event = {}
-
-    # カレンダー登録のタイトルと payload の title が前後空白除去後に完全一致する
-    # ときだけ通知する。欠落・空・不一致では外部 I/O も DB 更新も行わない。
-    calendar_title = str(calendar_event.get("title") or "").strip()
-    if not calendar_title:
-        return {"status": "skipped", "reason": "calendar_title_missing"}
     payload_title = str(data.get("title") or "").strip()
-    if calendar_title != payload_title:
-        return {"status": "skipped", "reason": "calendar_title_mismatch"}
+    title, title_source, message_metadata, skip_reason = _trusted_title(
+        meeting_data, payload_title, meeting_info
+    )
+    if skip_reason:
+        return {"status": "skipped", "reason": skip_reason}
 
-    title = calendar_title
     web_view_link = str(drive_export.get("web_view_link") or "")
     context_excerpt = str(data.get("context_excerpt") or "")
 
@@ -368,7 +397,7 @@ async def handle_drive_export_completed(
         target, fallback_reason = resolve_target(
             selection, candidates, default_channel_id, threshold
         )
-        message = build_message(title, web_view_link, calendar_event, fallback_reason)
+        message = build_message(title, web_view_link, message_metadata, fallback_reason)
 
         try:
             response = await discord.create_message(target, message)
@@ -376,7 +405,9 @@ async def handle_drive_export_completed(
             if exc.status_code in {403, 404} and target != default_channel_id:
                 fallback_reason = f"selected_{exc.status_code}"
                 target = default_channel_id
-                message = build_message(title, web_view_link, calendar_event, fallback_reason)
+                message = build_message(
+                    title, web_view_link, message_metadata, fallback_reason
+                )
                 try:
                     response = await discord.create_message(target, message)
                 except Exception as fallback_exc:
@@ -397,6 +428,7 @@ async def handle_drive_export_completed(
         "confidence": selection["confidence"] if selection else None,
         "model_reason": selection["reason"] if selection else None,
         "fallback_reason": fallback_reason,
+        "title_source": title_source,
         "posted_at": _utcnow_iso(),
     }
     meeting.data = meeting_data

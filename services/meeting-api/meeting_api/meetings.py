@@ -1003,6 +1003,11 @@ async def request_bot(
         meeting_data["meeting_url"] = req.meeting_url
     if req.teams_base_host:
         meeting_data["teams_base_host"] = req.teams_base_host
+    if req.meeting_title:
+        meeting_data["meeting_title"] = {
+            "title": req.meeting_title,
+            "source": "manual_join",
+        }
     transcribe = True if req.transcribe_enabled is None else bool(req.transcribe_enabled)
     meeting_data["transcribe_enabled"] = transcribe
     if req.video:
