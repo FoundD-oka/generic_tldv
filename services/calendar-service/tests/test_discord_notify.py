@@ -340,6 +340,41 @@ def _fake_db(meeting):
     return db
 
 
+CALENDAR_TITLE = "週次定例"
+MANUAL_TITLE = "採用ふりかえり"
+
+
+def _calendar_event_data(title=CALENDAR_TITLE):
+    return {
+        "source": "google_calendar",
+        "title": title,
+        "start_time": "2026-07-03T10:00:00+09:00",
+        "end_time": "2026-07-03T11:00:00+09:00",
+    }
+
+
+def _manual_title_data(title=MANUAL_TITLE):
+    return {"title": title, "source": "manual_join"}
+
+
+def _meeting(**data):
+    return SimpleNamespace(id=42, data=dict(data))
+
+
+def _calendar_meeting(title=CALENDAR_TITLE, **data):
+    return _meeting(calendar_event=_calendar_event_data(title), **data)
+
+
+def _assert_skipped_without_effects(result, reason, *, factory, fake, model, meeting, db):
+    assert result == {"status": "skipped", "reason": reason}
+    assert factory.calls == 0
+    assert fake.list_calls == 0
+    assert fake.posts == []
+    assert model.calls == 0
+    assert db.commit.await_count == 0
+    assert "discord_notify" not in meeting.data
+
+
 def _install_fakes(monkeypatch, fake_discord, selection):
     monkeypatch.setattr(discord_notify, "DiscordClient", lambda client, **kwargs: fake_discord)
 
@@ -352,7 +387,7 @@ def _install_fakes(monkeypatch, fake_discord, selection):
 @pytest.mark.asyncio
 async def test_handle_posts_to_selected_channel(monkeypatch):
     _configure_discord(monkeypatch)
-    meeting = SimpleNamespace(id=42, data={})
+    meeting = _calendar_meeting()
     db = _fake_db(meeting)
     fake = FakeDiscord(_channels())
     _install_fakes(monkeypatch, fake, {"channel_id": "1", "confidence": 0.92, "reason": "定例"})
@@ -373,13 +408,14 @@ async def test_handle_posts_to_selected_channel(monkeypatch):
     assert notify["status"] == "posted"
     assert notify["selected_channel_id"] == "1"
     assert notify["confidence"] == 0.92
+    assert notify["title_source"] == "google_calendar"
     assert db.commit.await_count == 1
 
 
 @pytest.mark.asyncio
 async def test_handle_falls_back_to_default_on_model_timeout(monkeypatch):
     _configure_discord(monkeypatch)
-    meeting = SimpleNamespace(id=42, data={})
+    meeting = _calendar_meeting()
     db = _fake_db(meeting)
     fake = FakeDiscord(_channels())
     _install_fakes(monkeypatch, fake, None)
@@ -396,7 +432,7 @@ async def test_handle_falls_back_to_default_on_model_timeout(monkeypatch):
 @pytest.mark.asyncio
 async def test_handle_falls_back_to_default_on_unknown_channel(monkeypatch):
     _configure_discord(monkeypatch)
-    meeting = SimpleNamespace(id=42, data={})
+    meeting = _calendar_meeting()
     db = _fake_db(meeting)
     fake = FakeDiscord(_channels())
     _install_fakes(monkeypatch, fake, {"channel_id": "777", "confidence": 0.99, "reason": "?"})
@@ -413,7 +449,7 @@ async def test_handle_falls_back_to_default_on_unknown_channel(monkeypatch):
 @pytest.mark.parametrize("status", [403, 404])
 async def test_handle_reposts_to_default_when_selected_channel_rejects(monkeypatch, status):
     _configure_discord(monkeypatch)
-    meeting = SimpleNamespace(id=42, data={})
+    meeting = _calendar_meeting()
     db = _fake_db(meeting)
     fake = FakeDiscord(_channels(), failures={"1": status})
     _install_fakes(monkeypatch, fake, {"channel_id": "1", "confidence": 0.95, "reason": "定例"})
@@ -431,7 +467,7 @@ async def test_handle_reposts_to_default_when_selected_channel_rejects(monkeypat
 @pytest.mark.asyncio
 async def test_handle_raises_when_default_channel_post_fails(monkeypatch):
     _configure_discord(monkeypatch)
-    meeting = SimpleNamespace(id=42, data={})
+    meeting = _calendar_meeting()
     db = _fake_db(meeting)
     fake = FakeDiscord(_channels(), failures={"1": 403, "999": 500})
     _install_fakes(monkeypatch, fake, {"channel_id": "1", "confidence": 0.95, "reason": "定例"})
@@ -533,28 +569,23 @@ def _install_counted_fakes(monkeypatch, fake_discord, selection=None):
     "calendar_event",
     [
         None,
-        {"start_time": "2026-07-03T10:00:00+09:00"},
-        {"title": "  ", "start_time": "2026-07-03T10:00:00+09:00"},
-        "週次定例",
+        CALENDAR_TITLE,
+        {"title": CALENDAR_TITLE, "start_time": "2026-07-03T10:00:00+09:00"},
+        {"source": "google_calendar", "start_time": "2026-07-03T10:00:00+09:00"},
+        {"source": "google_calendar", "title": "  ", "start_time": "2026-07-03T10:00:00+09:00"},
     ],
-    ids=["missing_key", "no_title", "blank_title", "not_a_dict"],
+    ids=["missing_key", "not_a_dict", "no_source", "no_title", "blank_title"],
 )
 async def test_handle_skips_when_calendar_title_missing(monkeypatch, calendar_event):
     _configure_discord(monkeypatch)
-    meeting = SimpleNamespace(id=42, data={})
+    meeting = _meeting() if calendar_event is None else _meeting(calendar_event=calendar_event)
     db = _fake_db(meeting)
     fake = FakeDiscord(_channels())
     model = _install_counted_fakes(
         monkeypatch, fake, {"channel_id": "1", "confidence": 0.95, "reason": "定例"}
     )
     factory = FakeClientFactory()
-    envelope = _envelope()
-    if calendar_event is None:
-        envelope["data"].pop("calendar_event")
-    else:
-        envelope["data"]["calendar_event"] = calendar_event
-
-    result = await handle_drive_export_completed(db, envelope, http_client_factory=factory)
+    result = await handle_drive_export_completed(db, _envelope(), http_client_factory=factory)
 
     assert result == {"status": "skipped", "reason": "calendar_title_missing"}
     assert factory.calls == 0
@@ -568,7 +599,7 @@ async def test_handle_skips_when_calendar_title_missing(monkeypatch, calendar_ev
 @pytest.mark.asyncio
 async def test_handle_skips_when_calendar_title_mismatches(monkeypatch):
     _configure_discord(monkeypatch)
-    meeting = SimpleNamespace(id=42, data={})
+    meeting = _calendar_meeting()
     db = _fake_db(meeting)
     fake = FakeDiscord(_channels())
     model = _install_counted_fakes(
@@ -576,10 +607,6 @@ async def test_handle_skips_when_calendar_title_mismatches(monkeypatch):
     )
     factory = FakeClientFactory()
     envelope = _envelope()
-    envelope["data"]["calendar_event"] = {
-        "title": "週次定例",
-        "start_time": "2026-07-03T10:00:00+09:00",
-    }
     envelope["data"]["title"] = "meeting-42"
 
     result = await handle_drive_export_completed(db, envelope, http_client_factory=factory)
@@ -596,14 +623,13 @@ async def test_handle_skips_when_calendar_title_mismatches(monkeypatch):
 @pytest.mark.asyncio
 async def test_handle_posts_when_calendar_title_matches_after_strip(monkeypatch):
     _configure_discord(monkeypatch)
-    meeting = SimpleNamespace(id=42, data={})
+    meeting = _calendar_meeting(f"  {CALENDAR_TITLE}  ")
     db = _fake_db(meeting)
     fake = FakeDiscord(_channels())
     model = _install_counted_fakes(
         monkeypatch, fake, {"channel_id": "1", "confidence": 0.92, "reason": "定例"}
     )
     envelope = _envelope()
-    envelope["data"]["calendar_event"]["title"] = "  週次定例  "
     envelope["data"]["title"] = "週次定例 "
 
     result = await handle_drive_export_completed(
@@ -660,7 +686,7 @@ async def test_handle_title_gate_runs_after_existing_checks(monkeypatch):
     monkeypatch.delenv("KABOSU_DISCORD_BOT_TOKEN", raising=False)
     monkeypatch.delenv("KABOSU_DISCORD_GUILD_ID", raising=False)
     monkeypatch.delenv("KABOSU_DISCORD_DEFAULT_CHANNEL_ID", raising=False)
-    unconfigured_db = _fake_db(SimpleNamespace(id=42, data={}))
+    unconfigured_db = _fake_db(_calendar_meeting())
     unconfigured = await handle_drive_export_completed(
         unconfigured_db, envelope, http_client_factory=FakeClientFactory()
     )
@@ -670,6 +696,152 @@ async def test_handle_title_gate_runs_after_existing_checks(monkeypatch):
     assert fake.list_calls == 0
     assert fake.posts == []
     assert model.calls == 0
+
+
+# ---------------------------------------------------------------------------
+# Handler: manual join title gate
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_handle_posts_when_manual_join_title_matches(monkeypatch):
+    _configure_discord(monkeypatch)
+    meeting = _meeting(meeting_title=_manual_title_data())
+    db = _fake_db(meeting)
+    fake = FakeDiscord(_channels())
+    model = _install_counted_fakes(
+        monkeypatch, fake, {"channel_id": "1", "confidence": 0.92, "reason": "採用"}
+    )
+    envelope = _envelope()
+    envelope["data"]["title"] = MANUAL_TITLE
+
+    result = await handle_drive_export_completed(
+        db, envelope, http_client_factory=FakeClientFactory()
+    )
+
+    assert result == {"status": "posted", "channel_id": "1", "fallback_reason": None}
+    assert model.titles == [MANUAL_TITLE]
+    assert len(fake.posts) == 1
+    channel_id, message = fake.posts[0]
+    assert channel_id == "1"
+    assert f"カボス議事録: {MANUAL_TITLE}\n" in message["content"]
+    assert CALENDAR_TITLE not in message["content"]
+    notify = meeting.data["discord_notify"]
+    assert notify["status"] == "posted"
+    assert notify["title_source"] == "manual_join"
+    assert db.commit.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_handle_skips_when_manual_join_title_mismatches(monkeypatch):
+    _configure_discord(monkeypatch)
+    meeting = _meeting(meeting_title=_manual_title_data())
+    db = _fake_db(meeting)
+    fake = FakeDiscord(_channels())
+    model = _install_counted_fakes(
+        monkeypatch, fake, {"channel_id": "1", "confidence": 0.95, "reason": "定例"}
+    )
+    factory = FakeClientFactory()
+    envelope = _envelope()
+    envelope["data"]["title"] = "別の会議"
+
+    result = await handle_drive_export_completed(db, envelope, http_client_factory=factory)
+    _assert_skipped_without_effects(
+        result, "manual_title_mismatch", factory=factory, fake=fake,
+        model=model, meeting=meeting, db=db,
+    )
+
+
+@pytest.mark.asyncio
+async def test_handle_prefers_calendar_title_when_both_are_stored(monkeypatch):
+    _configure_discord(monkeypatch)
+    meeting = _calendar_meeting(meeting_title=_manual_title_data())
+    db = _fake_db(meeting)
+    fake = FakeDiscord(_channels())
+    model = _install_counted_fakes(
+        monkeypatch, fake, {"channel_id": "1", "confidence": 0.95, "reason": "定例"}
+    )
+    factory = FakeClientFactory()
+    envelope = _envelope()
+    envelope["data"]["title"] = MANUAL_TITLE
+
+    result = await handle_drive_export_completed(db, envelope, http_client_factory=factory)
+    _assert_skipped_without_effects(
+        result, "calendar_title_mismatch", factory=factory, fake=fake,
+        model=model, meeting=meeting, db=db,
+    )
+
+
+@pytest.mark.asyncio
+async def test_handle_ignores_calendar_title_supplied_only_by_payload(monkeypatch):
+    _configure_discord(monkeypatch)
+    meeting = _meeting()
+    db = _fake_db(meeting)
+    fake = FakeDiscord(_channels())
+    model = _install_counted_fakes(
+        monkeypatch, fake, {"channel_id": "1", "confidence": 0.95, "reason": "定例"}
+    )
+    factory = FakeClientFactory()
+    envelope = _envelope()
+    envelope["data"]["calendar_event"] = _calendar_event_data()
+    envelope["data"]["title"] = CALENDAR_TITLE
+
+    result = await handle_drive_export_completed(db, envelope, http_client_factory=factory)
+    _assert_skipped_without_effects(
+        result, "calendar_title_missing", factory=factory, fake=fake,
+        model=model, meeting=meeting, db=db,
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "manual",
+    [
+        MANUAL_TITLE,
+        {"title": MANUAL_TITLE},
+        {"title": MANUAL_TITLE, "source": "google_calendar"},
+        {"title": "   ", "source": "manual_join"},
+    ],
+    ids=["not_a_dict", "no_source", "other_source", "blank_title"],
+)
+async def test_handle_skips_when_manual_title_entry_is_invalid(monkeypatch, manual):
+    _configure_discord(monkeypatch)
+    meeting = _meeting(meeting_title=manual)
+    db = _fake_db(meeting)
+    fake = FakeDiscord(_channels())
+    model = _install_counted_fakes(
+        monkeypatch, fake, {"channel_id": "1", "confidence": 0.95, "reason": "定例"}
+    )
+    factory = FakeClientFactory()
+    envelope = _envelope()
+    envelope["data"]["title"] = MANUAL_TITLE
+
+    result = await handle_drive_export_completed(db, envelope, http_client_factory=factory)
+    _assert_skipped_without_effects(
+        result, "calendar_title_missing", factory=factory, fake=fake,
+        model=model, meeting=meeting, db=db,
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("payload_title", ["meeting-42", "abc-defg-hij"])
+async def test_handle_skips_when_payload_title_is_meeting_id_fallback(monkeypatch, payload_title):
+    _configure_discord(monkeypatch)
+    meeting = _meeting(meeting_title=_manual_title_data())
+    db = _fake_db(meeting)
+    fake = FakeDiscord(_channels())
+    model = _install_counted_fakes(
+        monkeypatch, fake, {"channel_id": "1", "confidence": 0.95, "reason": "定例"}
+    )
+    factory = FakeClientFactory()
+    envelope = _envelope()
+    envelope["data"]["title"] = payload_title
+
+    result = await handle_drive_export_completed(db, envelope, http_client_factory=factory)
+    _assert_skipped_without_effects(
+        result, "manual_title_mismatch", factory=factory, fake=fake,
+        model=model, meeting=meeting, db=db,
+    )
 
 
 # ---------------------------------------------------------------------------

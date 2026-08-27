@@ -236,6 +236,60 @@ class TestCreateMeeting:
         assert bot_config["voiceAgentEnabled"] is False
 
     @pytest.mark.asyncio
+    async def test_create_meeting_persists_manual_title_in_data(self, client, mock_db, mock_redis):
+        _setup_create_meeting_db(mock_db)
+
+        runtime_resp = {"container_id": TEST_CONTAINER_ID, "name": TEST_CONTAINER_NAME}
+        with patch("meeting_api.meetings._spawn_via_runtime_api", new_callable=AsyncMock, return_value=runtime_resp):
+            with patch("meeting_api.meetings.mint_meeting_token", return_value="fake.jwt.token"):
+                with patch("meeting_api.meetings.async_session_local") as mock_sf:
+                    inner = AsyncMock()
+                    inner.add = MagicMock()
+                    inner.commit = AsyncMock()
+                    mock_sf.return_value.__aenter__ = AsyncMock(return_value=inner)
+                    mock_sf.return_value.__aexit__ = AsyncMock(return_value=False)
+
+                    resp = await client.post("/bots", json={
+                        "platform": "google_meet",
+                        "native_meeting_id": "abc-defg-hij",
+                        "meeting_title": "  週次定例  ",
+                    })
+
+        assert resp.status_code == 201
+        created_meeting = mock_db.add.call_args.args[0]
+        assert created_meeting.data["meeting_title"] == {
+            "title": "週次定例",
+            "source": "manual_join",
+        }
+        assert "title" not in created_meeting.data
+        assert "name" not in created_meeting.data
+
+    @pytest.mark.asyncio
+    async def test_create_meeting_without_title_omits_manual_title_key(self, client, mock_db, mock_redis):
+        _setup_create_meeting_db(mock_db)
+
+        runtime_resp = {"container_id": TEST_CONTAINER_ID, "name": TEST_CONTAINER_NAME}
+        with patch("meeting_api.meetings._spawn_via_runtime_api", new_callable=AsyncMock, return_value=runtime_resp):
+            with patch("meeting_api.meetings.mint_meeting_token", return_value="fake.jwt.token"):
+                with patch("meeting_api.meetings.async_session_local") as mock_sf:
+                    inner = AsyncMock()
+                    inner.add = MagicMock()
+                    inner.commit = AsyncMock()
+                    mock_sf.return_value.__aenter__ = AsyncMock(return_value=inner)
+                    mock_sf.return_value.__aexit__ = AsyncMock(return_value=False)
+
+                    resp = await client.post("/bots", json={
+                        "platform": "google_meet",
+                        "native_meeting_id": "abc-defg-hij",
+                    })
+
+        assert resp.status_code == 201
+        created_meeting = mock_db.add.call_args.args[0]
+        assert "meeting_title" not in created_meeting.data
+        assert "title" not in created_meeting.data
+        assert "name" not in created_meeting.data
+
+    @pytest.mark.asyncio
     async def test_create_meeting_runtime_failure(self, client, mock_db, mock_redis):
         """POST /bots → 500 when Runtime API fails."""
         _setup_create_meeting_db(mock_db)

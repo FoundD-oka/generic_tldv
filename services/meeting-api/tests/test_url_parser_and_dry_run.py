@@ -19,8 +19,13 @@ supply (URL + platform) and trust them."
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
-from meeting_api.schemas import parse_meeting_url, MeetingCreate
+from meeting_api.schemas import (
+    MANUAL_MEETING_TITLE_MAX_LENGTH,
+    parse_meeting_url,
+    MeetingCreate,
+)
 
 
 # ===================================================================
@@ -179,3 +184,60 @@ class TestVideoReceiveSchemaField:
             video_receive_enabled=True,
         )
         assert m.video_receive_enabled is True
+
+
+class TestManualMeetingTitle:
+    def test_omitted_defaults_to_none(self):
+        m = MeetingCreate(platform="google_meet", native_meeting_id="abc-defg-hij")
+        assert m.meeting_title is None
+
+    def test_surrounding_whitespace_stripped(self):
+        m = MeetingCreate(
+            platform="google_meet",
+            native_meeting_id="abc-defg-hij",
+            meeting_title="  週次定例  ",
+        )
+        assert m.meeting_title == "週次定例"
+
+    @pytest.mark.parametrize("raw", ["", "   \t\n  "])
+    def test_empty_value_becomes_none(self, raw):
+        m = MeetingCreate(
+            platform="google_meet",
+            native_meeting_id="abc-defg-hij",
+            meeting_title=raw,
+        )
+        assert m.meeting_title is None
+
+    def test_exactly_max_length_accepted(self):
+        title = "x" * MANUAL_MEETING_TITLE_MAX_LENGTH
+        m = MeetingCreate(
+            platform="google_meet",
+            native_meeting_id="abc-defg-hij",
+            meeting_title=title,
+        )
+        assert m.meeting_title == title
+
+    def test_max_length_with_padding_accepted_after_strip(self):
+        title = "y" * MANUAL_MEETING_TITLE_MAX_LENGTH
+        m = MeetingCreate(
+            platform="google_meet",
+            native_meeting_id="abc-defg-hij",
+            meeting_title=f"   {title}   ",
+        )
+        assert m.meeting_title == title
+
+    def test_over_max_length_rejected(self):
+        with pytest.raises(ValidationError, match="200 characters or fewer"):
+            MeetingCreate(
+                platform="google_meet",
+                native_meeting_id="abc-defg-hij",
+                meeting_title="z" * (MANUAL_MEETING_TITLE_MAX_LENGTH + 1),
+            )
+
+    def test_non_string_rejected(self):
+        with pytest.raises(ValidationError):
+            MeetingCreate(
+                platform="google_meet",
+                native_meeting_id="abc-defg-hij",
+                meeting_title=123,
+            )

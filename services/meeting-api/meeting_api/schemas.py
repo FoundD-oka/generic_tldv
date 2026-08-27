@@ -42,6 +42,9 @@ def redact_meeting_data(data: Optional[Dict[str, Any]]) -> Optional[Dict[str, An
 # --- Allowed Transcription Tiers ---
 ALLOWED_TRANSCRIPTION_TIERS = {"realtime", "deferred"}
 
+# --- Manual join meeting title (dashboard "会議に参加" modal) ---
+MANUAL_MEETING_TITLE_MAX_LENGTH = 200
+
 # --- Meeting Status Definitions ---
 
 class MeetingStatus(str, Enum):
@@ -542,6 +545,14 @@ class MeetingCreate(BaseModel):
     platform: Optional[Platform] = Field(None, description="Meeting platform. Required unless agent_enabled=true with no meeting.")
     native_meeting_id: Optional[str] = Field(None, description="The platform-specific ID for the meeting (e.g., Google Meet code, Teams ID). Required unless agent_enabled=true with no meeting.")
     bot_name: Optional[str] = Field(None, description="Optional name for the bot in the meeting")
+    meeting_title: Optional[str] = Field(
+        None,
+        description=(
+            "Optional human-entered meeting title (dashboard「会議に参加」modal). "
+            f"Stripped server-side; max {MANUAL_MEETING_TITLE_MAX_LENGTH} characters after stripping. "
+            "Stored as meeting.data.meeting_title with source='manual_join'."
+        ),
+    )
     language: Optional[str] = Field(None, description="Optional language code for transcription (e.g., 'en', 'es'). Forces this single language.")
     task: Optional[str] = Field(None, description="Optional task for the transcription model (e.g., 'transcribe', 'translate')")
     transcription_tier: Optional[str] = Field(
@@ -709,6 +720,23 @@ class MeetingCreate(BaseModel):
         if v is not None and v != "" and v not in ALLOWED_TASKS:
             raise ValueError(f"Invalid task '{v}'. Must be one of: {sorted(ALLOWED_TASKS)}")
         return v
+
+    @field_validator('meeting_title', mode='before')
+    @classmethod
+    def validate_meeting_title(cls, v):
+        """Normalize the human-entered title from the dashboard join modal."""
+        if v is None:
+            return None
+        if not isinstance(v, str):
+            raise ValueError("meeting_title must be a string")
+        stripped = v.strip()
+        if not stripped:
+            return None
+        if len(stripped) > MANUAL_MEETING_TITLE_MAX_LENGTH:
+            raise ValueError(
+                f"meeting_title must be {MANUAL_MEETING_TITLE_MAX_LENGTH} characters or fewer"
+            )
+        return stripped
 
     @field_validator('transcription_tier')
     @classmethod

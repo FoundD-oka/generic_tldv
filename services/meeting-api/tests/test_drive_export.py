@@ -9,9 +9,12 @@ import pytest
 from meeting_api import sweeps
 from meeting_api.drive_export import (
     build_drive_markdown,
+    drive_export_filename,
     queue_drive_export_if_needed,
     requeue_drive_export,
+    resolve_export_title,
     run_drive_export,
+    send_drive_export_completed_hook,
 )
 from meeting_api.models import Transcription
 from meeting_api.schemas import MeetingStatus
@@ -742,3 +745,114 @@ async def test_run_drive_export_without_hook_url_does_not_deliver(monkeypatch):
     assert claim.await_count == 0
     assert delivered.await_count == 0
     assert "domain_permission" not in meeting.data["drive_export"]
+
+
+MANUAL_TITLE = "四半期レビュー"
+
+
+def _manual_meeting(title=MANUAL_TITLE, **data_overrides):
+    data = {"meeting_title": {"title": title, "source": "manual_join"}}
+    data.update(data_overrides)
+    return make_meeting(
+        id=TEST_MEETING_ID,
+        status=MeetingStatus.COMPLETED.value,
+        data=data,
+        start_time=datetime(2026, 7, 3, 10, 0, 0),
+    )
+
+
+def test_resolve_export_title_prefers_calendar_over_manual():
+    meeting = _manual_meeting(calendar_event=_calendar_event())
+    assert resolve_export_title(meeting, _calendar_event()) == ("週次定例", "google_calendar")
+
+
+def test_resolve_export_title_uses_manual_title_without_calendar():
+    meeting = _manual_meeting(title=f"  {MANUAL_TITLE}  ")
+    assert resolve_export_title(meeting, {}) == (MANUAL_TITLE, "manual_join")
+
+
+def test_resolve_export_title_without_any_title_is_fallback():
+    meeting = make_meeting(id=TEST_MEETING_ID, data={})
+    assert resolve_export_title(meeting, {}) == (None, "fallback")
+    assert resolve_export_title(meeting, {"title": "   "}) == (None, "fallback")
+
+
+@pytest.mark.parametrize("manual", [
+    "週次定例",
+    {"title": MANUAL_TITLE, "source": "google_calendar"},
+    {"title": "   ", "source": "manual_join"},
+    {"source": "manual_join"},
+])
+def test_resolve_export_title_ignores_invalid_manual_title(manual):
+    meeting = make_meeting(id=TEST_MEETING_ID, data={"meeting_title": manual})
+    assert resolve_export_title(meeting, {}) == (None, "fallback")
+
+
+def test_manual_and_calendar_titles_render_identically():
+    calendar_event = {**_calendar_event(), "title": MANUAL_TITLE}
+    calendar_meeting = make_meeting(
+        id=TEST_MEETING_ID,
+        status=MeetingStatus.COMPLETED.value,
+        data={"calendar_event": calendar_event},
+        start_time=datetime(2026, 7, 3, 10, 0, 0),
+    )
+    manual_meeting = _manual_meeting()
+
+    assert (
+        drive_export_filename(manual_meeting, {})
+        == drive_export_filename(calendar_meeting, calendar_event)
+        == f"2026-07-03_1000_{MANUAL_TITLE}.md"
+    )
+    manual_markdown = build_drive_markdown(manual_meeting, {}, [])
+    calendar_markdown = build_drive_markdown(calendar_meeting, calendar_event, [])
+    assert manual_markdown.splitlines()[0] == calendar_markdown.splitlines()[0] == f"# {MANUAL_TITLE}"
+
+
+async def _hook_data(meeting, calendar_event, monkeypatch):
+    from meeting_api.webhook_delivery import DeliveryResult
+
+    monkeypatch.setenv("KABOSU_DRIVE_EXPORT_WEBHOOK_URL", HOOK_URL)
+    db = AsyncMock()
+    db.execute = AsyncMock(side_effect=[MockResult([meeting] if meeting else [])])
+    claim = AsyncMock(return_value=("k", {"attempts": 0}, True))
+    mark = AsyncMock()
+    delivered = AsyncMock(return_value=DeliveryResult(status="delivered"))
+
+    with patch("meeting_api.outbound_events.claim_outbound_event", new=claim), \
+         patch("meeting_api.outbound_events.mark_outbound_event", new=mark), \
+         patch("meeting_api.webhook_delivery.deliver_with_result", new=delivered):
+        await send_drive_export_completed_hook(
+            TEST_MEETING_ID,
+            db,
+            file_id="drive-file-1",
+            web_view_link="https://drive/file",
+            filename=f"2026-07-03_1000_{MANUAL_TITLE}.md",
+            content="本文です",
+            calendar_event=calendar_event,
+        )
+
+    return delivered.await_args.kwargs["payload"]["data"]
+
+
+@pytest.mark.asyncio
+async def test_hook_payload_title_matches_for_calendar_and_manual(monkeypatch):
+    calendar_event = {**_calendar_event(), "title": MANUAL_TITLE}
+    calendar_meeting = make_meeting(
+        id=TEST_MEETING_ID,
+        status=MeetingStatus.COMPLETED.value,
+        data={"calendar_event": calendar_event},
+    )
+
+    calendar_data = await _hook_data(calendar_meeting, calendar_event, monkeypatch)
+    manual_data = await _hook_data(_manual_meeting(), {}, monkeypatch)
+
+    assert calendar_data["title"] == manual_data["title"] == MANUAL_TITLE
+    assert calendar_data["title_source"] == "google_calendar"
+    assert manual_data["title_source"] == "manual_join"
+
+
+@pytest.mark.asyncio
+async def test_hook_payload_title_source_fallback_without_meeting(monkeypatch):
+    data = await _hook_data(None, {}, monkeypatch)
+    assert data["title"] == f"meeting-{TEST_MEETING_ID}"
+    assert data["title_source"] == "fallback"
