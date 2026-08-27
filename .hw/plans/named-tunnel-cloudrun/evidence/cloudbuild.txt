@@ -1,0 +1,7 @@
+Build ID: 9d84d1b6-cc99-4666-9493-4cb069fd68e0
+Status: SUCCESS
+Duration: 3M8S
+Source: clean detached worktree at dafb0796e4a71085f3ec6305b35a4d9d1f899703
+Build arg VEXA_API_URL: https://kabosu-api.bonginkan.com
+Image tag: manual-named-tunnel-202608252335
+Serving revision: kabosu-dashboard-00067-tf4 (100%)

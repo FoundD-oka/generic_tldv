@@ -1,0 +1,17 @@
+{
+  "status": "ok",
+  "authMode": "direct",
+  "checks": {
+    "smtp": {"configured": false, "optional": true},
+    "googleOAuth": {"configured": false, "optional": true},
+    "azureAdOAuth": {"configured": false, "optional": true},
+    "adminApi": {"configured": true, "reachable": true},
+    "vexaApi": {"configured": true, "reachable": true}
+  },
+  "missingConfig": [],
+  "timings": [
+    {"status": 200, "seconds": 0.183064},
+    {"status": 200, "seconds": 0.115432},
+    {"status": 200, "seconds": 0.104883}
+  ]
+}

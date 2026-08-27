@@ -1,0 +1,3 @@
+https://kabosu-api.bonginkan.com/ HTTP 200
+https://kabosu-api.bonginkan.com/admin/users?limit=1 (X-Admin-API-Key: dummy) HTTP 403
+判定: gateway まで外部到達でき、認証拒否も期待どおり。

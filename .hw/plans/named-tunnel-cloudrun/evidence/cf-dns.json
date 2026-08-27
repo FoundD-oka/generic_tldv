@@ -1,0 +1,23 @@
+{
+  "result": {
+    "id": "d444428f08cc2ba23e9a10a1485e3bc6",
+    "name": "kabosu-api.bonginkan.com",
+    "type": "CNAME",
+    "content": "f8532500-4a46-4f94-b3c2-31ff3c0e012d.cfargotunnel.com",
+    "proxiable": true,
+    "proxied": true,
+    "ttl": 1,
+    "settings": {
+      "flatten_cname": false
+    },
+    "meta": {},
+    "comment": "kabosu-api-tunnel (named-tunnel-cloudrun)",
+    "tags": [],
+    "created_on": "2026-08-25T14:32:02.945064Z",
+    "modified_on": "2026-08-25T14:32:02.945064Z",
+    "comment_modified_on": "2026-08-25T14:32:02.945064Z"
+  },
+  "success": true,
+  "errors": [],
+  "messages": []
+}

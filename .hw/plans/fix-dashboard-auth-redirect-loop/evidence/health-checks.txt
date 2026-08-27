@@ -1,0 +1,32 @@
+# 反映後 health / contract 検証(--env-file 訂正後)
+# date: 2026-08-14T15:26:14Z
+# image: fix-auth-loop-20260815-002312-d698db4
+
+== AT-011 /api/health ==
+-- :3001 --
+http_code=200
+status= ok authMode= direct
+-- :3002 --
+http_code=200
+status= ok authMode= direct
+
+== AT-011 /api/config sharedAuth ==
+:3001 sharedAuth.enabled = False
+:3002 sharedAuth.enabled = True
+
+== AT-011 :3002 POST /api/auth/shared-login ==
+http_code=200
+mode= shared has_user= True has_token= True
+発行cookie: 
+== AT-013 cookie付き :3002 /api/vexa/meetings ==
+http_code=200
+keys= ['meetings', 'has_more']
+meetings件数= 33
+
+== 参考(契約外): cookie無しの同エンドポイント。200 を返すが meetings は空 ==
+http_code=200
+
+== FP-005 :3001 /login が通常ログインUIを返す ==
+http_code=200
+自動サインイン失敗UIの文言(0であること): 0
+通常ログインUIのマーカー meet.new(1以上であること): 1

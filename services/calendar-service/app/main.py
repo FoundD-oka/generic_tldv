@@ -1,17 +1,23 @@
 """Calendar Service — Google Calendar sync + bot scheduling."""
 
+import json
 import os
 import asyncio
 import logging
 
 import uvicorn
-from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi import FastAPI, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from meeting_api.database import get_db, init_db
 from meeting_api.models import CalendarEvent
 from admin_models.models import User
+from app.discord_notify import (
+    DiscordDeliveryError,
+    handle_drive_export_completed,
+    verify_webhook_signature,
+)
 from app.sync import (
     schedule_upcoming_bots,
     single_account_mode_enabled,
@@ -80,6 +86,45 @@ async def health():
         "service": "calendar-service",
         "mode": "single_account" if single_account_mode_enabled() else "per_user",
     }
+
+
+@app.post("/internal/webhooks/drive-export-completed")
+async def drive_export_completed(request: Request, db: AsyncSession = Depends(get_db)):
+    """Receive meeting-api's `drive_export.completed` hook and notify Discord.
+
+    HMAC required (fail-closed): the port is published in compose, so a missing
+    secret means the endpoint refuses to serve rather than trusting the caller.
+    """
+    raw = await request.body()
+    secret = os.getenv("KABOSU_DRIVE_EXPORT_WEBHOOK_SECRET", "").strip()
+    if not secret:
+        raise HTTPException(status_code=503, detail="webhook secret not configured")
+
+    tolerance = int(os.getenv("KABOSU_WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS", "300"))
+    if not verify_webhook_signature(
+        raw,
+        request.headers.get("X-Webhook-Signature"),
+        request.headers.get("X-Webhook-Timestamp"),
+        secret,
+        tolerance=tolerance,
+    ):
+        raise HTTPException(status_code=401, detail="invalid signature")
+
+    try:
+        envelope = json.loads(raw)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="invalid JSON body")
+    if not isinstance(envelope, dict) or envelope.get("event_type") != "drive_export.completed":
+        raise HTTPException(status_code=400, detail="unsupported event_type")
+    meeting_id = ((envelope.get("data") or {}).get("meeting") or {}).get("id")
+    if meeting_id is None:
+        raise HTTPException(status_code=400, detail="missing data.meeting.id")
+
+    try:
+        return await handle_drive_export_completed(db, envelope)
+    except DiscordDeliveryError as exc:
+        logger.error(f"Discord notification failed for meeting {meeting_id}: {exc}")
+        raise HTTPException(status_code=502, detail="discord delivery failed")
 
 
 @app.post("/calendar/connect")

@@ -1,0 +1,51 @@
+{
+  "schema_version": "1.0",
+  "task_id": "named-tunnel-cloudrun",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "dafb0796e4a71085f3ec6305b35a4d9d1f899703",
+  "reviewed_commit": "3cf08af939de0b1fe17f5d0628baa74f3f1a7f3d",
+  "target_sha256": "sha256:d0f4ff540783a52c6bc5028925566588a52791e1d051406b1a2247804345a51e",
+  "contract_sha256": "sha256:35e0282637b8fd0dcff3ff5b5944e6bc40e83134fc05da911dd92305e256e507",
+  "prompt_sha256": "sha256:33fe8636c48da76ba0af284309f02968bf59dfed9f5012c63dc2892a79ef6df7",
+  "response_sha256": "sha256:b5d00b93e151ff07e456c4f0d8ab2cab4fc8c154598b5cd9baa657816a5e5158",
+  "created_at": "2026-08-25T15:02:13.516491+00:00",
+  "verdict": "READY",
+  "summary": "差分は `.hw/plans/named-tunnel-cloudrun/**` と `docs/ops/cloudflare-named-tunnel.md` のみ(AT-014/FP-006 合格)。AT-001(before スナップショット3点、describe に trycloudflare あり)、AT-002(cf-tunnel.json: remote_config=true / cf-tunnel-config.json: 固定ホスト→127.0.0.1:8056 + http_status:404 / cf-dns.json: proxied CNAME→<tunnel-id>.cfargotunnel.com)、AT-003(200/403)、AT-004(3 URL 固定、22→22 キー・追加削除なし、--update-env-vars)、AT-005(Build SUCCESS、serving 00067-tf4 の image tag manual-named-tunnel-202608252335)、AT-006(切替後成果物 0 件、非0 は before/preflight のみと実測記録)、AT-007〜009(health reachable 両 true・fetch failed なし、config の apiUrl/publicApiUrl/wsUrl/sharedAuth、shared-login 200 と user/token 存在)、AT-010(png + Playwright request 捕捉 81 件中旧 Quick Tunnel 0)、AT-011(kickstart 後約5秒で 200/403・reachable true・env 変更なし)、AT-012(302 同一)、AT-013(6 節すべて存在、Access Key ID 未使用理由含む)、AT-015〜018(verify active、読み取り3点 success、zone 名一致、list-after 1 件と created-resources 整合、token-fetch に result キーなし、token file mode 600、preflight の Access Key ID / 最小権限記載)を確認。FP-001(Account ID は <ACCOUNT_ID>、token 系キーなし、secret-scan 0)、FP-002(commands.txt に禁止操作の参照なし、cert.pem 不在)、FP-003〜008、NFT-001(0.18/0.12/0.10 秒)、NFT-002(日本語・SPOF・00065-954 を壊れた状態と明記)、RF-001〜003 も合格。契約違反 0 件のため READY。証跡の再現性に関する改善点は advisory として記録。",
+  "confidence": "medium",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "cf-tunnel-list-after.json の取得時点が「作業後」に見えない",
+      "file": ".hw/plans/named-tunnel-cloudrun/evidence/cf-tunnel-list-after.json",
+      "detail": "status=\"inactive\"、connections=[]、conns_inactive_at が created_at(14:32:00)と一致し、cf-tunnel.json(14:32:40 に healthy・接続4)より前の状態を示している。内容は cf-tunnel-create.json の result と同一で、作成直後の再取得に見える。件数1件という契約の最低ラインは満たすが、restart-test 等の後工程以降に重複作成が無かったことの証明力は弱い。次回以降は最終手順の後に取り直し、取得時刻を付記することを推奨。"
+    },
+    {
+      "title": "cloudrun-after.json が describe の redact 版ではなく射影版",
+      "file": ".hw/plans/named-tunnel-cloudrun/evidence/cloudrun-after.json",
+      "detail": "plan 3-b は手順0と同じ redact で describe JSON 全体を保存する想定だが、after は env 3 件のみの手書き射影になっている。そのため AT-004 のキー集合比較(22→22)を committed evidence だけから jq で再現できず、env-key-diff.txt の自己申告に依存する。before と同形式の redact 済み全 env を残すと第三者再現性が上がる。"
+    },
+    {
+      "title": "diff-files.txt / commands.txt が実行出力ではなく要約",
+      "file": ".hw/plans/named-tunnel-cloudrun/evidence/diff-files.txt",
+      "detail": "AT-014 は `git diff --name-only dafb079..HEAD` の出力を求めるが、ファイルは allowlist と説明文のみ。commands.txt も禁止コマンド未使用の宣言であり、実行コマンド一覧(引数 redact 済)ではない。今回は差分本体で AT-014/FP-006 を直接確認できたため違反にはしないが、command audit 系証跡は生の出力を残す方が監査に耐える。"
+    },
+    {
+      "title": "preflight.txt 末尾に重複記載",
+      "file": ".hw/plans/named-tunnel-cloudrun/evidence/preflight.txt",
+      "detail": "RF-002 節の後に「Cloudflare API token verify: active / 要求最小権限 / Access Key ID: 未使用 / Tunnel ID」が P-4〜P-6 節と重複して再出現している。内容は矛盾しないが、追記作業の痕跡として整理の余地がある。"
+    },
+    {
+      "title": "ブラウザ捕捉で blog.vexa.ai への外部リクエストが1件",
+      "file": ".hw/plans/named-tunnel-cloudrun/evidence/browser-network.txt",
+      "detail": "契約外だが、カボス単一ブランド方針の観点で dashboard から旧ブランド(vexa.ai)ドメインへ 1 件リクエストが出ている。本タスクの範囲外なので別 issue として起票を検討。"
+    },
+    {
+      "title": "api-gateway の publish が 0.0.0.0:8056",
+      "file": ".hw/plans/named-tunnel-cloudrun/evidence/preflight.txt",
+      "detail": "plan P-1 は 127.0.0.1:8056 bind を想定していたが実測は 0.0.0.0:8056 で LAN 露出あり(preflight で事実記録済み)。契約外・本タスク範囲外だが、compose 側で 127.0.0.1 bind に絞る別タスクを推奨。"
+    }
+  ]
+}

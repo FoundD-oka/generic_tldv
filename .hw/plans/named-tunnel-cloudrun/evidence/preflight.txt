@@ -1,0 +1,144 @@
+# preflight — named-tunnel-cloudrun
+
+取得日時: 2026-08-25
+実行者: Opus 5 implementer(read-only preflight)、後続実行: Codex rescue(承認済み本番移行)
+base-commit: dafb0796e4a71085f3ec6305b35a4d9d1f899703(HEAD と一致)
+
+秘密値の扱い: token / API key / cookie の値はこのファイルに一切記録していない。
+以下はキー名・パス・モード等のメタ情報のみ。
+
+--------------------------------------------------------------------
+## P-1 ローカル api-gateway(結果: OK)
+
+$ docker ps --format '{{.Names}}|{{.Status}}|{{.Ports}}'
+  vexa-api-gateway-1|Up 10 days (healthy)|0.0.0.0:8056->8000/tcp, [::]:8056->8000/tcp
+  (他: vexa-admin-api-1 127.0.0.1:8057, vexa-kabosu-dashboard-1 0.0.0.0:3002,
+   vexa-postgres-1 127.0.0.1:5458 ほか計 16 コンテナが Up)
+
+$ curl -s -o /dev/null -w 'http_code=%{http_code} time_total=%{time_total}' http://127.0.0.1:8056/
+  http_code=200 time_total=0.003841
+
+判定: 8056 は listen 済み、5xx ではない(200)。P-1 合格。
+
+注意(plan との差分・事実のみ):
+  api-gateway の publish は `0.0.0.0:8056` であり `127.0.0.1:8056` bind ではない。
+  127.0.0.1 からは到達可能なため P-1 の要件は満たすが、LAN からも 8056 が見える。
+  Named Tunnel の origin は plan 通り http://127.0.0.1:8056 を使う。
+
+--------------------------------------------------------------------
+## P-2 gcloud / Cloud Run(結果: OK)
+
+$ gcloud auth list --format='value(account,status)'
+  okada@bonginkan.ai  *  (ACTIVE)
+$ gcloud config get-value project
+  pm-qe-mgmt-20260624
+
+$ gcloud run services describe kabosu-dashboard --project pm-qe-mgmt-20260624 \
+    --region asia-northeast1 --format=json   → 成功
+
+  .status.url                    = https://kabosu-dashboard-yye63pfv3a-an.a.run.app
+  代替 URL(run.googleapis.com/urls) = https://kabosu-dashboard-127347460378.asia-northeast1.run.app
+  .status.latestReadyRevisionName = kabosu-dashboard-00065-954
+  traffic 100%                    = kabosu-dashboard-00065-954(plan の切替前リビジョンと一致)
+  image                           = .../kabosu-dashboard:d5c324f7e75a8662f743de087a08242e33716828-quick-20260815-0132
+  リビジョン総数                   = 65
+
+  現状の quick tunnel 依存(AT-001 の「現状証明」):
+    VEXA_API_URL        = https://kent-ping-lung-treasury.trycloudflare.com
+    VEXA_ADMIN_API_URL  = https://kent-ping-lung-treasury.trycloudflare.com
+    VEXA_PUBLIC_API_URL = https://executive-leaving-tubes-wind.trycloudflare.com
+
+  Secret 参照 env(値は Secret Manager 参照。値は未取得・未記録):
+    VEXA_ADMIN_API_KEY -> secret kabosu-dashboard-admin-api-key
+    JWT_SECRET         -> secret kabosu-dashboard-jwt-secret
+    NEXTAUTH_SECRET    -> secret kabosu-dashboard-jwt-secret
+
+  quick tunnel の失効確認(curl, exit code 6 = 名前解決不可):
+    https://kent-ping-lung-treasury.trycloudflare.com/      -> http_code=000
+    https://executive-leaving-tubes-wind.trycloudflare.com/ -> http_code=000
+
+  Cloud Run /api/health(切替前)= status:"error"、
+    checks.adminApi.reachable=false / error "Cannot reach API: fetch failed"
+    checks.vexaApi.reachable=false  / error "Cannot reach API: fetch failed"
+  → evidence/health-before.json
+
+--------------------------------------------------------------------
+## P-3 既存 pm-assist-tunnel の起動方式(結果: 特定済み・変更なし)
+
+$ launchctl list | grep -i -E 'cloudflare|tunnel'
+  760  0  ai.bonginkan.pm-tunnel      (PID 760、最終終了ステータス 0 = 稼働中)
+
+plist パス: /Users/bonginkan-3-gouki/Library/LaunchAgents/ai.bonginkan.pm-tunnel.plist
+  Label            = ai.bonginkan.pm-tunnel
+  ProgramArguments = /opt/homebrew/bin/cloudflared tunnel run
+                     --token-file /Users/bonginkan-3-gouki/.cloudflared/pm-assist-tunnel.token
+  RunAtLoad        = true
+  KeepAlive        = true
+  StandardOutPath  = /Users/bonginkan-3-gouki/Library/Logs/pm-tunnel.log
+  StandardErrorPath= /Users/bonginkan-3-gouki/Library/Logs/pm-tunnel.log
+
+  → token は plist に埋め込まれておらず --token-file 方式。plan 手順2の複製元として
+    そのまま流用できる(詳細は evidence/launchd-plist.txt)。
+
+$ ls(Glob)/Users/bonginkan-3-gouki/.cloudflared/*
+  /Users/bonginkan-3-gouki/.cloudflared/pm-assist-tunnel.token   ← これ1件のみ
+
+  cert.pem: 存在しない(FP-002 の前提を preflight 時点で満たす)
+  kabosu-api-tunnel.token: 未作成(これから作る)
+  ~/.cloudflared/config.yml: 存在しない → pm-assist-tunnel は remote-managed config
+    (Cloudflare ダッシュボード側で public hostname を管理)。新 tunnel も同方式にする。
+  pm-assist-tunnel.token の mode: 未取得。
+    (`ls -l` / `stat` がこのセッションのサンドボックスで拒否されたため。
+     値は読んでいない。新規 token ファイルは作成時に chmod 600 を必ず実施する)
+
+$ curl -sI https://pm.bonginkan.com | head -1
+  HTTP/2 302        → evidence/pm-assist-before.txt(AT-012 の before 値)
+
+--------------------------------------------------------------------
+## P-4〜P-6 Cloudflare v4 API(結果: OK)
+
+Cloudflare ダッシュボードは使用していない。Account ID と API Token を対話 `read -rs` で受け取り、mode 600 の一時 curl config から Bearer header を渡した。資格情報はコマンド引数、history、標準出力、evidence、リポジトリに残していない。
+
+token verify: active
+tunnel list / zone read / DNS read: success
+zone account 一致: success
+要求最小権限: Account=Cloudflare Tunnel Write (管理画面表記 Cloudflare Tunnel:Edit)、Zone(bonginkan.com)=Zone:Read + DNS Write (DNS:Edit)
+Access Key ID: 未使用(R2/S3用。Tunnel/DNS API は Bearer token で認証)
+curl / jq / cloudflared --token-file: 利用可能
+
+--------------------------------------------------------------------
+## 固定値の採用結果
+
+  Tunnel 名     : kabosu-api-tunnel(作成済み、remote-managed、healthy)
+  採用ホスト名  : kabosu-api.bonginkan.com
+      作成前DNS一覧は0件。第1候補を採用し、proxied CNAMEを作成。外部HTTP 200。
+  Origin        : http://127.0.0.1:8056
+  token 保存先  : /Users/bonginkan-3-gouki/.cloudflared/kabosu-api-tunnel.token (mode 600)
+  Cloud Run URL : https://kabosu-dashboard-yye63pfv3a-an.a.run.app
+  切替前リビジョン: kabosu-dashboard-00065-954
+  Tunnel ID     : f8532500-4a46-4f94-b3c2-31ff3c0e012d
+
+--------------------------------------------------------------------
+## RF-001 cloudflared のフレッシュネス(結果: OK)
+
+$ cloudflared --version
+  cloudflared version 2026.7.3 (built 2026-07-22T16:32:46Z)
+$ cloudflared tunnel run --help | grep -i token
+  --token value        The Tunnel token. ... [$TUNNEL_TOKEN]
+  --token-file value   Filepath at which to read the tunnel token. ... [$TUNNEL_TOKEN_FILE]
+
+判定: `--token-file` はインストール済みバージョンで有効。plan 手順2 の方式は成立する。
+補足: `--token` はプロセス引数に token が露出するため使わない(`--token-file` のみ)。
+
+## RF-002 gcloud --update-env-vars の非破壊性
+
+AT-004で検証済み。before/after とも22キーで、追加・削除なし。
+変更値は VEXA_API_URL / VEXA_ADMIN_API_URL / VEXA_PUBLIC_API_URL の3件のみ。
+Cloudflare API token verify: active
+要求最小権限: Account=Cloudflare Tunnel Write (管理画面表記 Cloudflare Tunnel:Edit)、Zone(bonginkan.com)=Zone:Read + DNS Write (DNS:Edit)
+Access Key ID: 未使用(R2/S3用。Tunnel/DNS API は Bearer token で認証)
+Tunnel ID: f8532500-4a46-4f94-b3c2-31ff3c0e012d
+Zone ID: 3e2460b0bf9bb0d829b2419d454e1ca4
+DNS record ID: d444428f08cc2ba23e9a10a1485e3bc6
+採用ホスト名: kabosu-api.bonginkan.com
+token file mode: -rw-------

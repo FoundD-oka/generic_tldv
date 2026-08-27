@@ -1,0 +1,14 @@
+=== volumes 差分 ===
+差分なし
+
+=== .env hash 差分 ===
+差分なし
+
+=== docker ps 差分(Names/Image) ===
+5,6c5,6
+< vexa-dashboard-1	vexaai/dashboard:0.10.6.3.14-260810-0156
+< vexa-kabosu-dashboard-1	vexaai/dashboard:0.10.6.3.14-260810-0156
+---
+> vexa-dashboard-1	vexaai/dashboard:fix-auth-loop-20260815-002312-d698db4
+> vexa-kabosu-dashboard-1	vexaai/dashboard:fix-auth-loop-20260815-002312-d698db4
+(dashboard / kabosu-dashboard の image tag のみ変更)
