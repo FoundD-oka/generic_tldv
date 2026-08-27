@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act } from "react";
+import { act, createRef, forwardRef, useImperativeHandle } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -22,21 +22,34 @@ import { useMeetingListQuery } from "@/hooks/use-meeting-list-query";
 
 type HookApi = ReturnType<typeof useMeetingListQuery>;
 
-let api: HookApi;
+let apiRef: { current: HookApi | null };
 let container: HTMLDivElement;
 let root: Root;
 
-function Harness({ onSearch }: { onSearch?: (value: string) => void }) {
-  api = useMeetingListQuery({ onDebouncedSearch: onSearch });
-  return null;
+const Harness = forwardRef<HookApi, { onSearch?: (value: string) => void }>(
+  function Harness({ onSearch }, ref) {
+    const hookApi = useMeetingListQuery({ onDebouncedSearch: onSearch });
+    useImperativeHandle(ref, () => hookApi);
+    return null;
+  }
+);
+
+/** render 中の代入ではなく ref 経由で最新の Hook API を取り出す。 */
+function api(): HookApi {
+  const current = apiRef.current;
+  if (current === null) {
+    throw new Error("Harness is not mounted");
+  }
+  return current;
 }
 
 function mount(onSearch?: (value: string) => void) {
+  apiRef = createRef<HookApi>();
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
   act(() => {
-    root.render(<Harness onSearch={onSearch} />);
+    root.render(<Harness ref={apiRef} onSearch={onSearch} />);
   });
 }
 
@@ -66,7 +79,7 @@ describe("useMeetingListQuery", () => {
   it("status / platform の変更でそれぞれ1回ずつ再取得する", () => {
     mount();
 
-    act(() => api.setStatusFilter("completed"));
+    act(() => api().setStatusFilter("completed"));
     expect(fetchMeetings).toHaveBeenCalledTimes(2);
     expect(fetchMeetings).toHaveBeenLastCalledWith({
       search: undefined,
@@ -74,7 +87,7 @@ describe("useMeetingListQuery", () => {
       platform: undefined,
     });
 
-    act(() => api.setPlatformFilter("teams"));
+    act(() => api().setPlatformFilter("teams"));
     expect(fetchMeetings).toHaveBeenCalledTimes(3);
     expect(fetchMeetings).toHaveBeenLastCalledWith({
       search: undefined,
@@ -87,9 +100,9 @@ describe("useMeetingListQuery", () => {
     const onSearch = vi.fn();
     mount(onSearch);
 
-    act(() => api.setSearch("週"));
-    act(() => api.setSearch("週次"));
-    act(() => api.setSearch("週次定例"));
+    act(() => api().setSearch("週"));
+    act(() => api().setSearch("週次"));
+    act(() => api().setSearch("週次定例"));
     expect(fetchMeetings).toHaveBeenCalledTimes(1); // mount の1回のみ
 
     act(() => { vi.advanceTimersByTime(300); });
@@ -107,8 +120,8 @@ describe("useMeetingListQuery", () => {
   it("refresh は現在のフィルタで1回取得する", () => {
     mount();
 
-    act(() => api.setStatusFilter("failed"));
-    act(() => api.refresh());
+    act(() => api().setStatusFilter("failed"));
+    act(() => api().refresh());
 
     expect(fetchMeetings).toHaveBeenCalledTimes(3);
     expect(fetchMeetings).toHaveBeenLastCalledWith({
