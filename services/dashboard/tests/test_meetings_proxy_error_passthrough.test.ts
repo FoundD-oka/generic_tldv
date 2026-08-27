@@ -31,7 +31,7 @@ describe("GET /api/vexa/meetings のエラー伝播", () => {
   }
 
   it("上流 500 をそのまま返し、/bots/status へフォールバックしない", async () => {
-    const fetchMock = vi.fn(async () => new Response(
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(
       JSON.stringify({ detail: "database is down" }),
       { status: 500, headers: { "Content-Type": "application/json" } }
     ));
