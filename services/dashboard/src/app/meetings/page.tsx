@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ErrorState } from "@/components/ui/error-state";
+import { ErrorMessage, ErrorState } from "@/components/ui/error-state";
 import { useMeetingsStore } from "@/stores/meetings-store";
 import { useJoinModalStore } from "@/stores/join-modal-store";
 import type { Platform, MeetingStatus } from "@/types/vexa";
@@ -20,6 +20,7 @@ import { MeetingCard } from "@/components/meetings/meeting-card";
 import { getWebappUrl } from "@/lib/docs/webapp-url";
 import { Input } from "@/components/ui/input";
 import { usePendingMeeting } from "@/hooks/use-pending-meeting";
+import { useMeetingListQuery } from "@/hooks/use-meeting-list-query";
 import { toast } from "sonner";
 import { withBasePath } from "@/lib/base-path";
 import { DEFAULT_DASHBOARD_BRAND } from "@/lib/dashboard-brand";
@@ -59,14 +60,7 @@ export default function MeetingsPage() {
   const brand = config?.brand || DEFAULT_DASHBOARD_BRAND;
   const copy = getDashboardCopy(brand.locale).meetings;
 
-  const [searchQuery, setSearchQuery] = useState("");
-  const [platformFilter, setPlatformFilter] = useState<Platform | "all">("all");
-  const [statusFilter, setStatusFilter] = useState<MeetingStatus | "all">("all");
   const [isCreatingBrowser, setIsCreatingBrowser] = useState(false);
-
-  // Debounced server-side search
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
-  const filtersRef = useRef({ search: "", status: "" as string, platform: "" as string });
 
   // 文字起こし横断検索(タイトル検索とは独立。一覧の絞り込みには影響しない)
   const [transcriptSearch, setTranscriptSearch] = useState<TranscriptSearchState>(
@@ -92,14 +86,15 @@ export default function MeetingsPage() {
     }
   }, []);
 
-  const applyFilters = useCallback((search: string, status: string, platform: string) => {
-    filtersRef.current = { search, status, platform };
-    fetchMeetings({
-      search: search || undefined,
-      status: status === "all" ? undefined : status,
-      platform: platform === "all" ? undefined : platform,
-    });
-  }, [fetchMeetings]);
+  const {
+    searchQuery,
+    setSearch: handleSearchChange,
+    platformFilter,
+    setPlatformFilter,
+    statusFilter,
+    setStatusFilter,
+    refresh: handleRefresh,
+  } = useMeetingListQuery({ onDebouncedSearch: runTranscriptSearch });
 
   async function handleStartBrowserSession() {
     setIsCreatingBrowser(true);
@@ -122,27 +117,6 @@ export default function MeetingsPage() {
       setIsCreatingBrowser(false);
     }
   }
-
-  // Initial load
-  useEffect(() => {
-    fetchMeetings();
-  }, [fetchMeetings]);
-
-  // Re-fetch when dropdown filters change
-  useEffect(() => {
-    applyFilters(searchQuery, statusFilter, platformFilter);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter, platformFilter]);
-
-  // Debounce search input (300ms)
-  const handleSearchChange = useCallback((value: string) => {
-    setSearchQuery(value);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      applyFilters(value, statusFilter, platformFilter);
-      runTranscriptSearch(value);
-    }, 300);
-  }, [applyFilters, statusFilter, platformFilter, runTranscriptSearch]);
 
   const filteredMeetings = meetings;
   const hasRetranscriptionInProgress = meetings.some((meeting) =>
@@ -175,8 +149,6 @@ export default function MeetingsPage() {
     observer.observe(el);
     return () => observer.disconnect();
   }, [handleLoadMore]);
-
-  const handleRefresh = () => applyFilters(searchQuery, statusFilter, platformFilter);
 
   const handleSubscribe = () => {
     window.open(`${getWebappUrl()}/pricing`, "_blank");
@@ -280,9 +252,14 @@ export default function MeetingsPage() {
         />
       )}
 
+      {/* 取得に失敗しても既に表示している一覧は保持し、インラインで再試行を出す */}
+      {error && meetings.length > 0 && (
+        <ErrorMessage message={error} onRetry={() => fetchMeetings()} />
+      )}
+
       {/* Meetings cards */}
-      {error ? (
-        <ErrorState error={error} onRetry={fetchMeetings} />
+      {error && meetings.length === 0 ? (
+        <ErrorState error={error} onRetry={() => fetchMeetings()} />
       ) : subscriptionRequired && meetings.length === 0 ? (
         <ErrorState
           type="subscription"
