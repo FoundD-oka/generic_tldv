@@ -186,6 +186,70 @@ class TestVideoReceiveSchemaField:
         assert m.video_receive_enabled is True
 
 
+# ===================================================================
+# Path 3 — empty native_meeting_id normalization
+# ===================================================================
+
+
+class TestPath3EmptyNativeIdNormalization:
+    """Clients on the (URL + platform) path have no ID to send for
+    white-label URLs. Sending `native_meeting_id=""` used to 422 on
+    "cannot be empty" even though Shape B (platform + meeting_url) is
+    documented as valid. An empty/blank ID alongside (meeting_url +
+    platform) is normalized to None; the rejection boundaries for
+    requests that lack meeting_url or platform stay put."""
+
+    def test_white_label_url_with_empty_native_id(self):
+        m = MeetingCreate(
+            meeting_url="https://zoom-lfx.platform.linuxfoundation.org/meeting/96088138284?password=secret",
+            platform="zoom",
+            native_meeting_id="",
+        )
+        assert m.platform.value == "zoom"
+        assert m.native_meeting_id is None
+        assert m.meeting_url is not None
+
+    def test_white_label_url_with_blank_native_id(self):
+        m = MeetingCreate(
+            meeting_url="https://my-corp.example.com/meet/room-42",
+            platform="google_meet",
+            native_meeting_id="   ",
+        )
+        assert m.platform.value == "google_meet"
+        assert m.native_meeting_id is None
+
+    def test_canonical_zoom_url_with_empty_native_id_backfills(self):
+        """Normalization runs before the parser, so a canonical URL still
+        backfills the ID instead of leaving it None."""
+        m = MeetingCreate(
+            meeting_url="https://zoom.us/j/96088138284?pwd=abc",
+            platform="zoom",
+            native_meeting_id="",
+        )
+        assert m.native_meeting_id == "96088138284"
+
+    def test_canonical_meet_url_with_blank_native_id_backfills(self):
+        m = MeetingCreate(
+            meeting_url="https://meet.google.com/abc-defg-hij",
+            platform="google_meet",
+            native_meeting_id="   ",
+        )
+        assert m.native_meeting_id == "abc-defg-hij"
+
+    def test_empty_native_id_without_meeting_url_still_rejected(self):
+        """No URL to fall back on — the empty ID is the whole request."""
+        with pytest.raises(ValueError, match="cannot be empty"):
+            MeetingCreate(platform="google_meet", native_meeting_id="")
+
+    def test_empty_native_id_without_platform_still_rejected(self):
+        """Unknown URL shape + no platform — nothing identifies the meeting."""
+        with pytest.raises(ValueError):
+            MeetingCreate(
+                meeting_url="https://my-corp.example.com/meet/abc",
+                native_meeting_id="",
+            )
+
+
 class TestManualMeetingTitle:
     def test_omitted_defaults_to_none(self):
         m = MeetingCreate(platform="google_meet", native_meeting_id="abc-defg-hij")

@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "task_id": "meeting-join-422",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "a939e2910a04e02bce5c4d863ad8962f3cc2659a",
+  "reviewed_commit": "929a144ccd65f528273345245852e17a790e6fc5",
+  "target_sha256": "sha256:f18dda6eb16fef9da277157642a5f061ad1ea3a8eac8254ab7e2b7cd51b2f99c",
+  "contract_sha256": "sha256:04544f5fb9f5ab33a745451ca3b5833a20496c3feb1ed2a7a64a9920e9c1edb2",
+  "prompt_sha256": "sha256:5b0def4106b53ea07e5ee9ef27f990612e2315b95c87e12a676aa516706f234f",
+  "response_sha256": "sha256:ea76aed892e5b693e62bad7b2fa2925d63d78bbd578d0949ef9747e3dc098b60",
+  "created_at": "2026-09-01T09:27:57.376230+00:00",
+  "verdict": "READY",
+  "summary": "meeting-join-422 の差分は検証契約の全条項に静的整合する。AT-A1 の6ケース(白ラベル+空/空白ID→None、canonical URL の ID 補完、meeting_url なし・platform なしの拒否維持)は TestPath3EmptyNativeIdNormalization として実在し、schemas.py の mode=before 正規化(meeting_url と platform 両方 truthy かつ空白文字列 ID のみ None 化)と論理整合する。AT-D1/D2 は test_join_modal_request.test.ts で最終合成オブジェクトと JSON 直列化の双方を固定。AT-D3 の旧経路 native_meeting_id: parsedInput.meetingId || \"\" は除去され、status === 422 分岐と extractFastApi422Messages 使用が存在する。FP-5(削除・skip・only なし)、NFT-1(禁止ファイル不変)、NFT-2(変更集合は plan §5 + .hw/plans/meeting-join-422/ のみ)を差分上で確認。契約違反0件のため READY。本判定は reviewed commit 929a144 / contract hash sha256:04544f… / target hash sha256:f18dda… に束縛される。",
+  "confidence": "high",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "422 detail の英語 msg が ja ロケールでもそのまま toast 表示される",
+      "file": "services/dashboard/src/components/join/join-modal.tsx",
+      "detail": "VALIDATION_ERROR_COPY のタイトルは ja/en を切り替えるが、description に入る FastAPI の msg はバックエンド生成の英語文のまま表示される。ja ロケールのユーザーには日本語タイトル + 英語本文の混在になる。契約(AT-D2)は msg 抽出のみを要求しており違反ではない。将来、msg の type/loc からロケール別コピーへマップする層を挟む余地がある。"
+    },
+    {
+      "title": "as CreateBotRequest キャストは共有型の将来変更を隠蔽し得る",
+      "file": "services/dashboard/src/components/join/join-modal.tsx",
+      "detail": "buildJoinBotRequest の戻り値を as CreateBotRequest で必須プロパティ持ち型へ昇格させている。CreateBotRequest に将来必須フィールドが追加された場合、このキャストが型エラーを吸収して実行時の欠落を隠す。共有 interface を変更しない非目標の帰結であり契約適合だが、withPostMeetingAutoStop / applyBotCreationDefaults の引数型を Partial 受けにするか JoinBotRequest を共有型側で公式化すればキャストを消せる。"
+    },
+    {
+      "title": "buildJoinBotRequest は meetingId の null/undefined を型でのみ防いでいる",
+      "file": "services/dashboard/src/components/join/join-modal-helpers.ts",
+      "detail": "旧コードは parsedInput.meetingId || \"\" で null/undefined を実行時に吸収していたが、新コードは meetingId: string 型を信頼して直接 .trim() を呼ぶ。parse-meeting-input の戻り型が将来 string | undefined に変わると tsc(NFT-3)が検出するため契約上は担保されるが、外部入力を扱う境界としては (meetingId ?? \"\").trim() の防御があるとより頑健。"
+    }
+  ]
+}
