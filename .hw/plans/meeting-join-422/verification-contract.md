@@ -1,6 +1,6 @@
 # verification-contract: meeting-join-422
 
-前提: clean committed treeで、base `67ea03210c2de4c8723780402d302948b138d939` からの実装ブランチ上で実行する。
+前提: clean committed treeで、base `a939e2910a04e02bce5c4d863ad8962f3cc2659a` からの実装ブランチ上で実行する。
 
 ## AT — 受け入れテスト
 
@@ -31,7 +31,7 @@
 - FP-3: meeting_url なし空 ID は `MeetingCreate(platform='google_meet', native_meeting_id='')` が ValidationError。
 - FP-4: platform なし + 未知 URL + 空 ID は ValidationError。
 - FP-5: テスト削除・skip・期待値緩和なし。
-  - `git diff 67ea03210c2de4c8723780402d302948b138d939..HEAD --diff-filter=D --name-only` が空。
+  - `git diff a939e2910a04e02bce5c4d863ad8962f3cc2659a..HEAD --diff-filter=D --name-only` が空。
   - 差分に新規 `.skip(` / `.only(` がない。
 
 ## NFT — 非機能・不変条件

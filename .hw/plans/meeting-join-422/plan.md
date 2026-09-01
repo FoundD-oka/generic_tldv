@@ -1,7 +1,7 @@
 ---
 generated_by: fable
 task_id: meeting-join-422
-base_commit: 67ea03210c2de4c8723780402d302948b138d939
+base_commit: a939e2910a04e02bce5c4d863ad8962f3cc2659a
 ---
 
 # meeting-join-422 修正計画: platformNeeded URL + 空 native_meeting_id が 422 になる問題

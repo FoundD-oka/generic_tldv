@@ -6,26 +6,121 @@
   "model": "fable",
   "review_mode": "contract",
   "reviewed_base": "67ea03210c2de4c8723780402d302948b138d939",
-  "reviewed_commit": "4ddcfb653b704ada4865b4d540b5f8a490aab730",
-  "target_sha256": "sha256:fa592766bb4c9e281148e21191f4657af2a0c200b3d275dbe0107474ce68a09c",
+  "reviewed_commit": "e0846008132b60fc9ddc3fd241b6e1c764521682",
+  "target_sha256": "sha256:5e18a3874dac0247e3014b6abfd22db1181b987f37a6f35515930ab758fd2ad6",
   "contract_sha256": "sha256:44852f6626c545d8921a644d68720235ca299b9ac5b4b8dcf1cdc4c965471dae",
-  "prompt_sha256": "sha256:7d75892843f81e279d2a62b1c122eebc9d9d250114d741c87c763cd46c3c16ee",
-  "response_sha256": "sha256:7ce489c855af5c9a8d62b319af04fb1b1c41d185949a5845d703f3970ce60077",
-  "created_at": "2026-09-01T08:00:58.617572+00:00",
-  "verdict": "READY",
-  "summary": "契約 meeting-join-422 の AT/FP/NFT 全項目を base 67ea032..HEAD 4ddcfb6 の差分と静的に照合し、違反0件。schemas.py の mode=before 正規化は meeting_url+platform 両方が truthy の場合のみ空/空白 ID を None 化し、meeting_url なし(FP-3)・platform なし(FP-4)の拒否境界を保持。Dashboard は旧空文字送信経路を除去し(AT-D3)、キー省略 helper と 422 detail 抽出 helper を新設、契約要求の全テストケース(API 6件、Dashboard 相当ケース)が差分に存在し期待値が実装ロジックと整合。変更ファイル集合は plan.md §5 + .hw/plans/meeting-join-422/ に収まり、変更禁止ファイル・テスト削除・skip/only 追加なし。レビューは read-only のためコマンド実行結果は未検証であり、実行系の最終権威は pr-ready-gate と CI。",
-  "confidence": "medium",
-  "violations": [],
-  "advisory": [
+  "prompt_sha256": "sha256:c214bee82e3f34bdbbcaaad1ed00d8a98a8e3e4a179f76b69877de2666e08c86",
+  "response_sha256": "sha256:7e9346c00006dc26f33c8b39823e0ddc9f4b48384a2fb63fc6ea0cbac170055f",
+  "created_at": "2026-09-01T09:25:23.772260+00:00",
+  "chunked": true,
+  "chunk_count": 2,
+  "chunks": [
     {
-      "title": "テストの defaults 合成が config なしで実行されている",
-      "file": "services/dashboard/tests/test_join_modal_request.test.ts",
-      "detail": "composeJoinRequest は applyBotCreationDefaults(withPostMeetingAutoStop(...)) を config 引数なしで呼ぶが、join-modal.tsx の実経路は config を渡す。将来 config 由来の defaults が native_meeting_id を注入した場合、このテストは検知できない。config を渡した合成(または両方)での検証を推奨。"
+      "index": 1,
+      "files": [
+        ".hw/plans/meeting-join-422/base-commit",
+        ".hw/plans/meeting-join-422/plan.md",
+        ".hw/plans/meeting-join-422/runtime-decision.json",
+        ".hw/plans/meeting-join-422/sml-decision.json",
+        ".hw/plans/meeting-join-422/verification-contract.md",
+        ".hw/plans/poc-kabosu-discord-calendar-title-gate/base-commit",
+        ".hw/plans/poc-kabosu-discord-calendar-title-gate/plan.md",
+        ".hw/plans/poc-kabosu-discord-calendar-title-gate/runtime-decision.json",
+        ".hw/plans/poc-kabosu-discord-calendar-title-gate/sml-decision.json",
+        ".hw/plans/poc-kabosu-discord-calendar-title-gate/verification-contract.md",
+        ".hw/plans/poc-kabosu-drive-discord-routing/base-commit",
+        ".hw/plans/poc-kabosu-drive-discord-routing/plan.md",
+        ".hw/plans/poc-kabosu-drive-discord-routing/review-verdict.json",
+        ".hw/plans/poc-kabosu-drive-discord-routing/runtime-decision.json",
+        ".hw/plans/poc-kabosu-drive-discord-routing/sml-decision.json",
+        ".hw/plans/poc-kabosu-drive-discord-routing/verification-contract.md",
+        ".hw/plans/poc-manual-join-title-discord/base-commit",
+        ".hw/plans/poc-manual-join-title-discord/plan.md",
+        ".hw/plans/poc-manual-join-title-discord/review-verdict.json",
+        ".hw/plans/poc-manual-join-title-discord/runtime-decision.json",
+        ".hw/plans/poc-manual-join-title-discord/sml-decision.json",
+        ".hw/plans/poc-manual-join-title-discord/verification-contract.md",
+        "deploy/compose/docker-compose.yml",
+        "deploy/env-example",
+        "services/calendar-service/README.md",
+        "services/calendar-service/app/discord_notify.py",
+        "services/calendar-service/app/main.py",
+        "services/calendar-service/tests/test_discord_notify.py",
+        "services/dashboard/src/components/join/join-modal-helpers.ts",
+        "services/dashboard/src/components/join/join-modal.tsx",
+        "services/dashboard/src/lib/dashboard-copy.ts",
+        "services/dashboard/src/lib/manual-meeting-title.ts",
+        "services/dashboard/src/types/vexa.ts",
+        "services/dashboard/tests/test_join_modal_request.test.ts",
+        "services/dashboard/tests/test_manual_meeting_title.test.ts",
+        "services/meeting-api/meeting_api/drive_export.py",
+        "services/meeting-api/meeting_api/meetings.py",
+        "services/meeting-api/meeting_api/schemas.py",
+        "services/meeting-api/tests/test_meetings.py"
+      ],
+      "material_sha256": "sha256:8a1435ee58bfab506c180478258b55d38806fb828fdaa2377085a885eff31a6c",
+      "prompt_sha256": "sha256:40cbaf2861bae0da4dd2ea5a35d78c672f8cf7028b8b5b1aad8e2f07f59870c6",
+      "response_sha256": "sha256:d206d26e6399984c049b21ab6572dafe7c72c985501e87a9863c4ea6373e1d95",
+      "verdict": "NEEDS_REPAIR",
+      "confidence": "high"
     },
     {
-      "title": "extractFastApi422Messages の all-or-nothing null 仕様",
-      "file": "services/dashboard/src/components/join/join-modal-helpers.ts",
-      "detail": "detail 配列内に1件でも malformed エントリ(msg 非文字列など)があると、有効な msg が他にあっても全体を null にして汎用エラー表示へフォールバックする。契約(malformed 形は null)には適合しているが、有効エントリのみ部分抽出する方がユーザーに具体情報を残せる。採用する場合は契約改訂が必要。"
+      "index": 2,
+      "files": [
+        "services/meeting-api/tests/test_drive_export.py",
+        "services/meeting-api/tests/test_url_parser_and_dry_run.py"
+      ],
+      "material_sha256": "sha256:929f807be44a2de6c329692a34f37da2824fdc7999dcbfb6fd483d6c1336e785",
+      "prompt_sha256": "sha256:3a52699577a40749ddc16c429edf0064860ea6cc6d4cd4a0e716d111ad69edfe",
+      "response_sha256": "sha256:a4ed0d409d9f050b18e2a8c8717ac825383e747f0b965d98221e787cbc36ba4e",
+      "verdict": "READY",
+      "confidence": "medium"
+    }
+  ],
+  "verdict": "NEEDS_REPAIR",
+  "summary": "[chunk 1/2] meeting-join-422 本体の実装はこのチャンクで確認できる範囲では契約適合。schemas.py の parse_meeting_url_if_provided は meeting_url と platform が両方ある場合のみ空/空白の native_meeting_id を None に正規化し(FP-3/FP-4 の拒否境界は維持)、join-modal-helpers.ts の buildJoinBotRequest は空 ID のキー省略、extractFastApi422Messages は malformed で null を返す。join-modal.tsx から旧経路 `native_meeting_id: parsedInput.meetingId || \"\"` は除去され、status === 422 分岐と helper 使用が存在する(AT-D3)。AT-D1/D2 のテストも差分内にある。しかし reviewed commit e084600 は origin/main のマージコミットであり、契約が束縛する base 67ea032..HEAD の差分に main 由来の変更が混入した結果、NFT-1(変更禁止ファイル: src/types/vexa.ts、deploy/compose/docker-compose.yml、deploy/env-example に差分あり)と NFT-2(変更ファイル 41 件中 36 件が plan.md §5 + .hw/plans/meeting-join-422/ の許可集合外)に違反する。混入ファイルは実装者のタスク作業ではなく main 統合由来のため、修復はコード revert ではなく base-commit の再設定と契約再束縛(および Fable 再レビュー)が妥当。AT-A1 と FP 系の pytest 対象(test_url_parser_and_dry_run.py)はチャンク 2 の範囲でありここでは未判定。\n[chunk 2/2] チャンク2/2(meeting-api のテスト2ファイル)に契約違反は確認できず READY。AT-A1 の6ケース(TestPath3EmptyNativeIdNormalization)は契約記述と完全に対応し、FP-3/FP-4 の拒否境界テストも存在。追加のみでテスト削除・skip・期待値緩和なし(FP-5 の本チャンク分は適合)。test_drive_export.py への大量追加は本タスクのスコープ外の内容だが、base 記録後の origin/main マージ由来(他タスクの既レビュー済み変更)である可能性が高く、NFT-2 の許可集合を定義する plan.md §5 が本チャンクから参照不能のため violation の根拠を示せない。NFT-1/NFT-2 の最終裁定はチャンク1側に委ねる。",
+  "confidence": "medium",
+  "violations": [
+    {
+      "contract_id": "NFT-1",
+      "title": "変更禁止ファイル(src/types/vexa.ts・deploy/)に差分がある",
+      "detail": "NFT-1 は「src/lib/api.ts、src/types/vexa.ts、src/lib/error-messages.ts、src/lib/bot-create-defaults.ts、.env、deploy/、Docker資材に差分なし」を要求するが、base 67ea032..HEAD の差分に services/dashboard/src/types/vexa.ts(meeting_title?: string の追加)、deploy/compose/docker-compose.yml(meeting-api / calendar-service への環境変数追加)、deploy/env-example(Kabosu Drive/Discord キー追加)が含まれる。これらはいずれも reviewed commit e084600(origin/main のマージ)で持ち込まれた別タスク(poc-kabosu-drive-discord-routing / poc-manual-join-title-discord)の変更であり、meeting-join-422 の実装作業ではない。修復は main の変更の revert ではなく、base-commit を main 統合後の merge-base に更新して契約を再束縛し、Fable レビューを再実行すること(READY は契約 hash 変更で自動失効する規律どおり)。",
+      "file": "deploy/compose/docker-compose.yml",
+      "reproduction": "git diff 67ea03210c2de4c8723780402d302948b138d939..e0846008132b60fc9ddc3fd241b6e1c764521682 --name-only -- deploy/ services/dashboard/src/types/vexa.ts → 3 ファイルが出力される(契約は 0 件を要求)"
+    },
+    {
+      "contract_id": "NFT-2",
+      "title": "変更ファイル集合が plan.md §5 + .hw/plans/meeting-join-422/ の許可集合を超える",
+      "detail": "NFT-2 は変更ファイルを plan.md §5 の 5 ファイル(schemas.py / join-modal-helpers.ts / join-modal.tsx / test_url_parser_and_dry_run.py / test_join_modal_request.test.ts)と .hw/plans/meeting-join-422/ に限定するが、差分は全チャンク合計 41 ファイルで、うち 36 ファイルが許可集合外(services/calendar-service/ 一式、services/meeting-api/meeting_api/drive_export.py・meetings.py、services/dashboard/src/lib/manual-meeting-title.ts・dashboard-copy.ts、他タスクの .hw/plans/poc-* ディレクトリなど)。原因は NFT-1 と同一で、e084600 での origin/main マージにより契約の base 固定と実差分が乖離したこと。修復経路も同じく base-commit と契約の再束縛。",
+      "file": ".hw/plans/meeting-join-422/verification-contract.md",
+      "reproduction": "git diff 67ea03210c2de4c8723780402d302948b138d939..e0846008132b60fc9ddc3fd241b6e1c764521682 --name-only | grep -v -E '^\\.hw/plans/meeting-join-422/|meeting_api/schemas\\.py$|join/join-modal-helpers\\.ts$|join/join-modal\\.tsx$|test_url_parser_and_dry_run\\.py$|test_join_modal_request\\.test\\.ts$' → 36 ファイルが出力される(契約は 0 件を要求)"
+    }
+  ],
+  "advisory": [
+    {
+      "title": "修復はコード変更ではなくハーネス手続きの是正が妥当",
+      "detail": "契約外ファイルはすべて origin/main マージ(e084600)由来で、meeting-join-422 の実装 5 ファイル自体は plan どおり。main の変更を revert すると別タスクの成果物を壊すため、base-commit を main 統合後の値へ更新し、contract hash / target hash を取り直して Fable レビューを再実行するのが正しい修復。以後、統合が必要な場合は「先に main を取り込んでから base-commit を記録する」か「レビューを merge-base 差分(three-dot)で定義する」かをハーネス規約として明文化すると再発を防げる。",
+      "file": ".hw/plans/meeting-join-422/base-commit"
+    },
+    {
+      "title": "buildJoinBotRequest の戻り値を CreateBotRequest へキャストしている",
+      "detail": "join-modal.tsx で `buildJoinBotRequest(...) as CreateBotRequest` とキャストしており、native_meeting_id 省略という型情報が消える。withPostMeetingAutoStop / applyBotCreationDefaults の共有シグネチャを変えないための局所キャストとしてコメントで意図が明示されており契約適合だが、将来 defaults 側が native_meeting_id を参照する変更をした場合に型検査で捕捉できない。test_join_modal_request.test.ts が最終合成オブジェクトのキー省略を固定しているので現時点のリスクは低い。",
+      "file": "services/dashboard/src/components/join/join-modal.tsx"
+    },
+    {
+      "title": "422 detail の msg が全て空白のときは汎用エラー表示へフォールバックする",
+      "detail": "extractFastApi422Messages は detail 配列の msg がすべて空白だと null を返し、getUserFriendlyError の汎用文言に落ちる。FastAPI が空 msg を返すことは実運用上ほぼないため契約(AT-D2 の malformed → null)どおりで問題ないが、挙動として記録しておく。",
+      "file": "services/dashboard/src/components/join/join-modal-helpers.ts"
+    },
+    {
+      "title": "base..HEAD 範囲に origin/main マージ由来の差分が混入し NFT-1/NFT-2/FP-5 の機械チェックが誤検知し得る",
+      "file": "services/meeting-api/tests/test_drive_export.py",
+      "detail": "本チャンクの test_drive_export.py 追加(ドメイン権限付与・drive_export.completed フック)は meeting-join-422 のスコープ外の内容だが、ブランチのマージコミット(e084600「origin/mainを会議参加422修正へ統合」)およびマニフェスト内の他タスク review-verdict.json の存在から、main で既レビュー・マージ済みの変更が base..HEAD 範囲に写り込んだものと推定される。NFT-1/NFT-2/FP-5 を recorded base に対する素朴な git diff で評価すると偽陽性になるため、merge-base(origin/main, HEAD)..HEAD で評価するか、main 統合後に base を再記録する運用を契約に明記することを推奨。本タスク固有コミット(4ddcfb6 等)の authorship 確認で機械的に裁定可能。"
+    },
+    {
+      "title": "TestManualMeetingTitle は別タスク(手動タイトル)由来のテストが同一ファイルに同居",
+      "file": "services/meeting-api/tests/test_url_parser_and_dry_run.py",
+      "detail": "AT-A1 対象ファイルに poc-manual-join-title-discord 由来と思われる MANUAL_MEETING_TITLE_MAX_LENGTH / meeting_title のテスト群が追加されている。契約適合の妨げにはならないが、AT-A1 の -k フィルタ実行時に混同しないよう、タスク横断でテストクラスの帰属をコミット単位で分離しておくと今後のレビュー分割が容易になる。"
     }
   ]
 }
