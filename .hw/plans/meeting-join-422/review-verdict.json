@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "task_id": "meeting-join-422",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "67ea03210c2de4c8723780402d302948b138d939",
+  "reviewed_commit": "4ddcfb653b704ada4865b4d540b5f8a490aab730",
+  "target_sha256": "sha256:fa592766bb4c9e281148e21191f4657af2a0c200b3d275dbe0107474ce68a09c",
+  "contract_sha256": "sha256:44852f6626c545d8921a644d68720235ca299b9ac5b4b8dcf1cdc4c965471dae",
+  "prompt_sha256": "sha256:7d75892843f81e279d2a62b1c122eebc9d9d250114d741c87c763cd46c3c16ee",
+  "response_sha256": "sha256:7ce489c855af5c9a8d62b319af04fb1b1c41d185949a5845d703f3970ce60077",
+  "created_at": "2026-09-01T08:00:58.617572+00:00",
+  "verdict": "READY",
+  "summary": "契約 meeting-join-422 の AT/FP/NFT 全項目を base 67ea032..HEAD 4ddcfb6 の差分と静的に照合し、違反0件。schemas.py の mode=before 正規化は meeting_url+platform 両方が truthy の場合のみ空/空白 ID を None 化し、meeting_url なし(FP-3)・platform なし(FP-4)の拒否境界を保持。Dashboard は旧空文字送信経路を除去し(AT-D3)、キー省略 helper と 422 detail 抽出 helper を新設、契約要求の全テストケース(API 6件、Dashboard 相当ケース)が差分に存在し期待値が実装ロジックと整合。変更ファイル集合は plan.md §5 + .hw/plans/meeting-join-422/ に収まり、変更禁止ファイル・テスト削除・skip/only 追加なし。レビューは read-only のためコマンド実行結果は未検証であり、実行系の最終権威は pr-ready-gate と CI。",
+  "confidence": "medium",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "テストの defaults 合成が config なしで実行されている",
+      "file": "services/dashboard/tests/test_join_modal_request.test.ts",
+      "detail": "composeJoinRequest は applyBotCreationDefaults(withPostMeetingAutoStop(...)) を config 引数なしで呼ぶが、join-modal.tsx の実経路は config を渡す。将来 config 由来の defaults が native_meeting_id を注入した場合、このテストは検知できない。config を渡した合成(または両方)での検証を推奨。"
+    },
+    {
+      "title": "extractFastApi422Messages の all-or-nothing null 仕様",
+      "file": "services/dashboard/src/components/join/join-modal-helpers.ts",
+      "detail": "detail 配列内に1件でも malformed エントリ(msg 非文字列など)があると、有効な msg が他にあっても全体を null にして汎用エラー表示へフォールバックする。契約(malformed 形は null)には適合しているが、有効エントリのみ部分抽出する方がユーザーに具体情報を残せる。採用する場合は契約改訂が必要。"
+    }
+  ]
+}
