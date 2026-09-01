@@ -1,0 +1,25 @@
+{
+  "size": "M",
+  "generated_by": "fable",
+  "task_id": "meeting-join-422",
+  "base_commit": "67ea03210c2de4c8723780402d302948b138d939",
+  "axes": {
+    "requirement_ambiguity": {
+      "level": "S",
+      "reason": "根本原因は副作用なし再現で経路単位に特定済み。残る不確実性は当該422のdetail本文未確認のみで、修正契約は変わらない。"
+    },
+    "technical_unknown": {
+      "level": "S",
+      "reason": "Pydantic mode=before正規化とDashboard局所helperで実装方法が確定し、新規技術探索は不要。"
+    },
+    "blast_radius": {
+      "level": "M",
+      "reason": "2サービスにまたがる入力境界の意図的変更。CRITICAL/HIGHの共有面は変更せず、拒否経路を反証テストで固定する。"
+    },
+    "verifiability": {
+      "level": "M",
+      "reason": "pytest、vitest、tsc、lint、diffガードで機械検証できるが複数検証系統を要する。"
+    }
+  },
+  "verdict_reason": "L相当の軸なし。サービス2つと検証4系統にまたがるためM。Fable契約レビュー必須。"
+}
