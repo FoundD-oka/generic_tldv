@@ -1,0 +1,16 @@
+{
+  "task_id": "poc-manual-join-title-discord",
+  "generated_by": "fable",
+  "base_commit": "0ce72b26872269c80df47844978b0672b285b5b1",
+  "decided_at": "2026-08-27",
+  "runtime": "inline",
+  "executor": "opus-5-implementer",
+  "axes": {
+    "duration_over_hours": {"applies": false, "reason": "局所変更で1セッション内。"},
+    "state_exceeds_context": {"applies": false, "reason": "対象ファイルを1コンテキストに保持可能。"},
+    "parallel_delegation_needed": {"applies": false, "reason": "依存順に直列実装できる。"},
+    "reusable_procedure_asset": {"applies": false, "reason": "一回限りの機能追加。"}
+  },
+  "rule": "該当軸なしのためinline。"
+}
+

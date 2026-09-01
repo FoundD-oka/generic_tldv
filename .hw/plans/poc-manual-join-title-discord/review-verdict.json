@@ -1,0 +1,40 @@
+{
+  "schema_version": "1.0",
+  "task_id": "poc-manual-join-title-discord",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "0ce72b26872269c80df47844978b0672b285b5b1",
+  "reviewed_commit": "68144c0e9f19ac8be6b38b31ad17a3bd9a6558c0",
+  "target_sha256": "sha256:e57c989d47f8dc050ab65b48b34db0d51a5587b0480425418cf6ae9d63bd9ae4",
+  "contract_sha256": "sha256:130683b10424150c6ed11ac0dfe93dfaa28947946c738cc739df4770d85dd98c",
+  "prompt_sha256": "sha256:d1d3c9680fcdccbdb4e08f6ce2b9ba5dcb149b5b1121ac6896c86e8b63ed5d55",
+  "response_sha256": "sha256:2ce3805709bae03bc04ee159f0680a437cb425f36db0c577fb2205ddb91f31c3",
+  "created_at": "2026-08-27T03:55:09.057956+00:00",
+  "verdict": "READY",
+  "summary": "base 0ce72b2..HEAD 68144c0 の差分を検証契約 sha256:130683b1… に対して静的照合した。変更ファイルは plan 記載の許可集合(dashboard 5件・meeting-api 6件・calendar-service 2件)と .hw/plans/poc-manual-join-title-discord/** のみで、依存追加・.env/deploy/migration・join-form.tsx/use-meeting-actions.tsx/use-pending-meeting.ts・calendar-service main.py への変更はない(NFT-001, FP-006, FP-007, FP-010, AT-018)。AT-001/002: normalizeManualMeetingTitle が trim→空は undefined、JoinModal は truthy 時のみ request.meeting_title を設定し Input に maxLength={MANUAL_MEETING_TITLE_MAX} を付与、200/201 境界テストとソース検査テストあり。AT-003: CreateBotRequest に meeting_title?: string の任意追加のみ。AT-004/005: field_validator(mode='before') で非文字列拒否→strip→空は None→200超拒否の順、request_bot は req.meeting_title が truthy の時だけ {title, source:\"manual_join\"} を保存し、data[\"title\"]/[\"name\"] 非書込をテストが assert(FP-008)。AT-006〜008: resolve_export_title が calendar>manual_join>fallback を1か所で決め、filename/Markdown見出し/hook payload の3経路で共有、不正 manual entry 4形態を fallback とするテストと calendar/manual 同値テストあり。AT-009〜015: _trusted_title は meeting_data(DB)だけを参照し、payload の calendar_event 読取は handler から削除。calendar(source==\"google_calendar\")一致→posted、manual(source==\"manual_join\")一致→posted+title_source 記録、両方存在時は calendar 優先、payload のみの calendar_event は calendar_title_missing で拒否、manual 不正形4形態拒否、meeting ID fallback 拒否。skip 時は factory/list/posts/model/commit 全て 0 と discord_notify 未作成を _assert_skipped_without_effects で検証。AT-016/017: ゲート位置は duplicate 判定直後で不変、build_message の引数が DB 由来 metadata に変わるだけで閾値・default fallback・403/404 再投稿・配送失敗テストは fixture に calendar_event を補完した以外無改変。FP-001〜003: テスト関数削除なし、parametrize は4→5ケースへ拡大、assert 削減なし、skip/xfail/only 追加なし。FP-004: Groq/Discord に渡る title は DB 信頼値のみ(model.titles == [MANUAL_TITLE]、CALENDAR_TITLE 不含を assert)。FP-009: 既存 reason 名 calendar_title_missing/calendar_title_mismatch と {status, reason} 形状は維持、manual_title_mismatch は追加のみ。契約違反は 0 件。NFT-002〜005 の実行結果は差分からは検証できないため、evidence pack と pr-ready-gate/CI で確認されることを前提とする。",
+  "confidence": "high",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "UI の文字数判定は UTF-16 コード単位、API はコードポイント基準",
+      "file": "services/dashboard/src/lib/manual-meeting-title.ts",
+      "detail": "isManualMeetingTitleTooLong と Input の maxLength は JS の .length(UTF-16 単位)で、API 側 len() はコードポイント数。サロゲートペア(絵文字など)を含むと UI の方が厳しくなるが、API が受理して UI が拒否する方向のみで逆方向の不整合は起きない。契約 AT-002/AT-004 は BMP 文字で検証済みのため違反ではないが、将来 Intl.Segmenter 等で揃えるか、仕様として明記すると混乱が減る。"
+    },
+    {
+      "title": "Drive 側は calendar_event の source を検査しないが Discord 側は要求する",
+      "file": "services/meeting-api/meeting_api/drive_export.py",
+      "detail": "resolve_export_title は calendar_event.title があれば source に関係なく採用する一方、_trusted_title は source==\"google_calendar\" を必須とする。legacy データ等で DB の calendar_event に source が無い場合、Drive はカレンダータイトルを使い、Discord は manual 経路のみ評価して(manual 不一致または不在で)skip する。fail-closed で契約 AT-006/AT-009 どおりだが、この非対称は plan の H1 前提に依存するため、運用で「Drive にはタイトルが出るのに Discord に通知されない」ケースの説明として記録しておく価値がある。"
+    },
+    {
+      "title": "skip reason 名 calendar_title_missing が manual 経路の不在も包含する",
+      "file": "services/calendar-service/app/discord_notify.py",
+      "detail": "DB に有効な calendar/manual タイトルがどちらも無い場合(manual entry 不正形を含む)も既存の reason 名 calendar_title_missing を返す。FP-009 により今回は既存 reason 名の維持が正しいが、将来 reason を拡張する際は trusted_title_missing 等への改名を契約改訂とセットで検討すると監査ログの可読性が上がる。"
+    },
+    {
+      "title": "NFT-002〜NFT-005 の実行結果は差分から検証不能",
+      "detail": "typecheck/vitest/pytest/.hw/verify.sh の通過は本レビューの根拠(契約+差分)からは確認できない。特に discord_notify.py で新規使用する Tuple/Optional と handler 内の meeting_info が base 側で既に定義済みであること、および dashboard テストの readFileSync が services/dashboard を cwd として動くことは、evidence pack と pr-ready-gate/CI の実行ログで裏取りされることを前提としている。"
+    }
+  ]
+}

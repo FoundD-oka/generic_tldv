@@ -1,0 +1,5 @@
+{
+  "runtime": "inline",
+  "axes": {"duration": false, "state_volume": false, "delegation": false, "recurrence": false},
+  "reason": "単一関数への早期returnとテスト追加で1セッションに収まり、並行委譲・反復資産化は不要。"
+}
