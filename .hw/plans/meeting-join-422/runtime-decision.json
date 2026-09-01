@@ -1,0 +1,13 @@
+{
+  "runtime": "inline",
+  "generated_by": "fable",
+  "task_id": "meeting-join-422",
+  "base_commit": "a939e2910a04e02bce5c4d863ad8962f3cc2659a",
+  "axes": {
+    "duration": false,
+    "state_volume": false,
+    "delegation": false,
+    "recurrence": false
+  },
+  "reason": "探索不要、実装3ファイルとテスト2ファイル、ローカル高速検証で単一セッションに収まるためinline。"
+}

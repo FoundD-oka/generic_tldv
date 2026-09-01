@@ -19,7 +19,7 @@ import { useLiveStore } from "@/stores/live-store";
 import { useJoinModalStore } from "@/stores/join-modal-store";
 import { useMeetingsStore } from "@/stores/meetings-store";
 import { useRuntimeConfig } from "@/hooks/use-runtime-config";
-import type { Platform } from "@/types/vexa";
+import type { CreateBotRequest, Platform } from "@/types/vexa";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { getUserFriendlyError } from "@/lib/error-messages";
@@ -40,6 +40,7 @@ import {
   applyBotCreationDefaults,
   withPostMeetingAutoStop,
 } from "@/lib/bot-create-defaults";
+import { buildJoinBotRequest, extractFastApi422Messages } from "./join-modal-helpers";
 
 const VIDEO_RECORDING_COPY = {
   en: {
@@ -58,6 +59,15 @@ const VIDEO_RECORDING_COPY = {
   },
 } as const;
 
+const VALIDATION_ERROR_COPY = {
+  en: {
+    title: "The meeting request was rejected",
+  },
+  ja: {
+    title: "会議リクエストが受け付けられませんでした",
+  },
+} as const;
+
 type CreateBotRequestWithVideo = ReturnType<typeof withPostMeetingAutoStop> & {
   video?: boolean;
   video_receive_enabled?: boolean;
@@ -73,6 +83,7 @@ export function JoinModal() {
   const brand = config?.brand || DEFAULT_DASHBOARD_BRAND;
   const copy = getDashboardCopy(brand.locale).joinModal;
   const recordingCopy = VIDEO_RECORDING_COPY[brand.locale];
+  const validationCopy = VALIDATION_ERROR_COPY[brand.locale];
 
   const [mode, setMode] = useState<"meeting" | "browser">("meeting");
   const [meetingInput, setMeetingInput] = useState("");
@@ -159,14 +170,18 @@ export function JoinModal() {
     setIsSubmitting(true);
 
     // Path 3 (URL + platform): when parser identified platform, use parsed
-    // meetingId. Otherwise (platformNeeded), send meeting_url + platform; backend
-    // synthesizes/extracts native_meeting_id best-effort.
+    // meetingId. Otherwise (platformNeeded), send meeting_url + platform with
+    // native_meeting_id omitted; backend synthesizes/extracts it best-effort.
+    // The cast is local: buildJoinBotRequest leaves the key out, which the
+    // shared CreateBotRequest type can't express.
     const request: CreateBotRequestWithVideo = applyBotCreationDefaults(
-      withPostMeetingAutoStop({
-        platform: effectivePlatform!,
-        native_meeting_id: parsedInput.meetingId || "",
-        voice_agent_enabled: wakeWordEnabled,
-      }),
+      withPostMeetingAutoStop(
+        buildJoinBotRequest({
+          platform: effectivePlatform!,
+          meetingId: parsedInput.meetingId,
+          wakeWordEnabled,
+        }) as CreateBotRequest
+      ),
       config
     );
 
@@ -223,6 +238,17 @@ export function JoinModal() {
         return;
       }
 
+      // 422 carries FastAPI's per-field detail array. The generic copy turns
+      // that into "Unprocessable Entity", which tells the user nothing about
+      // which part of their meeting input the API refused.
+      if (error instanceof VexaAPIError && error.status === 422) {
+        const messages = extractFastApi422Messages(error.details);
+        if (messages) {
+          toast.error(validationCopy.title, { description: messages.join(" / ") });
+          return;
+        }
+      }
+
       if (
         shouldTriggerZoomOAuth(error, request.platform) &&
         request.platform === "zoom" &&
@@ -261,6 +287,7 @@ export function JoinModal() {
     brand.locale,
     copy,
     recordingCopy,
+    validationCopy,
     config,
     setActiveMeeting,
     setCurrentMeeting,

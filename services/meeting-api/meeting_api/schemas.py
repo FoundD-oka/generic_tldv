@@ -818,6 +818,17 @@ class MeetingCreate(BaseModel):
         """
         if not isinstance(data, dict):
             return data
+        # Shape B (platform + meeting_url): an empty/blank native_meeting_id
+        # means "the caller has no ID", not "the caller sent a bad one".
+        # Normalize to None so validate_native_meeting_id takes its None
+        # branch and the documented Shape B contract actually validates —
+        # otherwise a white-label URL + platform + "" is rejected with
+        # "native_meeting_id cannot be empty" before validate_meeting_or_agent
+        # ever runs. Canonical URLs still get their ID from the parser below.
+        if data.get("meeting_url") and data.get("platform"):
+            native_id = data.get("native_meeting_id")
+            if isinstance(native_id, str) and not native_id.strip():
+                data["native_meeting_id"] = None
         url = data.get("meeting_url")
         if not url or data.get("native_meeting_id"):
             return data
