@@ -135,6 +135,22 @@ KABOSU_DRIVE_EXPORT_ENABLED=true
 # Set to true to export only Google Calendar-origin meetings.
 # Default (false) exports every completed meeting, including manual joins.
 KABOSU_DRIVE_EXPORT_CALENDAR_ONLY=false
+# Drive議事録の閲覧範囲。設定するとエクスポートしたファイルに
+# type=domain / role=reader / allowFileDiscovery=false を付与する。
+# 空にすると権限付与をスキップ（既存挙動のまま）。
+KABOSU_DRIVE_SHARE_DOMAIN=bonginkan.ai
+# Drive export 完了フックの内部宛先。空にすると通知を送らない。
+# 推奨値: http://calendar-service:8050/internal/webhooks/drive-export-completed
+KABOSU_DRIVE_EXPORT_WEBHOOK_URL=
+# 送信側の署名と受信側（calendar-service）の検証で共有するHMAC秘密。
+# 空だと受信側は503で拒否する（fail-closed）。
+KABOSU_DRIVE_EXPORT_WEBHOOK_SECRET=
+# Discord通知（calendar-service）。3つのいずれかが空なら通知は無効。
+KABOSU_DISCORD_BOT_TOKEN=
+KABOSU_DISCORD_GUILD_ID=
+KABOSU_DISCORD_DEFAULT_CHANNEL_ID=
+# モデルの投稿先選択を採用する確信度の閾値。下回れば既定チャンネルへ。
+KABOSU_DISCORD_ROUTER_CONFIDENCE_THRESHOLD=0.85
 CALENDAR_SYNC_INTERVAL=300
 CALENDAR_LEAD_TIME=2
 

@@ -1,0 +1,10 @@
+{
+  "size": "S",
+  "axes": {
+    "requirement_ambiguity": {"level": "S", "reason": "比較対象、正規化、戻り値、副作用0回、ゲート位置、対象ファイルが明文化されている。"},
+    "technical_unknown": {"level": "S", "reason": "外部APIに依存しない文字列比較と早期return。送信側title生成も現物確認済み。"},
+    "blast_radius": {"level": "S", "reason": "GitNexus実測でimpactedCount=1、processes=0、risk=LOW。"},
+    "verifiability": {"level": "S", "reason": "全分岐と副作用0回を既存fake/AsyncMockで機械検証できる。"}
+  },
+  "verdict_reason": "4軸すべてS。Fable契約レビューなし・機械検証のみ。"
+}

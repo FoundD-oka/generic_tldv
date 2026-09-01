@@ -31,6 +31,11 @@ import { withBasePath } from "@/lib/base-path";
 import { DEFAULT_DASHBOARD_BRAND } from "@/lib/dashboard-brand";
 import { getDashboardCopy } from "@/lib/dashboard-copy";
 import {
+  MANUAL_MEETING_TITLE_MAX,
+  isManualMeetingTitleTooLong,
+  normalizeManualMeetingTitle,
+} from "@/lib/manual-meeting-title";
+import {
   DEFAULT_TRANSCRIPTION_LANGUAGE,
   applyBotCreationDefaults,
   withPostMeetingAutoStop,
@@ -82,6 +87,7 @@ export function JoinModal() {
 
   const [mode, setMode] = useState<"meeting" | "browser">("meeting");
   const [meetingInput, setMeetingInput] = useState("");
+  const [meetingTitle, setMeetingTitle] = useState("");
   const [platform, setPlatform] = useState<Platform>("google_meet");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [passcode, setPasscode] = useState("");
@@ -94,6 +100,7 @@ export function JoinModal() {
     if (!isOpen) {
       setMode("meeting");
       setMeetingInput("");
+      setMeetingTitle("");
       setPlatform("google_meet");
       setIsSubmitting(false);
       setPasscode("");
@@ -153,6 +160,13 @@ export function JoinModal() {
       return;
     }
 
+    if (isManualMeetingTitleTooLong(meetingTitle)) {
+      toast.error(copy.meetingTitleTooLongTitle, {
+        description: copy.meetingTitleTooLongDescription,
+      });
+      return;
+    }
+
     setIsSubmitting(true);
 
     // Path 3 (URL + platform): when parser identified platform, use parsed
@@ -181,6 +195,11 @@ export function JoinModal() {
 
     request.language = DEFAULT_TRANSCRIPTION_LANGUAGE;
     request.transcribe_enabled = true;
+
+    const normalizedTitle = normalizeManualMeetingTitle(meetingTitle);
+    if (normalizedTitle) {
+      request.meeting_title = normalizedTitle;
+    }
 
     if (authenticated) {
       request.authenticated = true;
@@ -261,6 +280,7 @@ export function JoinModal() {
     parsedInput,
     platform,
     passcode,
+    meetingTitle,
     wakeWordEnabled,
     videoRecordingEnabled,
     authenticated,
@@ -525,6 +545,25 @@ export function JoinModal() {
                 </span>
               </div>
             )}
+          </div>
+
+          {/* Optional meeting title — Drive / Discord で使う信頼タイトル */}
+          <div className="space-y-2">
+            <Label htmlFor="meetingTitle" className="text-sm">
+              {copy.meetingTitleLabel}
+            </Label>
+            <Input
+              id="meetingTitle"
+              placeholder={copy.meetingTitlePlaceholder}
+              value={meetingTitle}
+              onChange={(e) => setMeetingTitle(e.target.value)}
+              className="h-10"
+              maxLength={MANUAL_MEETING_TITLE_MAX}
+              autoComplete="off"
+            />
+            <p className="text-xs text-muted-foreground">
+              {copy.meetingTitleHelp}
+            </p>
           </div>
 
           {/* Wake Word Toggle */}
