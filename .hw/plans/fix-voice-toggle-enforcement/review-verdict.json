@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "task_id": "fix-voice-toggle-enforcement",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "67ea03210c2de4c8723780402d302948b138d939",
+  "reviewed_commit": "44a50b748846bd2d3f5ae3479160f54f81520579",
+  "target_sha256": "sha256:5dca2a8471759ce4b3f16b3c3237535cad39871dd679f20fad290797b9b0ed23",
+  "contract_sha256": "sha256:6bc3c7f565bda4e27a12e2c3d49f8b10e265f4d9c54f31796b9ba2c25296ea2f",
+  "prompt_sha256": "sha256:2b2ea8fa6e2d34285391485aed932930a0e1221801b19898cda30a0af537bc70",
+  "response_sha256": "sha256:d41192719ffd8a2e69fb680d63b05c01df5a62257b896603d1c039113950d305",
+  "created_at": "2026-09-04T03:14:44.846961+00:00",
+  "verdict": "READY",
+  "summary": "差分は検証契約の最低合格ライン1〜6、FP-001〜FP-006、Non-Functional Checks、Allowed Diffのすべてに静的検査で適合する。meetings.pyは省略時True・明示時boolをMeeting.dataへ保存し、voice_agent.pyはRedis publish前に明示的Falseのみ403でfail-closed、clients.pyは明示的Falseのみ発見除外、index.tsはspeak/speak_audio両分岐にコマンド名付きログと早期returnを置き、構造テストで固定しnpm testチェーンに追記している。既存テストの削除・skip・期待値緩和はなく、変更ファイルは全て許可範囲内。AT-001〜AT-007の実行はこのレビューでは行っておらず、pr-ready-gateとCIでの実行結果を最終権威とする。",
+  "confidence": "medium",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "/bots/status レスポンスに Meeting.data が含まれることの実機確認",
+      "file": "services/wake-orchestrator/app/clients.py",
+      "detail": "list_running_bots は各botの data.voice_agent_enabled を参照するが、meeting-api の /bots/status が Meeting.data をレスポンスに含めるかは本差分から確認できない(該当エンドポイントは許可範囲外で未変更)。含まれない場合、このフィルタは常に通過し、OFF会議もウェイク購読される。/speak側の403とbot側no-opにより最終的な無音化は維持されるが、wake-orchestratorがOFF会議の文字起こしを購読し続けてリソースを消費する。再現: OFF会議をrequest_botで作成し、GET /bots/status の該当エントリに data キーが存在するか確認する。存在しなければ次タスクで status エンドポイントの data 露出を契約化することを推奨。"
+    },
+    {
+      "title": "OFF時の早期returnが handleRedisMessage 全体を抜ける点の確認",
+      "file": "services/vexa-bot/core/src/index.ts",
+      "detail": "ガードの `return;` は handleRedisMessage を終了する。dispatch チェーンの後ろに全コマンド共通の後処理(ack送信、メトリクス等)があれば、OFF時のspeak/speak_audioだけがそれをスキップする。差分の範囲では後処理の有無を確認できない。再現: OFF会議のbotに speak コマンドをpublishし、他コマンドと同じ共通後処理ログが出るか比較する。差異があれば `return` を分岐内の条件分けに置き換える。"
+    },
+    {
+      "title": "構造テストはソース文字列一致に依存する",
+      "file": "services/vexa-bot/core/src/voice-command-guard.test.ts",
+      "detail": "テストは `} else if (command.action === 'speak') {` の完全一致文字列で分岐を切り出すため、将来のフォーマッタ適用や switch 文への書き換えで偽陰性(branch exists が FAIL)になる。契約AT-004は満たしているが、handleRedisMessage の dispatch 部分を純粋関数へ抽出して振る舞いテストにすると保守性が上がる。再現: index.ts の該当行の空白を1つ変えて npm test を実行する。"
+    }
+  ]
+}
