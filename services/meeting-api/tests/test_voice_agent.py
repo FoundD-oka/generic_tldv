@@ -139,6 +139,68 @@ class TestSpeak:
         assert resp.json()["request_id"] == "wake-reply-1"
 
     @pytest.mark.asyncio
+    async def test_speak_rejected_when_voice_agent_disabled(self, client, mock_redis):
+        """POST /speak on a voice_agent_enabled=false meeting → 403, no publish."""
+        meeting = make_meeting(
+            status=MeetingStatus.ACTIVE.value,
+            data={"voice_agent_enabled": False},
+        )
+        with _patch_find_active(meeting):
+            resp = await client.post(
+                f"/bots/{TEST_PLATFORM}/{TEST_NATIVE_MEETING_ID}/speak",
+                json={"text": "Hello, world!"},
+            )
+
+        assert resp.status_code == 403
+        assert resp.json()["detail"] == "voice agent disabled for this meeting"
+        mock_redis.publish.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_speak_audio_rejected_when_voice_agent_disabled(self, client, mock_redis):
+        """POST /speak with audio on a disabled meeting → 403, no publish."""
+        meeting = make_meeting(
+            status=MeetingStatus.ACTIVE.value,
+            data={"voice_agent_enabled": False},
+        )
+        with _patch_find_active(meeting):
+            resp = await client.post(
+                f"/bots/{TEST_PLATFORM}/{TEST_NATIVE_MEETING_ID}/speak",
+                json={"audio_url": "https://example.com/audio.wav"},
+            )
+
+        assert resp.status_code == 403
+        mock_redis.publish.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_speak_allowed_when_voice_agent_enabled(self, client, mock_redis):
+        """POST /speak on a voice_agent_enabled=true meeting still publishes."""
+        meeting = make_meeting(
+            status=MeetingStatus.ACTIVE.value,
+            data={"voice_agent_enabled": True},
+        )
+        with _patch_find_active(meeting):
+            resp = await client.post(
+                f"/bots/{TEST_PLATFORM}/{TEST_NATIVE_MEETING_ID}/speak",
+                json={"text": "Hello, world!"},
+            )
+
+        assert resp.status_code == 202
+        mock_redis.publish.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_speak_allowed_when_voice_agent_key_missing(self, client, mock_redis):
+        """Legacy meetings without the key keep the enabled behaviour."""
+        meeting = make_meeting(status=MeetingStatus.ACTIVE.value, data={})
+        with _patch_find_active(meeting):
+            resp = await client.post(
+                f"/bots/{TEST_PLATFORM}/{TEST_NATIVE_MEETING_ID}/speak",
+                json={"text": "Hello, world!"},
+            )
+
+        assert resp.status_code == 202
+        mock_redis.publish.assert_called_once()
+
+    @pytest.mark.asyncio
     async def test_speak_no_content(self, client, mock_redis, active_meeting):
         """POST /speak without text or audio → 400."""
         with _patch_find_active(active_meeting):

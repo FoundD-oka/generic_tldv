@@ -502,6 +502,10 @@ class VexaClient:
             native_id = bot.get("native_meeting_id") or bot.get("native_id")
             if not platform or not native_id:
                 continue
+            # Recording-only meetings (voice_agent_enabled=false) must not be
+            # subscribed for wake words. Missing key stays discoverable.
+            if (bot.get("data") or {}).get("voice_agent_enabled", True) is False:
+                continue
             primary_meeting_id = _to_int(bot.get("meeting_id"))
             name_meeting_id = _to_int(bot.get("meeting_id_from_name"))
             meeting_id = primary_meeting_id or name_meeting_id

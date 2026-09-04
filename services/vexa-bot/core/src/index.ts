@@ -619,11 +619,21 @@ const handleRedisMessage = async (message: string, channel: string, page: Page |
       // ==================== Voice Agent Commands ====================
 
       } else if (command.action === 'speak') {
+        // Last line of defence: a recording-only meeting never speaks.
+        if (currentBotConfig?.voiceAgentEnabled === false) {
+          log('[VoiceGuard] voiceAgentEnabled=false — ignoring speak command');
+          return;
+        }
         // Speak text using TTS
         log(`Processing speak command: "${(command.text || '').substring(0, 50)}..."`);
         await handleSpeakCommand(command, page);
 
       } else if (command.action === 'speak_audio') {
+        // Last line of defence: a recording-only meeting never speaks.
+        if (currentBotConfig?.voiceAgentEnabled === false) {
+          log('[VoiceGuard] voiceAgentEnabled=false — ignoring speak_audio command');
+          return;
+        }
         // Play pre-rendered audio (URL or base64)
         log(`Processing speak_audio command`);
         await handleSpeakAudioCommand(command);
