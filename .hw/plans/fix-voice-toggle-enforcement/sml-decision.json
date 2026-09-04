@@ -1,0 +1,1 @@
+{"size":"M","axes":{"requirement_ambiguity":{"level":"S","reason":"要求とOFF時の期待動作は明確。"},"technical_unknown":{"level":"S","reason":"既存のフラグ伝搬と判定の修正で新規技術要素なし。"},"impact_scope":{"level":"M","reason":"meeting-api、wake-orchestrator、vexa-botの境界にまたがる。"},"verifiability":{"level":"S","reason":"各境界を単体テストと構造テストで機械検証可能。"}},"reason":"影響範囲の1軸がMのため全体をMとし、Fable契約レビューを必須とする。"}
