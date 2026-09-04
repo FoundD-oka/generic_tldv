@@ -236,6 +236,55 @@ class TestCreateMeeting:
         assert bot_config["voiceAgentEnabled"] is False
 
     @pytest.mark.asyncio
+    async def test_create_meeting_persists_voice_agent_enabled_default_in_meeting_data(self, client, mock_db, mock_redis):
+        """Omitted voice_agent_enabled is stored as True in Meeting.data."""
+        _setup_create_meeting_db(mock_db)
+
+        runtime_resp = {"container_id": TEST_CONTAINER_ID, "name": TEST_CONTAINER_NAME}
+        with patch("meeting_api.meetings._spawn_via_runtime_api", new_callable=AsyncMock, return_value=runtime_resp):
+            with patch("meeting_api.meetings.mint_meeting_token", return_value="fake.jwt.token"):
+                with patch("meeting_api.meetings.async_session_local") as mock_sf:
+                    inner = AsyncMock()
+                    inner.add = MagicMock()
+                    inner.commit = AsyncMock()
+                    mock_sf.return_value.__aenter__ = AsyncMock(return_value=inner)
+                    mock_sf.return_value.__aexit__ = AsyncMock(return_value=False)
+
+                    resp = await client.post("/bots", json={
+                        "platform": "google_meet",
+                        "native_meeting_id": "abc-defg-hij",
+                    })
+
+        assert resp.status_code == 201
+        created_meeting = mock_db.add.call_args[0][0]
+        assert created_meeting.data["voice_agent_enabled"] is True
+
+    @pytest.mark.asyncio
+    async def test_create_meeting_persists_voice_agent_disabled_in_meeting_data(self, client, mock_db, mock_redis):
+        """Explicit voice_agent_enabled=false is stored as False in Meeting.data."""
+        _setup_create_meeting_db(mock_db)
+
+        runtime_resp = {"container_id": TEST_CONTAINER_ID, "name": TEST_CONTAINER_NAME}
+        with patch("meeting_api.meetings._spawn_via_runtime_api", new_callable=AsyncMock, return_value=runtime_resp):
+            with patch("meeting_api.meetings.mint_meeting_token", return_value="fake.jwt.token"):
+                with patch("meeting_api.meetings.async_session_local") as mock_sf:
+                    inner = AsyncMock()
+                    inner.add = MagicMock()
+                    inner.commit = AsyncMock()
+                    mock_sf.return_value.__aenter__ = AsyncMock(return_value=inner)
+                    mock_sf.return_value.__aexit__ = AsyncMock(return_value=False)
+
+                    resp = await client.post("/bots", json={
+                        "platform": "google_meet",
+                        "native_meeting_id": "abc-defg-hij",
+                        "voice_agent_enabled": False,
+                    })
+
+        assert resp.status_code == 201
+        created_meeting = mock_db.add.call_args[0][0]
+        assert created_meeting.data["voice_agent_enabled"] is False
+
+    @pytest.mark.asyncio
     async def test_create_meeting_runtime_failure(self, client, mock_db, mock_redis):
         """POST /bots → 500 when Runtime API fails."""
         _setup_create_meeting_db(mock_db)

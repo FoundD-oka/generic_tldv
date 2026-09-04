@@ -298,6 +298,52 @@ class ClientTests(unittest.IsolatedAsyncioTestCase):
             ],
         )
 
+    async def test_vexa_client_excludes_voice_agent_disabled_bots(self):
+        """Only an explicit voice_agent_enabled=false drops a bot from discovery."""
+        async def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "running_bots": [
+                        {
+                            "platform": "google_meet",
+                            "native_meeting_id": "enabled-mtg",
+                            "meeting_id": 41,
+                            "data": {"voice_agent_enabled": True},
+                        },
+                        {
+                            "platform": "google_meet",
+                            "native_meeting_id": "disabled-mtg",
+                            "meeting_id": 42,
+                            "data": {"voice_agent_enabled": False},
+                        },
+                        {
+                            "platform": "google_meet",
+                            "native_meeting_id": "legacy-mtg",
+                            "meeting_id": 43,
+                            "data": {},
+                        },
+                        {
+                            "platform": "zoom",
+                            "native_meeting_id": "123456789",
+                            "meeting_id": 44,
+                        },
+                    ]
+                },
+            )
+
+        settings = Settings(vexa_api_url="http://vexa.test", vexa_api_key="vexa-key")
+        client = VexaClient(settings, httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+
+        self.assertEqual(
+            await client.list_running_bots(),
+            [
+                MeetingRef(platform="google_meet", native_id="enabled-mtg", meeting_id=41),
+                MeetingRef(platform="google_meet", native_id="legacy-mtg", meeting_id=43),
+                MeetingRef(platform="zoom", native_id="123456789", meeting_id=44),
+            ],
+        )
+
     async def test_transcript_subscriber_registers_meeting_id_aliases(self):
         class FakeVexa:
             async def list_running_bots(self):
