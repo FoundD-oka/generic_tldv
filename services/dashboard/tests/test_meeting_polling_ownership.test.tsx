@@ -164,7 +164,7 @@ describe("meeting polling ownership", () => {
       meetingId: "1",
       transcripts: [],
       forcePostMeetingMode: false,
-      playbackConnectionError: null,
+      audioResolutionError: null,
       hasLoadedRef: { current: false },
       handleStatusChange: vi.fn(),
       setForcePostMeetingMode: vi.fn(),

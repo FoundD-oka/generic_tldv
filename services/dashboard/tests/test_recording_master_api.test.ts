@@ -76,4 +76,33 @@ describe("vexaAPI.getRecordingMasterStreamUrl", () => {
       duration_seconds: 12.5,
     });
   });
+  it("passes an optional AbortSignal through headers and body consumption", async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn().mockResolvedValue({
+      status: 200,
+      ok: true,
+      json: () => new Promise((_resolve, reject) => {
+        controller.signal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const pending = vexaAPI.getRecordingMasterStreamUrl(42, "audio", controller.signal);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/vexa/recordings/42/master?type=audio",
+      { signal: controller.signal }
+    );
+    await Promise.resolve();
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+  });
+
+  it("uses VexaAPIError with status for non-404 failures", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ status: 503, ok: false }));
+    await expect(vexaAPI.getRecordingMasterStreamUrl(42, "video")).rejects.toMatchObject({
+      name: "VexaAPIError",
+      status: 503,
+    });
+  });
+
 });

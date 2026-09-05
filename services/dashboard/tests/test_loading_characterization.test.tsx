@@ -180,7 +180,7 @@ describe("loading and playback characterization", () => {
 
     let playback!: MeetingPlayback;
     function Harness({ recordings }: { recordings: RecordingData[] }) {
-      const currentPlayback = useMeetingPlayback(recordings, [segmentB]);
+      const currentPlayback = useMeetingPlayback("42", recordings, [segmentB]);
       useEffect(() => {
         playback = currentPlayback;
       }, [currentPlayback]);
