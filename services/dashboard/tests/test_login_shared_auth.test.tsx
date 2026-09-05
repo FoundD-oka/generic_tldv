@@ -53,7 +53,7 @@ const SHARED_USER = {
   created_at: "2026-01-01T00:00:00Z",
 };
 
-type SharedLoginOutcome = "ok" | "server-error" | "network-error";
+type SharedLoginOutcome = "ok" | "server-error" | "rejected" | "network-error";
 
 function installFetch(sharedLogin: SharedLoginOutcome, meStatus: number | "network-error" = 401) {
   const handler = vi.fn(async (input: RequestInfo | URL) => {
@@ -69,6 +69,9 @@ function installFetch(sharedLogin: SharedLoginOutcome, meStatus: number | "netwo
       if (sharedLogin === "network-error") throw new TypeError("Failed to fetch");
       if (sharedLogin === "server-error") {
         return new Response(JSON.stringify({ error: "boom" }), { status: 500 });
+      }
+      if (sharedLogin === "rejected") {
+        return new Response(JSON.stringify({ error: "disabled" }), { status: 403 });
       }
       return new Response(JSON.stringify({ user: SHARED_USER, token: "SHARED-TOKEN" }), {
         status: 200,
@@ -147,7 +150,7 @@ describe("login page shared auto sign-in", () => {
     expect(container.textContent).toContain("自動サインインに失敗しました");
     expect(container.textContent).toContain("再試行");
     expect(container.querySelector(".animate-spin")).toBeNull();
-    expect(useAuthStore.getState().authError).toBe("shared_login_failed");
+    expect(useAuthStore.getState().authError).toBe("network");
   });
 
   it("does not navigate when shared login fails with a network error", async () => {
@@ -189,7 +192,7 @@ describe("auth provider on protected routes", () => {
   });
 
   it("redirects to /login exactly once when session and shared login both fail", async () => {
-    installFetch("server-error", 401);
+    installFetch("rejected", 401);
 
     await render(
       <AuthProvider>
@@ -204,6 +207,26 @@ describe("auth provider on protected routes", () => {
     );
 
     expect(push.mock.calls).toEqual([["/login"]]);
+  });
+
+  it("does not redirect or retry when shared login returns 500", async () => {
+    const fetchMock = installFetch("server-error", 401);
+
+    await render(
+      <AuthProvider>
+        <div>protected</div>
+      </AuthProvider>
+    );
+    await render(
+      <AuthProvider>
+        <div>protected</div>
+      </AuthProvider>
+    );
+
+    expect(push).not.toHaveBeenCalled();
+    expect(useAuthStore.getState().authError).toBe("network");
+    expect(container.textContent).toContain("サーバーに接続できません");
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).includes("/api/auth/shared-login"))).toHaveLength(1);
   });
 
   it("shows a terminal error with retry instead of redirecting on network failure", async () => {

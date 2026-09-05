@@ -10,6 +10,7 @@ interface LoginResult {
   user?: VexaUser;
   token?: string;
   isNewUser?: boolean;
+  reason?: "network";
 }
 
 /**
@@ -72,6 +73,55 @@ interface PersistedAuthState {
   user: VexaUser | null;
   didLogout: boolean;
 }
+
+class AuthDeadlineError extends Error {
+  constructor() {
+    super("Authentication request timed out");
+    this.name = "AuthDeadlineError";
+  }
+}
+
+interface AuthDeadline {
+  signal: AbortSignal;
+  expired: Promise<never>;
+  clear: () => void;
+}
+
+function createAuthDeadline(timeoutMs: number): AuthDeadline {
+  const controller = new AbortController();
+  let rejectDeadline!: (reason: Error) => void;
+  const expired = new Promise<never>((_resolve, reject) => {
+    rejectDeadline = reject;
+  });
+  const timer = setTimeout(() => {
+    controller.abort();
+    rejectDeadline(new AuthDeadlineError());
+  }, timeoutMs);
+  return {
+    signal: controller.signal,
+    expired,
+    clear: () => clearTimeout(timer),
+  };
+}
+
+async function fetchWithDeadline(
+  url: string,
+  init: RequestInit,
+  deadline: AuthDeadline
+): Promise<Response> {
+  return Promise.race([
+    fetch(url, { ...init, signal: deadline.signal }),
+    deadline.expired,
+  ]);
+}
+
+async function readJsonWithDeadline(response: Response, deadline: AuthDeadline): Promise<unknown> {
+  return Promise.race([response.json(), deadline.expired]);
+}
+
+let authEpoch = 0;
+let checkAuthFlight: Promise<void> | null = null;
+let sharedLoginFlight: Promise<LoginResult> | null = null;
 
 interface AuthState {
   user: VexaUser | null;
@@ -150,45 +200,109 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      signInSharedDashboard: async (): Promise<LoginResult> => {
-        set({ isLoading: true });
-        try {
-          const response = await fetch(withBasePath("/api/auth/shared-login"), {
-            method: "POST",
-          });
-          const data = await response.json().catch(() => ({}));
+      signInSharedDashboard: (): Promise<LoginResult> => {
+        if (sharedLoginFlight) return sharedLoginFlight;
 
-          if (!response.ok || !data.user || !data.token) {
-            set({ isLoading: false, authError: "shared_login_failed" });
+        const epoch = ++authEpoch;
+        set({ isLoading: true });
+        const deadline = createAuthDeadline(60_000);
+        const flight = (async (): Promise<LoginResult> => {
+          try {
+            const response = await fetchWithDeadline(
+              withBasePath("/api/auth/shared-login"),
+              { method: "POST" },
+              deadline
+            );
+            if (response.status === 429 || response.status >= 500) {
+              if (authEpoch === epoch) {
+                set({
+                  token: null,
+                  isAuthenticated: false,
+                  isLoading: false,
+                  authError: "network",
+                });
+              }
+              return {
+                success: false,
+                error: "Authentication service unavailable",
+                reason: "network",
+              };
+            }
+
+            if (!response.ok) {
+              if (authEpoch === epoch) set({ isLoading: false, authError: "shared_login_failed" });
+              return {
+                success: false,
+                error: "Shared dashboard auth is not available",
+              };
+            }
+
+            const rawData = await readJsonWithDeadline(response, deadline);
+            const data = rawData && typeof rawData === "object"
+              ? rawData as Record<string, unknown>
+              : {};
+            if (!data.user || !data.token || typeof data.token !== "string") {
+              if (authEpoch === epoch) {
+                set({
+                  token: null,
+                  isAuthenticated: false,
+                  isLoading: false,
+                  authError: "network",
+                });
+              }
+              return {
+                success: false,
+                error: "Invalid shared dashboard response",
+                reason: "network",
+              };
+            }
+
+            if (authEpoch === epoch) {
+              set({
+                user: data.user as VexaUser,
+                token: data.token,
+                isAuthenticated: true,
+                isLoading: false,
+                didLogout: false,
+                authError: "none",
+              });
+            }
+
+            return {
+              success: true,
+              mode: "shared",
+              user: data.user as VexaUser,
+              token: data.token,
+              isNewUser: typeof data.isNewUser === "boolean" ? data.isNewUser : undefined,
+            };
+          } catch (error) {
+            if (authEpoch === epoch) {
+              set({
+                token: null,
+                isAuthenticated: false,
+                isLoading: false,
+                authError: "network",
+              });
+            }
             return {
               success: false,
-              error: data.error || "Shared dashboard auth is not available",
+              error: (error as Error).message,
+              reason: "network",
             };
+          } finally {
+            deadline.clear();
           }
+        })();
 
-          set({
-            user: data.user,
-            token: data.token,
-            isAuthenticated: true,
-            isLoading: false,
-            didLogout: false,
-            authError: "none",
-          });
-
-          return {
-            success: true,
-            mode: "shared",
-            user: data.user,
-            token: data.token,
-            isNewUser: data.isNewUser,
-          };
-        } catch (error) {
-          set({ isLoading: false, authError: "shared_login_failed" });
-          return { success: false, error: (error as Error).message };
-        }
+        const wrappedFlight = flight.finally(() => {
+          if (sharedLoginFlight === wrappedFlight) sharedLoginFlight = null;
+        });
+        sharedLoginFlight = wrappedFlight;
+        return wrappedFlight;
       },
 
       setAuth: (user: VexaUser, token: string) => {
+        authEpoch += 1;
         set({
           user,
           token,
@@ -200,6 +314,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
+        authEpoch += 1;
         // Clear server-side cookie
         fetch(withBasePath("/api/auth/logout"), { method: "POST" });
         // Clear state
@@ -222,26 +337,64 @@ export const useAuthStore = create<AuthState>()(
       setUser: (user) => set({ user, isAuthenticated: !!user }),
       setToken: (token) => set({ token }),
 
-      checkAuth: async () => {
-        const { token, user } = get();
+      checkAuth: (): Promise<void> => {
+        if (checkAuthFlight) return checkAuthFlight;
 
-        // Use localStorage as a quick pre-render hint so UI doesn't flash,
-        // but ALWAYS verify with the server below.
-        if (user && token) {
-          set({ isAuthenticated: true, isLoading: false, didLogout: false });
-        }
+        const epoch = authEpoch;
+        const deadline = createAuthDeadline(12_000);
+        const setIfCurrent = (next: Partial<AuthState>) => {
+          if (authEpoch === epoch) set(next);
+        };
 
-        // Always verify with server — localStorage may be stale (e.g. different
-        // user logged in on the webapp since last dashboard visit).
-        try {
-          const response = await fetch(withBasePath("/api/auth/me"));
-          if (response.ok) {
-            const meData = await response.json();
+        const flight = (async () => {
+          const initial = get();
 
-            // SSO path: /api/auth/me returns user+token from shared cookies
-            if (meData.user && meData.token) {
-              set({
-                user: meData.user,
+          // An in-memory identity is only a rendering hint until the server confirms it.
+          if (initial.user && initial.token) {
+            setIfCurrent({ isAuthenticated: true, isLoading: false, didLogout: false });
+          }
+
+          try {
+            const response = await fetchWithDeadline(
+              withBasePath("/api/auth/me"),
+              {},
+              deadline
+            );
+
+            if (response.status === 401) {
+              setIfCurrent({
+                user: null,
+                token: null,
+                isAuthenticated: false,
+                isLoading: false,
+                authError: "unauthorized",
+              });
+              return;
+            }
+            if (!response.ok) {
+              setIfCurrent({
+                token: null,
+                isAuthenticated: false,
+                isLoading: false,
+                authError: "network",
+              });
+              return;
+            }
+            const rawMeData = await readJsonWithDeadline(response, deadline);
+            if (!rawMeData || typeof rawMeData !== "object") {
+              setIfCurrent({
+                token: null,
+                isAuthenticated: false,
+                isLoading: false,
+                authError: "network",
+              });
+              return;
+            }
+
+            const meData = rawMeData as Record<string, unknown>;
+            if (meData.user && typeof meData.token === "string" && meData.token) {
+              setIfCurrent({
+                user: meData.user as VexaUser,
                 token: meData.token,
                 isAuthenticated: true,
                 isLoading: false,
@@ -251,57 +404,91 @@ export const useAuthStore = create<AuthState>()(
               return;
             }
 
-            // OAuth callback path (Dashboard's own auth flow)
-            if (!get().user || !get().token) {
-              try {
-                const oauthResponse = await fetch(withBasePath("/api/auth/oauth-callback"));
-                if (oauthResponse.ok) {
-                  const oauthData = await oauthResponse.json();
-                  if (oauthData.user && oauthData.token) {
-                    set({
-                      user: oauthData.user,
-                      token: oauthData.token,
-                      isAuthenticated: true,
-                      isLoading: false,
-                      didLogout: false,
-                      authError: "none",
-                    });
-                    return;
-                  }
-                }
-              } catch {
-                // OAuth callback failed, but cookie is still valid
+            // Preserve the existing OAuth fallback when /auth/me is a valid 200
+            // without a complete identity.
+            const current = get();
+            if (!current.user || !current.token) {
+              const oauthResponse = await fetchWithDeadline(
+                withBasePath("/api/auth/oauth-callback"),
+                {},
+                deadline
+              );
+              if (oauthResponse.status === 401) {
+                setIfCurrent({
+                  user: null,
+                  token: null,
+                  isAuthenticated: false,
+                  isLoading: false,
+                  authError: "unauthorized",
+                });
+                return;
+              }
+              if (!oauthResponse.ok) {
+                setIfCurrent({
+                  token: null,
+                  isAuthenticated: false,
+                  isLoading: false,
+                  authError: "network",
+                });
+                return;
+              }
+              const rawOauthData = await readJsonWithDeadline(oauthResponse, deadline);
+              if (!rawOauthData || typeof rawOauthData !== "object") {
+                setIfCurrent({
+                  token: null,
+                  isAuthenticated: false,
+                  isLoading: false,
+                  authError: "network",
+                });
+                return;
+              }
+              const oauthData = rawOauthData as Record<string, unknown>;
+              if (oauthData.user && typeof oauthData.token === "string" && oauthData.token) {
+                setIfCurrent({
+                  user: oauthData.user as VexaUser,
+                  token: oauthData.token,
+                  isAuthenticated: true,
+                  isLoading: false,
+                  didLogout: false,
+                  authError: "none",
+                });
+                return;
               }
             }
-            // Cookie returned 200 but no user data — not truly authenticated
-            // Only keep isAuthenticated if we already have local user+token
-            const current = get();
-            if (current.user && current.token) {
-              set({ isAuthenticated: true, isLoading: false, didLogout: false, authError: "none" });
+
+            const confirmed = get();
+            if (confirmed.user && confirmed.token) {
+              setIfCurrent({
+                isAuthenticated: true,
+                isLoading: false,
+                didLogout: false,
+                authError: "none",
+              });
             } else {
-              set({
-                user: null,
+              setIfCurrent({
                 token: null,
                 isAuthenticated: false,
                 isLoading: false,
-                authError: "unauthorized",
+                authError: "network",
               });
             }
-          } else {
-            // Server returned 401 or error — clear stale local state.
-            set({
-              user: null,
+          } catch {
+            setIfCurrent({
               token: null,
               isAuthenticated: false,
               isLoading: false,
-              authError: "unauthorized",
+              authError: "network",
             });
+          } finally {
+            deadline.clear();
           }
-        } catch {
-          // Network error. Never fall back to "authenticated" from unverified local
-          // state — that is what let a stale browser bounce between /login and /meetings.
-          set({ isAuthenticated: false, isLoading: false, authError: "network" });
-        }
+        })();
+
+        const wrappedFlight = flight.finally(() => {
+          if (checkAuthFlight === wrappedFlight) checkAuthFlight = null;
+        });
+        checkAuthFlight = wrappedFlight;
+        return wrappedFlight;
       },
     }),
     {
