@@ -1,0 +1,1968 @@
+{
+  "impact-list": {
+    "target": {
+      "id": "Function:services/meeting-api/meeting_api/meetings.py:list_user_bots",
+      "name": "list_user_bots",
+      "type": "Function",
+      "filePath": "services/meeting-api/meeting_api/meetings.py"
+    },
+    "direction": "upstream",
+    "impactedCount": 0,
+    "risk": "UNKNOWN",
+    "riskSharedAxes": "UNKNOWN",
+    "riskScale": {
+      "comparableAcrossKinds": true,
+      "unusedAxes": []
+    },
+    "riskNote": "No callers resolved. Absence of edges is not evidence the symbol is unused: a caller reaching it through a reference class this index does not record — plain-object property access, a bare-identifier read of a module-scope const — produces no edge to find. Confirm with a text search before treating the change as safe.",
+    "epistemic": "exact",
+    "summary": {
+      "direct": 0,
+      "processes_affected": 0,
+      "modules_affected": 0
+    },
+    "byDepthCounts": {},
+    "affected_processes": [],
+    "affected_modules": [],
+    "byDepth": {}
+  },
+  "impact-polling": {
+    "target": {
+      "id": "Function:services/dashboard/src/hooks/use-meeting-polling.ts:startImmediateIntervalPolling",
+      "name": "startImmediateIntervalPolling",
+      "type": "Function",
+      "filePath": "services/dashboard/src/hooks/use-meeting-polling.ts"
+    },
+    "direction": "upstream",
+    "impactedCount": 3,
+    "risk": "LOW",
+    "riskSharedAxes": "LOW",
+    "riskScale": {
+      "comparableAcrossKinds": true,
+      "unusedAxes": []
+    },
+    "epistemic": "exact",
+    "summary": {
+      "direct": 1,
+      "processes_affected": 1,
+      "modules_affected": 2
+    },
+    "byDepthCounts": {
+      "1": 1,
+      "2": 1,
+      "3": 1
+    },
+    "affected_processes": [
+      {
+        "name": "MeetingDetailPage",
+        "type": "Function",
+        "filePath": "services/dashboard/src/components/meetings/meeting-detail-page.tsx",
+        "affected_process_count": 3,
+        "total_hits": 3,
+        "earliest_broken_step": 1
+      }
+    ],
+    "affected_modules": [
+      {
+        "name": "Hooks",
+        "hits": 2,
+        "impact": "direct"
+      },
+      {
+        "name": "Ui",
+        "hits": 1,
+        "impact": "indirect"
+      }
+    ],
+    "byDepth": {
+      "1": [
+        {
+          "depth": 1,
+          "id": "Function:services/dashboard/src/hooks/use-meeting-polling.ts:useMeetingPolling",
+          "name": "useMeetingPolling",
+          "filePath": "services/dashboard/src/hooks/use-meeting-polling.ts",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        }
+      ],
+      "2": [
+        {
+          "depth": 2,
+          "id": "Function:services/dashboard/src/hooks/use-meeting-live-data.ts:useMeetingLiveData",
+          "name": "useMeetingLiveData",
+          "filePath": "services/dashboard/src/hooks/use-meeting-live-data.ts",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        }
+      ],
+      "3": [
+        {
+          "depth": 3,
+          "id": "Function:services/dashboard/src/components/meetings/meeting-detail-page.tsx:MeetingDetailPage",
+          "name": "MeetingDetailPage",
+          "filePath": "services/dashboard/src/components/meetings/meeting-detail-page.tsx",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": [
+            {
+              "id": "proc_522_meetingdetailpage",
+              "label": "MeetingDetailPage → WithBasePath",
+              "processType": "cross_community",
+              "step": 1
+            },
+            {
+              "id": "proc_12_meetingdetailpage",
+              "label": "MeetingDetailPage → GetRecordingMasterStreamUrl",
+              "processType": "cross_community",
+              "step": 1
+            },
+            {
+              "id": "proc_426_meetingdetailpage",
+              "label": "MeetingDetailPage → FetchConfig",
+              "processType": "cross_community",
+              "step": 1
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "impact-transcripts": {
+    "status": "ambiguous",
+    "message": "Found 2 symbols matching 'fetchTranscripts'. Blast radius differs per candidate (max 0 impacted at risk UNKNOWN). Disambiguate with target_uid (or file_path/kind) for a single authoritative result.",
+    "target": {
+      "name": "fetchTranscripts"
+    },
+    "direction": "upstream",
+    "totalCandidates": 2,
+    "impactedCount": null,
+    "risk": "UNKNOWN",
+    "maxImpactedCount": 0,
+    "maxRisk": "UNKNOWN",
+    "candidates": [
+      {
+        "uid": "Function:services/dashboard/src/stores/meetings-store.ts:useMeetingsStore.fetchTranscripts@347:2",
+        "name": "fetchTranscripts",
+        "kind": "Function",
+        "filePath": "services/dashboard/src/stores/meetings-store.ts",
+        "line": 348,
+        "score": 0.96,
+        "impactedCount": 0,
+        "risk": "UNKNOWN",
+        "riskSharedAxes": "UNKNOWN",
+        "riskScale": {
+          "comparableAcrossKinds": false,
+          "unusedAxes": [
+            {
+              "axis": "processes",
+              "reason": "enrichment-skipped"
+            },
+            {
+              "axis": "modules",
+              "reason": "enrichment-skipped"
+            }
+          ]
+        },
+        "direct": 0,
+        "riskNote": "No callers resolved. Absence of edges is not evidence the symbol is unused: a caller reaching it through a reference class this index does not record — plain-object property access, a bare-identifier read of a module-scope const — produces no edge to find. Confirm with a text search before treating the change as safe."
+      },
+      {
+        "uid": "Property:services/dashboard/src/stores/meetings-store.ts:MeetingsState.fetchTranscripts",
+        "name": "fetchTranscripts",
+        "kind": "",
+        "filePath": "services/dashboard/src/stores/meetings-store.ts",
+        "line": 116,
+        "score": 0.9,
+        "impactedCount": 0,
+        "risk": "UNKNOWN",
+        "riskSharedAxes": "UNKNOWN",
+        "riskScale": {
+          "comparableAcrossKinds": false,
+          "unusedAxes": [
+            {
+              "axis": "processes",
+              "reason": "enrichment-skipped"
+            },
+            {
+              "axis": "modules",
+              "reason": "enrichment-skipped"
+            }
+          ]
+        },
+        "direct": 0,
+        "riskNote": "No callers resolved. Absence of edges is not evidence the symbol is unused: a caller reaching it through a reference class this index does not record — plain-object property access, a bare-identifier read of a module-scope const — produces no edge to find. Confirm with a text search before treating the change as safe."
+      }
+    ]
+  },
+  "impact-forward": {
+    "target": {
+      "id": "Function:services/api-gateway/main.py:forward_request",
+      "name": "forward_request",
+      "type": "Function",
+      "filePath": "services/api-gateway/main.py"
+    },
+    "direction": "upstream",
+    "impactedCount": 61,
+    "risk": "CRITICAL",
+    "riskSharedAxes": "CRITICAL",
+    "riskScale": {
+      "comparableAcrossKinds": true,
+      "unusedAxes": []
+    },
+    "epistemic": "exact",
+    "summary": {
+      "direct": 61,
+      "processes_affected": 1,
+      "modules_affected": 1
+    },
+    "byDepthCounts": {
+      "1": 61
+    },
+    "affected_processes": [
+      {
+        "name": "enroll_voiceprint_from_audio_proxy",
+        "type": "Function",
+        "filePath": "services/api-gateway/main.py",
+        "affected_process_count": 1,
+        "total_hits": 1,
+        "earliest_broken_step": 1
+      }
+    ],
+    "affected_modules": [
+      {
+        "name": "Api-gateway",
+        "hits": 61,
+        "impact": "direct"
+      }
+    ],
+    "byDepth": {
+      "1": [
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:agent_chat_interrupt_proxy",
+          "name": "agent_chat_interrupt_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:agent_chat_reset_proxy",
+          "name": "agent_chat_reset_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:agent_session_create_proxy",
+          "name": "agent_session_create_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:agent_session_delete_proxy",
+          "name": "agent_session_delete_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:agent_session_rename_proxy",
+          "name": "agent_session_rename_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:agent_sessions_list_proxy",
+          "name": "agent_sessions_list_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:avatar_reset_proxy",
+          "name": "avatar_reset_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:avatar_set_proxy",
+          "name": "avatar_set_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:calendar_connect_proxy",
+          "name": "calendar_connect_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:calendar_disconnect_proxy",
+          "name": "calendar_disconnect_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:calendar_events_proxy",
+          "name": "calendar_events_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:calendar_preferences_proxy",
+          "name": "calendar_preferences_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:calendar_status_proxy",
+          "name": "calendar_status_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:chat_read_proxy",
+          "name": "chat_read_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:chat_send_proxy",
+          "name": "chat_send_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:create_transcription_dictionary_proxy",
+          "name": "create_transcription_dictionary_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:delete_meeting_proxy",
+          "name": "delete_meeting_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:delete_recording_proxy",
+          "name": "delete_recording_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:delete_speaker_profile_proxy",
+          "name": "delete_speaker_profile_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:delete_transcription_dictionary_proxy",
+          "name": "delete_transcription_dictionary_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:delete_workspace_git_proxy",
+          "name": "delete_workspace_git_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:download_media_mp3_proxy",
+          "name": "download_media_mp3_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:download_media_proxy",
+          "name": "download_media_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:download_media_raw_proxy",
+          "name": "download_media_raw_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:download_recording_master_mp3_proxy",
+          "name": "download_recording_master_mp3_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:enroll_voiceprint_from_audio_proxy",
+          "name": "enroll_voiceprint_from_audio_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": [
+            {
+              "id": "proc_53_enroll_voiceprint_fr",
+              "label": "Enroll_voiceprint_from_audio_proxy → _token_hash",
+              "processType": "cross_community",
+              "step": 1
+            }
+          ]
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:enroll_voiceprint_from_segments_proxy",
+          "name": "enroll_voiceprint_from_segments_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:forward_admin_request",
+          "name": "forward_admin_request",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:get_bot_by_id_proxy",
+          "name": "get_bot_by_id_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:get_bots_status_proxy",
+          "name": "get_bots_status_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:get_meeting_by_id_proxy",
+          "name": "get_meeting_by_id_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:get_meetings_proxy",
+          "name": "get_meetings_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:get_recording_config_proxy",
+          "name": "get_recording_config_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:get_recording_master_proxy",
+          "name": "get_recording_master_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:get_recording_proxy",
+          "name": "get_recording_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:get_transcript_proxy",
+          "name": "get_transcript_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:list_bots_proxy",
+          "name": "list_bots_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:list_recordings_proxy",
+          "name": "list_recordings_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:list_speaker_profiles_proxy",
+          "name": "list_speaker_profiles_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:list_transcription_dictionary_proxy",
+          "name": "list_transcription_dictionary_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:patch_transcription_dictionary_proxy",
+          "name": "patch_transcription_dictionary_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:preview_voiceprint_from_segments_proxy",
+          "name": "preview_voiceprint_from_segments_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:reject_speaker_suggestion_proxy",
+          "name": "reject_speaker_suggestion_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:request_bot_proxy",
+          "name": "request_bot_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:screen_show_proxy",
+          "name": "screen_show_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:screen_stop_proxy",
+          "name": "screen_stop_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:search_transcripts_proxy",
+          "name": "search_transcripts_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:set_user_webhook_proxy",
+          "name": "set_user_webhook_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:set_workspace_git_proxy",
+          "name": "set_workspace_git_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:speak_proxy",
+          "name": "speak_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:speak_stop_proxy",
+          "name": "speak_stop_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:stop_bot_proxy",
+          "name": "stop_bot_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:synthetic_callback_proxy",
+          "name": "synthetic_callback_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:synthetic_test_proxy",
+          "name": "synthetic_test_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:transcribe_meeting_proxy",
+          "name": "transcribe_meeting_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:transcription_status_proxy",
+          "name": "transcription_status_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:update_bot_config_proxy",
+          "name": "update_bot_config_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:update_meeting_data_proxy",
+          "name": "update_meeting_data_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:update_recording_config_proxy",
+          "name": "update_recording_config_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:update_transcript_speakers_proxy",
+          "name": "update_transcript_speakers_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:voice_events_proxy",
+          "name": "voice_events_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        }
+      ]
+    }
+  },
+  "impact-download": {
+    "target": {
+      "id": "Function:services/meeting-api/meeting_api/recordings.py:download_media_file",
+      "name": "download_media_file",
+      "type": "Function",
+      "filePath": "services/meeting-api/meeting_api/recordings.py"
+    },
+    "direction": "upstream",
+    "impactedCount": 1,
+    "risk": "LOW",
+    "riskSharedAxes": "LOW",
+    "riskScale": {
+      "comparableAcrossKinds": true,
+      "unusedAxes": []
+    },
+    "epistemic": "exact",
+    "summary": {
+      "direct": 1,
+      "processes_affected": 1,
+      "modules_affected": 1
+    },
+    "byDepthCounts": {
+      "1": 1
+    },
+    "affected_processes": [
+      {
+        "name": "get_recording_master",
+        "type": "Function",
+        "filePath": "services/meeting-api/meeting_api/recordings.py",
+        "affected_process_count": 4,
+        "total_hits": 4,
+        "earliest_broken_step": 1
+      }
+    ],
+    "affected_modules": [
+      {
+        "name": "Meeting_api",
+        "hits": 1,
+        "impact": "direct"
+      }
+    ],
+    "byDepth": {
+      "1": [
+        {
+          "depth": 1,
+          "id": "Function:services/meeting-api/meeting_api/recordings.py:get_recording_master",
+          "name": "get_recording_master",
+          "filePath": "services/meeting-api/meeting_api/recordings.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": [
+            {
+              "id": "proc_241_get_recording_master",
+              "label": "Get_recording_master → Get_db",
+              "processType": "intra_community",
+              "step": 1
+            },
+            {
+              "id": "proc_224_get_recording_master",
+              "label": "Get_recording_master → Validate_request",
+              "processType": "cross_community",
+              "step": 1
+            },
+            {
+              "id": "proc_225_get_recording_master",
+              "label": "Get_recording_master → _normalize_meeting_recording",
+              "processType": "intra_community",
+              "step": 1
+            },
+            {
+              "id": "proc_242_get_recording_master",
+              "label": "Get_recording_master → _find_media_file",
+              "processType": "intra_community",
+              "step": 1
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "impact-playback": {
+    "target": {
+      "id": "Function:services/dashboard/src/hooks/use-meeting-playback.ts:useMeetingPlayback",
+      "name": "useMeetingPlayback",
+      "type": "Function",
+      "filePath": "services/dashboard/src/hooks/use-meeting-playback.ts"
+    },
+    "direction": "upstream",
+    "impactedCount": 1,
+    "risk": "LOW",
+    "riskSharedAxes": "LOW",
+    "riskScale": {
+      "comparableAcrossKinds": true,
+      "unusedAxes": []
+    },
+    "epistemic": "exact",
+    "summary": {
+      "direct": 1,
+      "processes_affected": 1,
+      "modules_affected": 1
+    },
+    "byDepthCounts": {
+      "1": 1
+    },
+    "affected_processes": [
+      {
+        "name": "MeetingDetailPage",
+        "type": "Function",
+        "filePath": "services/dashboard/src/components/meetings/meeting-detail-page.tsx",
+        "affected_process_count": 3,
+        "total_hits": 3,
+        "earliest_broken_step": 1
+      }
+    ],
+    "affected_modules": [
+      {
+        "name": "Ui",
+        "hits": 1,
+        "impact": "direct"
+      }
+    ],
+    "byDepth": {
+      "1": [
+        {
+          "depth": 1,
+          "id": "Function:services/dashboard/src/components/meetings/meeting-detail-page.tsx:MeetingDetailPage",
+          "name": "MeetingDetailPage",
+          "filePath": "services/dashboard/src/components/meetings/meeting-detail-page.tsx",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": [
+            {
+              "id": "proc_522_meetingdetailpage",
+              "label": "MeetingDetailPage → WithBasePath",
+              "processType": "cross_community",
+              "step": 1
+            },
+            {
+              "id": "proc_12_meetingdetailpage",
+              "label": "MeetingDetailPage → GetRecordingMasterStreamUrl",
+              "processType": "cross_community",
+              "step": 1
+            },
+            {
+              "id": "proc_426_meetingdetailpage",
+              "label": "MeetingDetailPage → FetchConfig",
+              "processType": "cross_community",
+              "step": 1
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "impact-proxy": {
+    "target": {
+      "id": "Function:services/dashboard/src/app/api/vexa/[...path]/route.ts:proxyRequest",
+      "name": "proxyRequest",
+      "type": "Function",
+      "filePath": "services/dashboard/src/app/api/vexa/[...path]/route.ts"
+    },
+    "direction": "upstream",
+    "impactedCount": 5,
+    "risk": "MEDIUM",
+    "riskSharedAxes": "MEDIUM",
+    "riskScale": {
+      "comparableAcrossKinds": true,
+      "unusedAxes": []
+    },
+    "epistemic": "exact",
+    "summary": {
+      "direct": 5,
+      "processes_affected": 0,
+      "modules_affected": 1
+    },
+    "byDepthCounts": {
+      "1": 5
+    },
+    "affected_processes": [],
+    "affected_modules": [
+      {
+        "name": "[...path]",
+        "hits": 5,
+        "impact": "direct"
+      }
+    ],
+    "byDepth": {
+      "1": [
+        {
+          "depth": 1,
+          "id": "Function:services/dashboard/src/app/api/vexa/[...path]/route.ts:DELETE",
+          "name": "DELETE",
+          "filePath": "services/dashboard/src/app/api/vexa/[...path]/route.ts",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/dashboard/src/app/api/vexa/[...path]/route.ts:GET",
+          "name": "GET",
+          "filePath": "services/dashboard/src/app/api/vexa/[...path]/route.ts",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/dashboard/src/app/api/vexa/[...path]/route.ts:PATCH",
+          "name": "PATCH",
+          "filePath": "services/dashboard/src/app/api/vexa/[...path]/route.ts",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/dashboard/src/app/api/vexa/[...path]/route.ts:POST",
+          "name": "POST",
+          "filePath": "services/dashboard/src/app/api/vexa/[...path]/route.ts",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/dashboard/src/app/api/vexa/[...path]/route.ts:PUT",
+          "name": "PUT",
+          "filePath": "services/dashboard/src/app/api/vexa/[...path]/route.ts",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        }
+      ]
+    }
+  },
+  "impact-auth": {
+    "target": {
+      "id": "Function:services/api-gateway/main.py:_resolve_token",
+      "name": "_resolve_token",
+      "type": "Function",
+      "filePath": "services/api-gateway/main.py"
+    },
+    "direction": "upstream",
+    "impactedCount": 73,
+    "risk": "MEDIUM",
+    "riskSharedAxes": "MEDIUM",
+    "riskScale": {
+      "comparableAcrossKinds": true,
+      "unusedAxes": []
+    },
+    "epistemic": "exact",
+    "summary": {
+      "direct": 6,
+      "processes_affected": 1,
+      "modules_affected": 1
+    },
+    "byDepthCounts": {
+      "1": 6,
+      "2": 64,
+      "3": 3
+    },
+    "affected_processes": [
+      {
+        "name": "enroll_voiceprint_from_audio_proxy",
+        "type": "Function",
+        "filePath": "services/api-gateway/main.py",
+        "affected_process_count": 1,
+        "total_hits": 2,
+        "earliest_broken_step": 1
+      }
+    ],
+    "affected_modules": [
+      {
+        "name": "Api-gateway",
+        "hits": 73,
+        "impact": "direct"
+      }
+    ],
+    "byDepth": {
+      "1": [
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:_authorize_browser_token",
+          "name": "_authorize_browser_token",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:_require_voiceprint_tx",
+          "name": "_require_voiceprint_tx",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": [
+            {
+              "id": "proc_53_enroll_voiceprint_fr",
+              "label": "Enroll_voiceprint_from_audio_proxy → _token_hash",
+              "processType": "cross_community",
+              "step": 2
+            }
+          ]
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:agent_chat_proxy",
+          "name": "agent_chat_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:auth_me",
+          "name": "auth_me",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:forward_request",
+          "name": "forward_request",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 1,
+          "id": "Function:services/api-gateway/main.py:websocket_multiplex",
+          "name": "websocket_multiplex",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        }
+      ],
+      "2": [
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:_proxy_cdp_http",
+          "name": "_proxy_cdp_http",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:agent_chat_interrupt_proxy",
+          "name": "agent_chat_interrupt_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:agent_chat_reset_proxy",
+          "name": "agent_chat_reset_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:agent_session_create_proxy",
+          "name": "agent_session_create_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:agent_session_delete_proxy",
+          "name": "agent_session_delete_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:agent_session_rename_proxy",
+          "name": "agent_session_rename_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:agent_sessions_list_proxy",
+          "name": "agent_sessions_list_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:avatar_reset_proxy",
+          "name": "avatar_reset_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:avatar_set_proxy",
+          "name": "avatar_set_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:browser_cdp_ws",
+          "name": "browser_cdp_ws",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:calendar_connect_proxy",
+          "name": "calendar_connect_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:calendar_disconnect_proxy",
+          "name": "calendar_disconnect_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:calendar_events_proxy",
+          "name": "calendar_events_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:calendar_preferences_proxy",
+          "name": "calendar_preferences_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:calendar_status_proxy",
+          "name": "calendar_status_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:chat_read_proxy",
+          "name": "chat_read_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:chat_send_proxy",
+          "name": "chat_send_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:create_transcription_dictionary_proxy",
+          "name": "create_transcription_dictionary_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:delete_meeting_proxy",
+          "name": "delete_meeting_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:delete_recording_proxy",
+          "name": "delete_recording_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:delete_speaker_profile_proxy",
+          "name": "delete_speaker_profile_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:delete_transcription_dictionary_proxy",
+          "name": "delete_transcription_dictionary_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:delete_workspace_git_proxy",
+          "name": "delete_workspace_git_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:download_media_mp3_proxy",
+          "name": "download_media_mp3_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:download_media_proxy",
+          "name": "download_media_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:download_media_raw_proxy",
+          "name": "download_media_raw_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:download_recording_master_mp3_proxy",
+          "name": "download_recording_master_mp3_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:enroll_voiceprint_from_audio_proxy",
+          "name": "enroll_voiceprint_from_audio_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": [
+            {
+              "id": "proc_53_enroll_voiceprint_fr",
+              "label": "Enroll_voiceprint_from_audio_proxy → _token_hash",
+              "processType": "cross_community",
+              "step": 1
+            }
+          ]
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:enroll_voiceprint_from_cluster_proxy",
+          "name": "enroll_voiceprint_from_cluster_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:enroll_voiceprint_from_segments_proxy",
+          "name": "enroll_voiceprint_from_segments_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:forward_admin_request",
+          "name": "forward_admin_request",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:get_bot_by_id_proxy",
+          "name": "get_bot_by_id_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:get_bots_status_proxy",
+          "name": "get_bots_status_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:get_meeting_by_id_proxy",
+          "name": "get_meeting_by_id_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:get_meetings_proxy",
+          "name": "get_meetings_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:get_recording_config_proxy",
+          "name": "get_recording_config_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:get_recording_master_proxy",
+          "name": "get_recording_master_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:get_recording_proxy",
+          "name": "get_recording_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:get_transcript_proxy",
+          "name": "get_transcript_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:list_bots_proxy",
+          "name": "list_bots_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:list_recordings_proxy",
+          "name": "list_recordings_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:list_speaker_profiles_proxy",
+          "name": "list_speaker_profiles_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:list_transcription_dictionary_proxy",
+          "name": "list_transcription_dictionary_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:patch_transcription_dictionary_proxy",
+          "name": "patch_transcription_dictionary_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:preview_voiceprint_from_segments_proxy",
+          "name": "preview_voiceprint_from_segments_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:reject_speaker_suggestion_proxy",
+          "name": "reject_speaker_suggestion_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:request_bot_proxy",
+          "name": "request_bot_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:screen_show_proxy",
+          "name": "screen_show_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:screen_stop_proxy",
+          "name": "screen_stop_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:search_transcripts_proxy",
+          "name": "search_transcripts_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:set_user_webhook_proxy",
+          "name": "set_user_webhook_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:set_workspace_git_proxy",
+          "name": "set_workspace_git_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:speak_proxy",
+          "name": "speak_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:speak_stop_proxy",
+          "name": "speak_stop_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:stop_bot_proxy",
+          "name": "stop_bot_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:synthetic_callback_proxy",
+          "name": "synthetic_callback_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:synthetic_test_proxy",
+          "name": "synthetic_test_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:transcribe_meeting_proxy",
+          "name": "transcribe_meeting_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:transcription_status_proxy",
+          "name": "transcription_status_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:update_bot_config_proxy",
+          "name": "update_bot_config_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:update_meeting_data_proxy",
+          "name": "update_meeting_data_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:update_recording_config_proxy",
+          "name": "update_recording_config_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:update_transcript_speakers_proxy",
+          "name": "update_transcript_speakers_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 2,
+          "id": "Function:services/api-gateway/main.py:voice_events_proxy",
+          "name": "voice_events_proxy",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        }
+      ],
+      "3": [
+        {
+          "depth": 3,
+          "id": "Function:services/api-gateway/main.py:browser_cdp_http",
+          "name": "browser_cdp_http",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 3,
+          "id": "Function:services/api-gateway/main.py:browser_cdp_http_bare",
+          "name": "browser_cdp_http_bare",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        },
+        {
+          "depth": 3,
+          "id": "Function:services/api-gateway/main.py:browser_cdp_ws_direct",
+          "name": "browser_cdp_ws_direct",
+          "filePath": "services/api-gateway/main.py",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": []
+        }
+      ]
+    }
+  },
+  "impact-check-auth": {
+    "status": "ambiguous",
+    "message": "Found 2 symbols matching 'checkAuth'. Blast radius differs per candidate (max 0 impacted at risk UNKNOWN). Disambiguate with target_uid (or file_path/kind) for a single authoritative result.",
+    "target": {
+      "name": "checkAuth"
+    },
+    "direction": "upstream",
+    "totalCandidates": 2,
+    "impactedCount": null,
+    "risk": "UNKNOWN",
+    "maxImpactedCount": 0,
+    "maxRisk": "UNKNOWN",
+    "candidates": [
+      {
+        "uid": "Function:services/dashboard/src/stores/auth-store.ts:fn@95:4.checkAuth@224:6",
+        "name": "checkAuth",
+        "kind": "Function",
+        "filePath": "services/dashboard/src/stores/auth-store.ts",
+        "line": 225,
+        "score": 0.96,
+        "impactedCount": 0,
+        "risk": "UNKNOWN",
+        "riskSharedAxes": "UNKNOWN",
+        "riskScale": {
+          "comparableAcrossKinds": false,
+          "unusedAxes": [
+            {
+              "axis": "processes",
+              "reason": "enrichment-skipped"
+            },
+            {
+              "axis": "modules",
+              "reason": "enrichment-skipped"
+            }
+          ]
+        },
+        "direct": 0,
+        "riskNote": "No callers resolved. Absence of edges is not evidence the symbol is unused: a caller reaching it through a reference class this index does not record — plain-object property access, a bare-identifier read of a module-scope const — produces no edge to find. Confirm with a text search before treating the change as safe."
+      },
+      {
+        "uid": "Property:services/dashboard/src/stores/auth-store.ts:AuthState.checkAuth",
+        "name": "checkAuth",
+        "kind": "",
+        "filePath": "services/dashboard/src/stores/auth-store.ts",
+        "line": 91,
+        "score": 0.9,
+        "impactedCount": 0,
+        "risk": "UNKNOWN",
+        "riskSharedAxes": "UNKNOWN",
+        "riskScale": {
+          "comparableAcrossKinds": false,
+          "unusedAxes": [
+            {
+              "axis": "processes",
+              "reason": "enrichment-skipped"
+            },
+            {
+              "axis": "modules",
+              "reason": "enrichment-skipped"
+            }
+          ]
+        },
+        "direct": 0,
+        "riskNote": "No callers resolved. Absence of edges is not evidence the symbol is unused: a caller reaching it through a reference class this index does not record — plain-object property access, a bare-identifier read of a module-scope const — produces no edge to find. Confirm with a text search before treating the change as safe."
+      }
+    ]
+  },
+  "impact-audio-player": {
+    "target": {
+      "id": "Function:services/dashboard/src/components/recording/audio-player.tsx:AudioPlayer",
+      "name": "AudioPlayer",
+      "type": "Function",
+      "filePath": "services/dashboard/src/components/recording/audio-player.tsx"
+    },
+    "direction": "upstream",
+    "impactedCount": 1,
+    "risk": "LOW",
+    "riskSharedAxes": "LOW",
+    "riskScale": {
+      "comparableAcrossKinds": true,
+      "unusedAxes": []
+    },
+    "epistemic": "exact",
+    "summary": {
+      "direct": 1,
+      "processes_affected": 1,
+      "modules_affected": 1
+    },
+    "byDepthCounts": {
+      "1": 1
+    },
+    "affected_processes": [
+      {
+        "name": "MeetingDetailPage",
+        "type": "Function",
+        "filePath": "services/dashboard/src/components/meetings/meeting-detail-page.tsx",
+        "affected_process_count": 3,
+        "total_hits": 3,
+        "earliest_broken_step": 1
+      }
+    ],
+    "affected_modules": [
+      {
+        "name": "Ui",
+        "hits": 1,
+        "impact": "direct"
+      }
+    ],
+    "byDepth": {
+      "1": [
+        {
+          "depth": 1,
+          "id": "Function:services/dashboard/src/components/meetings/meeting-detail-page.tsx:MeetingDetailPage",
+          "name": "MeetingDetailPage",
+          "filePath": "services/dashboard/src/components/meetings/meeting-detail-page.tsx",
+          "relationType": "CALLS",
+          "confidence": 0.85,
+          "processes": [
+            {
+              "id": "proc_522_meetingdetailpage",
+              "label": "MeetingDetailPage → WithBasePath",
+              "processType": "cross_community",
+              "step": 1
+            },
+            {
+              "id": "proc_12_meetingdetailpage",
+              "label": "MeetingDetailPage → GetRecordingMasterStreamUrl",
+              "processType": "cross_community",
+              "step": 1
+            },
+            {
+              "id": "proc_426_meetingdetailpage",
+              "label": "MeetingDetailPage → FetchConfig",
+              "processType": "cross_community",
+              "step": 1
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "impact-fetch-meetings": {
+    "status": "ambiguous",
+    "message": "Found 2 symbols matching 'fetchMeetings'. Blast radius differs per candidate (max 0 impacted at risk UNKNOWN). Disambiguate with target_uid (or file_path/kind) for a single authoritative result.",
+    "target": {
+      "name": "fetchMeetings"
+    },
+    "direction": "upstream",
+    "totalCandidates": 2,
+    "impactedCount": null,
+    "risk": "UNKNOWN",
+    "maxImpactedCount": 0,
+    "maxRisk": "UNKNOWN",
+    "candidates": [
+      {
+        "uid": "Function:services/dashboard/src/stores/meetings-store.ts:useMeetingsStore.fetchMeetings@163:2",
+        "name": "fetchMeetings",
+        "kind": "Function",
+        "filePath": "services/dashboard/src/stores/meetings-store.ts",
+        "line": 164,
+        "score": 0.96,
+        "impactedCount": 0,
+        "risk": "UNKNOWN",
+        "riskSharedAxes": "UNKNOWN",
+        "riskScale": {
+          "comparableAcrossKinds": false,
+          "unusedAxes": [
+            {
+              "axis": "processes",
+              "reason": "enrichment-skipped"
+            },
+            {
+              "axis": "modules",
+              "reason": "enrichment-skipped"
+            }
+          ]
+        },
+        "direct": 0,
+        "riskNote": "No callers resolved. Absence of edges is not evidence the symbol is unused: a caller reaching it through a reference class this index does not record — plain-object property access, a bare-identifier read of a module-scope const — produces no edge to find. Confirm with a text search before treating the change as safe."
+      },
+      {
+        "uid": "Property:services/dashboard/src/stores/meetings-store.ts:MeetingsState.fetchMeetings",
+        "name": "fetchMeetings",
+        "kind": "",
+        "filePath": "services/dashboard/src/stores/meetings-store.ts",
+        "line": 109,
+        "score": 0.9,
+        "impactedCount": 0,
+        "risk": "UNKNOWN",
+        "riskSharedAxes": "UNKNOWN",
+        "riskScale": {
+          "comparableAcrossKinds": false,
+          "unusedAxes": [
+            {
+              "axis": "processes",
+              "reason": "enrichment-skipped"
+            },
+            {
+              "axis": "modules",
+              "reason": "enrichment-skipped"
+            }
+          ]
+        },
+        "direct": 0,
+        "riskNote": "No callers resolved. Absence of edges is not evidence the symbol is unused: a caller reaching it through a reference class this index does not record — plain-object property access, a bare-identifier read of a module-scope const — produces no edge to find. Confirm with a text search before treating the change as safe."
+      }
+    ]
+  }
+}

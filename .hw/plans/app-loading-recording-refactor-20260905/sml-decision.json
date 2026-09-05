@@ -1,0 +1,24 @@
+{
+  "size": "L",
+  "generated_by": "codex",
+  "status": "planning_only",
+  "axes": {
+    "requirement_ambiguity": {
+      "level": "M",
+      "reason": "症状は明確だが本番計測未取得。改善対象を決定的な契約へ限定。"
+    },
+    "technical_unknown": {
+      "level": "L",
+      "reason": "ASGI切断、stream寿命、複数非同期channelと認証状態の相互作用。"
+    },
+    "blast_radius": {
+      "level": "L",
+      "reason": "Dashboard、Gateway、Meeting API。forward_requestの直接caller61、認証resolverへの波及。"
+    },
+    "verifiability": {
+      "level": "M",
+      "reason": "決定的テストで構造契約を検証。本番高速化率と障害完全解消は合否対象外。"
+    }
+  },
+  "verdict_reason": "複数サービスと認証/streamingを横断するためL。実装前のFable再採用と実装後のFableレビューを省略しない。"
+}
