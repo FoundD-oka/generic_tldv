@@ -108,11 +108,11 @@ export default function MeetingDetailPage() {
     currentMeeting?.data?.languages?.[0] || "auto"
   );
 
-  const playback = useMeetingPlayback(recordings, transcripts);
+  const playback = useMeetingPlayback(meetingId, recordings, transcripts);
   const {
-    audioPlayerRef, videoPlayerRef, recordingFragments, videoSrc, playbackConnectionError,
-    playbackTime, playbackAbsoluteTime, isPlaybackActive, hasRecordingAudio,
-    recordingDownloadTarget, handlePlaybackTimeUpdate, handleFragmentChange, handleSegmentClick,
+    audioPlayerRef, videoPlayerRef, recordingFragments, videoSrc, audioResolutionError,
+    videoResolutionError, playbackTime, playbackAbsoluteTime, isPlaybackActive, hasRecordingAudio,
+    recordingDownloadTarget, retryPlayback, handlePlaybackTimeUpdate, handleFragmentChange, handleSegmentClick,
   } = playback;
 
   // Track if initial load is complete to prevent animation replays
@@ -151,7 +151,7 @@ export default function MeetingDetailPage() {
   }, [editedChatgptPrompt, chatgptPrompt]);
 
   const liveData = useMeetingLiveData({
-    meetingId, currentMeeting, transcripts, forcePostMeetingMode, hasRecordingAudio, playbackConnectionError,
+    meetingId, currentMeeting, transcripts, forcePostMeetingMode, hasRecordingAudio, audioResolutionError,
     hasLoadedRef, handleStatusChange, setForcePostMeetingMode, setCurrentLanguage, fetchMeeting, refreshMeeting,
     clearCurrentMeeting, fetchTranscripts, fetchChatMessages,
   });
@@ -270,14 +270,21 @@ export default function MeetingDetailPage() {
         <Loader2 className="h-4 w-4 animate-spin" />
         録画中...
       </div>
-    ) : playbackConnectionError ? (
+    ) : audioResolutionError ? (
       <div className="flex items-center gap-2 px-4 py-2 bg-destructive/10 rounded-lg border border-destructive/30 text-sm text-destructive">
-        録画の読み込みで接続エラーが発生しました: {playbackConnectionError}
+        <span>録画の読み込みで接続エラーが発生しました: {audioResolutionError}</span>
+        <Button type="button" variant="outline" size="sm" onClick={retryPlayback}>再試行</Button>
       </div>
     ) : hasRecordingAudio ? (
       <div className="flex flex-col gap-2">
         {videoSrc && (
           <VideoPlayer ref={videoPlayerRef} src={videoSrc} className="max-h-[360px]" />
+        )}
+        {videoResolutionError && (
+          <div className="flex items-center gap-2 px-4 py-2 bg-destructive/10 rounded-lg border border-destructive/30 text-sm text-destructive">
+            <span>映像の読み込みで接続エラーが発生しました: {videoResolutionError}</span>
+            <Button type="button" variant="outline" size="sm" onClick={retryPlayback}>再試行</Button>
+          </div>
         )}
         <AudioPlayer
           ref={audioPlayerRef}
