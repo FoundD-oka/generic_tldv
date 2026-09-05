@@ -1,0 +1,21 @@
+{
+  "task_id": "app-loading-recording-refactor-20260905",
+  "start_head": "3ea13e3187196926d1d774a03ba630f1c8c4539b",
+  "adopted_at": "2026-09-05T20:06:20.755972+00:00",
+  "adopted": true,
+  "baseline_commit": "3ea13e3187196926d1d774a03ba630f1c8c4539b",
+  "scope": "R01-R10",
+  "final_evidence": "R11",
+  "original_generated_by": "codex",
+  "user_approval": "codexで完成させて。",
+  "verification_contract_change_required": false,
+  "violations": [],
+  "reason": "差分16件はすべて .hw/plans/app-loading-recording-refactor-20260905/ 配下13件とplan.md R00で新設を指定したtest 3ファイルに一致し、既存sourceの変更はない。plan本文のR00–R11の順序・依存・完了条件を再確認し、実装対象R01–R10・最終証拠R11の採用に矛盾はない。verification-contract.mdはC00でR01時のbase-commit移行を既に規定しており、基準コードの記述は調査基準を示す注記にとどまるため意味変更は不要。D/G/M/Hは全pass・clean tree・新規回帰なしで、R01開始条件を満たす。",
+  "advisory": [
+    "R00検証結果は各suiteの集計数のみで、plan.mdのR00特性test名8件（5 Dashboard / 1 Gateway / 2 Meeting API）が個別に収集・実行された証拠は本入力に含まれない。$EVIDENCE_DIR側の個別実行ログ（3ファイル指定実行の出力）を保持し、R11の証拠に含めること。",
+    "api-gateway 4 skipped / meeting-api 19 skipped はR00時点の既存skip基準として外部証拠に記録し、R01以降でskip数が増えた場合の検出基準とすること。",
+    "meeting-api のDNS依存3件はsandbox内で不合格・sandbox外で合格という環境差がある。以後のM束は同じ制限外環境で実行し、環境差を合否理由に混ぜないこと。",
+    "diffに含まれる base-commit は調査SHA(67ea032)のままである。plan.md R01の記載どおり、R01のcommitで base-commit を 3ea13e3187196926d1d774a03ba630f1c8c4539b へ更新し、adoption.json に開始HEAD・採用日時・原稿generated_by=codex・ユーザー承認文・本再確認結果を記録すること。",
+    "lint ratchetの警告数が75→70に減っているが、lint-baseline.json は更新しないこと（ratchet基準は不変のまま運用する）。"
+  ]
+}
