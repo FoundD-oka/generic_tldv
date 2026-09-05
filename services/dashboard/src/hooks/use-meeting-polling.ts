@@ -1,4 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+
+import { startSingleFlightPolling } from "@/lib/single-flight-polling";
 
 import type { Meeting } from "@/types/vexa";
 
@@ -58,28 +60,51 @@ export function useMeetingPolling({
   fetchTranscripts,
   fetchChatMessages,
 }: UseMeetingPollingOptions): void {
+  const flightRef = useRef<{ meetingId: string; token: symbol } | null>(null);
+
   useEffect(() => {
-    if (!meetingId || !shouldPollMeetingStatus) return;
-    return startImmediateIntervalPolling(
-      () => refreshMeeting(meetingId),
-      MEETING_STATUS_POLL_INTERVAL_MS
+    const mode = shouldPollPostMeetingArtifacts
+      ? "artifacts"
+      : shouldPollMeetingStatus
+        ? "status"
+        : null;
+    if (!meetingId || !mode) return;
+    if (mode === "artifacts" && (!meetingPlatform || !meetingNativeId)) return;
+
+    const task = async (): Promise<void> => {
+      if (flightRef.current?.meetingId === meetingId) return;
+
+      const token = Symbol("meeting-poll-flight");
+      flightRef.current = { meetingId, token };
+      try {
+        if (mode === "artifacts") {
+          await Promise.allSettled([
+            Promise.resolve().then(() => refreshMeeting(meetingId)),
+            Promise.resolve().then(() =>
+              fetchTranscripts(meetingPlatform!, meetingNativeId!, meetingNumericId, { silent: true })
+            ),
+            Promise.resolve().then(() => fetchChatMessages(meetingPlatform!, meetingNativeId!)),
+          ]);
+        } else {
+          await refreshMeeting(meetingId);
+        }
+      } finally {
+        if (flightRef.current?.token === token) flightRef.current = null;
+      }
+    };
+
+    return startSingleFlightPolling(
+      task,
+      mode === "artifacts"
+        ? POST_MEETING_ARTIFACT_POLL_INTERVAL_MS
+        : MEETING_STATUS_POLL_INTERVAL_MS
     );
-  }, [meetingId, shouldPollMeetingStatus, refreshMeeting]);
-
-  useEffect(() => {
-    if (!meetingId || !meetingPlatform || !meetingNativeId) return;
-    if (!shouldPollPostMeetingArtifacts) return;
-
-    return startImmediateIntervalPolling(() => {
-      refreshMeeting(meetingId);
-      fetchTranscripts(meetingPlatform, meetingNativeId, meetingNumericId, { silent: true });
-      fetchChatMessages(meetingPlatform, meetingNativeId);
-    }, POST_MEETING_ARTIFACT_POLL_INTERVAL_MS);
   }, [
     meetingId,
     meetingPlatform,
     meetingNativeId,
     meetingNumericId,
+    shouldPollMeetingStatus,
     shouldPollPostMeetingArtifacts,
     refreshMeeting,
     fetchTranscripts,
