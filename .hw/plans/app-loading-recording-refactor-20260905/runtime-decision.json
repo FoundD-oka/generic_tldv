@@ -1,0 +1,12 @@
+{
+  "runtime": "prime",
+  "generated_by": "codex",
+  "status": "planned_not_started",
+  "axes": {
+    "duration": true,
+    "state_volume": true,
+    "delegation": false,
+    "recurrence": false
+  },
+  "reason": "12項目とサービス別全suiteの反復は数時間を超える見込み。全差分と非同期状態を一度に保持せず一項目ずつ検証・commitする。並列実装は不要。R00の独立worktreeで基準commit後、HW_PRIME_WORKTREE=0で既存prime_run.pyを起動し二重worktreeを避ける。停止条件は既存pr-ready-gateのまま。Fable再採用/レビューを実行役の自己署名で代替しない。"
+}
