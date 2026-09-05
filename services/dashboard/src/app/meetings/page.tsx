@@ -123,12 +123,7 @@ export default function MeetingsPage() {
     }
   }
 
-  // Initial load
-  useEffect(() => {
-    fetchMeetings();
-  }, [fetchMeetings]);
-
-  // Re-fetch when dropdown filters change
+  // Re-fetch when dropdown filters change (also performs the initial load)
   useEffect(() => {
     applyFilters(searchQuery, statusFilter, platformFilter);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -143,6 +138,11 @@ export default function MeetingsPage() {
       runTranscriptSearch(value);
     }, 300);
   }, [applyFilters, statusFilter, platformFilter, runTranscriptSearch]);
+
+  useEffect(() => () => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    transcriptSearchGenerationRef.current += 1;
+  }, []);
 
   const filteredMeetings = meetings;
   const hasRetranscriptionInProgress = meetings.some((meeting) =>
