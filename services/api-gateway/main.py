@@ -437,7 +437,16 @@ def _token_hash(api_key: str) -> str:
     return hashlib.sha256(api_key.encode()).hexdigest()[:16]
 
 
-async def _resolve_token(client: httpx.AsyncClient, api_key: str) -> Optional[dict]:
+class TokenValidationUnavailable(Exception):
+    """Raised when strict token validation cannot reach a trustworthy result."""
+
+
+async def _resolve_token(
+    client: httpx.AsyncClient,
+    api_key: str,
+    *,
+    report_unavailable: bool = False,
+) -> Optional[dict]:
     """Validate a token via admin-api, with Redis cache (60s TTL)."""
     cache_key = f"gateway:token:{_token_hash(api_key)}"
     redis_client: Optional[aioredis.Redis] = getattr(app.state, "redis", None)
@@ -445,11 +454,20 @@ async def _resolve_token(client: httpx.AsyncClient, api_key: str) -> Optional[di
     # Check cache first
     if redis_client:
         try:
-            cached = await redis_client.get(cache_key)
+            if report_unavailable:
+                cached = await asyncio.wait_for(redis_client.get(cache_key), 1.0)
+            else:
+                cached = await redis_client.get(cache_key)
             if cached:
-                return json.loads(cached)
+                user_data = json.loads(cached)
+                if not report_unavailable or (
+                    isinstance(user_data, dict)
+                    and user_data.get("user_id") is not None
+                    and isinstance(user_data.get("scopes"), list)
+                ):
+                    return user_data
         except Exception:
-            pass  # Redis down — fall through to admin-api
+            pass  # Redis down or invalid cache — fall through to admin-api
 
     # Validate via admin-api
     try:
@@ -463,20 +481,46 @@ async def _resolve_token(client: httpx.AsyncClient, api_key: str) -> Optional[di
             headers=validate_headers,
             timeout=5.0,
         )
-        if validate_resp.status_code == 200:
-            user_data = validate_resp.json()
-            # Cache the result
-            if redis_client:
-                try:
-                    await redis_client.set(cache_key, json.dumps(user_data), ex=60)
-                except Exception:
-                    pass  # Redis write failure is non-fatal
-            return user_data
-    except Exception as e:
-        logger.warning(f"Token validation failed: {e}")
+    except Exception as exc:
+        if report_unavailable:
+            logger.warning("Token validation service unavailable")
+            raise TokenValidationUnavailable() from None
+        logger.warning(f"Token validation failed: {exc}")
+        return None
 
-    # Validation failed or admin-api unreachable — caller decides whether to reject
-    return None
+    if validate_resp.status_code == 401:
+        return None
+    if validate_resp.status_code != 200:
+        if report_unavailable:
+            raise TokenValidationUnavailable()
+        return None
+
+    try:
+        user_data = validate_resp.json()
+    except Exception as exc:
+        if report_unavailable:
+            raise TokenValidationUnavailable() from None
+        logger.warning(f"Token validation failed: {exc}")
+        return None
+
+    if report_unavailable and not (
+        isinstance(user_data, dict)
+        and user_data.get("user_id") is not None
+        and isinstance(user_data.get("scopes"), list)
+    ):
+        raise TokenValidationUnavailable()
+
+    # Cache the result
+    if redis_client:
+        try:
+            cache_write = redis_client.set(cache_key, json.dumps(user_data), ex=60)
+            if report_unavailable:
+                await asyncio.wait_for(cache_write, 1.0)
+            else:
+                await cache_write
+        except Exception:
+            pass  # Redis write failure is non-fatal
+    return user_data
 
 # --- Root Endpoint --- 
 @app.get("/", tags=["General"], summary="API Gateway Root")
@@ -1869,7 +1913,20 @@ async def auth_me(request: Request):
     api_key = request.headers.get("x-api-key")
     if not api_key:
         raise HTTPException(status_code=401, detail="Missing API key")
-    user_data = await _resolve_token(app.state.http_client, api_key)
+    try:
+        user_data = await asyncio.wait_for(
+            _resolve_token(
+                app.state.http_client,
+                api_key,
+                report_unavailable=True,
+            ),
+            8.0,
+        )
+    except (TokenValidationUnavailable, asyncio.TimeoutError):
+        raise HTTPException(
+            status_code=503,
+            detail="Authentication service unavailable",
+        ) from None
     if not user_data:
         raise HTTPException(status_code=401, detail="Invalid API key")
     return {
