@@ -5,6 +5,9 @@ import { Play, Pause, Volume2, VolumeX, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+const AUDIO_RETRY_DELAY_MS = 1500;
+const AUDIO_MAX_AUTOMATIC_RETRIES = 3;
+
 /**
  * Describes a single recording fragment in a multi-fragment timeline.
  * Fragments are played sequentially; their durations define the virtual timeline.
@@ -54,6 +57,8 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
   function AudioPlayer({ src, fragments, onTimeUpdate, onFragmentChange, className, compact = false }, ref) {
     const audioRef = useRef<HTMLAudioElement>(null);
     const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const automaticRetryCountRef = useRef(0);
+    const currentSrcRef = useRef("");
     const [isPlaying, setIsPlaying] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [currentTime, setCurrentTime] = useState(0);
@@ -71,6 +76,20 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
     const effectiveFragments = fragments && fragments.length > 0 ? fragments : src ? [{ src, duration: 0, sessionUid: "", createdAt: "" }] : [];
     const currentFragment = effectiveFragments[currentFragmentIndex];
     const currentSrc = currentFragment?.src || src || "";
+
+    // HTML media retries have their own lifecycle. A resolved playback URL
+    // changing starts a fresh budget without affecting URL resolution retries.
+    useEffect(() => {
+      currentSrcRef.current = currentSrc;
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
+      automaticRetryCountRef.current = 0;
+      queueMicrotask(() => {
+        if (currentSrcRef.current === currentSrc) setErrorCount(0);
+      });
+    }, [currentSrc]);
 
     // Compute total virtual duration from known fragment durations
     const totalDuration = isMultiFragment
@@ -218,6 +237,11 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
       };
 
       const handleCanPlay = () => {
+        if (retryTimerRef.current) {
+          clearTimeout(retryTimerRef.current);
+          retryTimerRef.current = null;
+        }
+        automaticRetryCountRef.current = 0;
         setIsLoading(false);
         setErrorCount(0);
       };
@@ -236,14 +260,24 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
       };
       const handleError = () => {
         setIsPlaying(false);
-        setIsLoading(true);
         setErrorCount((count) => count + 1);
-        if (retryTimerRef.current) {
-          clearTimeout(retryTimerRef.current);
+
+        // Repeated error events for the same failed load share one timer and
+        // therefore consume only one retry from the finite budget.
+        if (retryTimerRef.current) return;
+        if (automaticRetryCountRef.current >= AUDIO_MAX_AUTOMATIC_RETRIES) {
+          setIsLoading(false);
+          return;
         }
+
+        setIsLoading(true);
+        const retrySrc = currentSrc;
         retryTimerRef.current = setTimeout(() => {
+          retryTimerRef.current = null;
+          if (audioRef.current !== audio || currentSrcRef.current !== retrySrc) return;
+          automaticRetryCountRef.current += 1;
           audio.load();
-        }, 1500);
+        }, AUDIO_RETRY_DELAY_MS);
       };
 
       audio.addEventListener("timeupdate", handleTimeUpdate);
@@ -316,6 +350,7 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
         clearTimeout(retryTimerRef.current);
         retryTimerRef.current = null;
       }
+      automaticRetryCountRef.current = 0;
       setErrorCount(0);
       setIsLoading(true);
       audio.load();
@@ -443,27 +478,25 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
           )}
         </Button>
 
-        {isLoading && (
-          errorCount > 0 ? (
-            <span className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-              <span className="truncate">音声の読み込みに失敗しました</span>
-              <button
-                type="button"
-                onClick={handleRetry}
-                className="shrink-0 font-medium text-primary hover:underline"
-              >
-                再試行
-              </button>
-            </span>
-          ) : (
-            <span
-              className="min-w-0 truncate text-xs text-muted-foreground"
-              title="音声を準備しています... 録画の長さによって数分かかることがあります"
+        {errorCount > 0 ? (
+          <span className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+            <span className="truncate">音声の読み込みに失敗しました</span>
+            <button
+              type="button"
+              onClick={handleRetry}
+              className="shrink-0 font-medium text-primary hover:underline"
             >
-              音声を準備しています... 録画の長さによって数分かかることがあります
-            </span>
-          )
-        )}
+              再試行
+            </button>
+          </span>
+        ) : isLoading ? (
+          <span
+            className="min-w-0 truncate text-xs text-muted-foreground"
+            title="音声を準備しています... 録画の長さによって数分かかることがあります"
+          >
+            音声を準備しています... 録画の長さによって数分かかることがあります
+          </span>
+        ) : null}
       </div>
     );
   }
