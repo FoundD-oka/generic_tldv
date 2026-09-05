@@ -38,6 +38,7 @@ const MEDIA_PROXY_HEADERS_TIMEOUT_MS =
   Number.isSafeInteger(parsedMediaProxyHeadersTimeoutMs) && parsedMediaProxyHeadersTimeoutMs > 0
     ? parsedMediaProxyHeadersTimeoutMs
     : 30000;
+const MEETINGS_LIST_TIMEOUT_MS = 5000;
 
 export class VoiceprintDirectEnrollmentAdmissionGate {
   private active = 0;
@@ -129,10 +130,10 @@ async function proxyRequest(
   const { path } = await params;
   const pathString = path.join("/");
 
-  // /meetings list: primary source is GET /bots (meeting-api DB — all statuses).
-  // Fallback to /bots/status (running containers only) if /bots fails.
+  // /meetings list: GET /bots is the sole source because it includes completed history.
   if (pathString === "meetings" && method === "GET") {
-    // Try GET /bots first — returns all meetings from DB (active + completed)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), MEETINGS_LIST_TIMEOUT_MS);
     try {
       const searchParams = request.nextUrl.searchParams;
       const qs = new URLSearchParams();
@@ -141,45 +142,77 @@ async function proxyRequest(
       if (searchParams.get("search")) qs.set("search", searchParams.get("search")!);
       if (searchParams.get("status")) qs.set("status", searchParams.get("status")!);
       if (searchParams.get("platform")) qs.set("platform", searchParams.get("platform")!);
-      const botsResp = await fetch(`${VEXA_API_URL}/bots?${qs.toString()}`, {
-        headers: { "X-API-Key": meetingsListAPIKey },
-        signal: AbortSignal.timeout(5000),
-      });
-      if (botsResp.ok) {
-        const data = await botsResp.json();
-        return NextResponse.json({ meetings: data.meetings || [], has_more: data.has_more ?? false });
-      }
-    } catch (e) {
-      console.error("[proxy] GET /bots failed, falling back to /bots/status:", e);
-    }
 
-    // Fallback: running containers only (no history)
-    const meetings: Array<Record<string, unknown>> = [];
-    try {
-      const statusResp = await fetch(`${VEXA_API_URL}/bots/status`, {
+      const upstream = await fetch(`${VEXA_API_URL}/bots?${qs.toString()}`, {
         headers: { "X-API-Key": meetingsListAPIKey },
+        signal: controller.signal,
+        cache: "no-store",
       });
-      if (statusResp.ok) {
-        const data = await statusResp.json();
-        for (const b of data.running_bots || []) {
-          if (!b.platform || !b.native_meeting_id) continue;
-          const id = b.meeting_id_from_name || b.container_name;
-          meetings.push({
-            id: parseInt(id) || 0,
-            platform: b.platform,
-            native_meeting_id: b.native_meeting_id,
-            status: b.meeting_status || "active",
-            start_time: b.start_time || b.created_at,
-            end_time: null,
-            data: b.data || {},
-            created_at: b.created_at,
-          });
+
+      if (!upstream.ok) {
+        let upstreamBody: unknown;
+        try {
+          upstreamBody = await upstream.json();
+        } catch {
+          if (controller.signal.aborted) throw new Error("Meetings response body timed out");
+          const headers: HeadersInit = { "Cache-Control": "no-store" };
+          if (upstream.status === 429) {
+            const retryAfter = upstream.headers.get("retry-after");
+            if (retryAfter) headers["Retry-After"] = retryAfter;
+          }
+          return NextResponse.json(
+            { error: "Meetings request failed", status: upstream.status },
+            { status: upstream.status, headers }
+          );
         }
+        const headers: HeadersInit = { "Cache-Control": "no-store" };
+        if (upstream.status === 429) {
+          const retryAfter = upstream.headers.get("retry-after");
+          if (retryAfter) headers["Retry-After"] = retryAfter;
+        }
+        return NextResponse.json(upstreamBody, { status: upstream.status, headers });
       }
-    } catch (e) {
-      console.error("[proxy] /bots/status failed:", e);
+
+      let data: unknown;
+      try {
+        data = await upstream.json();
+      } catch {
+        if (controller.signal.aborted) throw new Error("Meetings response body timed out");
+        return NextResponse.json(
+          { error: "Invalid meetings response" },
+          { status: 502, headers: { "Cache-Control": "no-store" } }
+        );
+      }
+      if (
+        typeof data !== "object" ||
+        data === null ||
+        !Array.isArray((data as { meetings?: unknown }).meetings) ||
+        ("has_more" in data && typeof (data as { has_more?: unknown }).has_more !== "boolean")
+      ) {
+        return NextResponse.json(
+          { error: "Invalid meetings response" },
+          { status: 502, headers: { "Cache-Control": "no-store" } }
+        );
+      }
+      const validData = data as { meetings: unknown[]; has_more?: boolean };
+      return NextResponse.json(
+        { meetings: validData.meetings, has_more: validData.has_more ?? false },
+        { headers: { "Cache-Control": "no-store" } }
+      );
+    } catch {
+      if (controller.signal.aborted) {
+        return NextResponse.json(
+          { error: "Request timeout" },
+          { status: 504, headers: { "Cache-Control": "no-store" } }
+        );
+      }
+      return NextResponse.json(
+        { error: "Failed to load meetings" },
+        { status: 502, headers: { "Cache-Control": "no-store" } }
+      );
+    } finally {
+      clearTimeout(timeoutId);
     }
-    return NextResponse.json({ meetings });
   }
 
   // Everything else: proxy through api-gateway (handles /transcripts, /recordings, /bots, etc.)
