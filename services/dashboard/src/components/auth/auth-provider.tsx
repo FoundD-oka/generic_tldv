@@ -65,7 +65,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       if (!sharedLoginAttempted.current) {
         sharedLoginAttempted.current = true;
         const sharedResult = await signInSharedDashboard();
-        if (cancelled || sharedResult.success) return;
+        if (cancelled || sharedResult.success || sharedResult.reason === "network") return;
       }
 
       const externalAuthUrl = process.env.NEXT_PUBLIC_EXTERNAL_AUTH_URL;
