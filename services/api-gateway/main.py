@@ -1,10 +1,12 @@
 import uvicorn
 from fastapi import FastAPI, Request, Response, HTTPException, status, Depends, WebSocket, WebSocketDisconnect, Path
 from fastapi.responses import HTMLResponse, StreamingResponse
+from media_streaming import ClosingStreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.security import APIKeyHeader
 import httpx
+import anyio
 import os
 from dotenv import load_dotenv
 import json # For request body processing and token cacheing
@@ -327,6 +329,7 @@ async def forward_request(
     *,
     require_auth: bool = True,
     timeout: Optional[float] = None,
+    stream_response: bool = False,
 ) -> Response:
     # Copy original headers, converting to a standard dict
     # Exclude host, content-length, transfer-encoding as they are handled by httpx/server
@@ -412,9 +415,19 @@ async def forward_request(
         }
         if timeout is not None:
             request_kwargs["timeout"] = timeout
-        resp = await client.request(method, url, **request_kwargs)
-        # Return downstream response directly (including headers, status code)
-        return Response(content=resp.content, status_code=resp.status_code, headers=dict(resp.headers))
+        if not stream_response:
+            resp = await client.request(method, url, **request_kwargs)
+            # Keep generic JSON and other non-binary forwarding fully buffered.
+            return Response(content=resp.content, status_code=resp.status_code, headers=dict(resp.headers))
+
+        upstream_request = client.build_request(method, url, **request_kwargs)
+        upstream = await client.send(upstream_request, stream=True)
+        try:
+            return ClosingStreamingResponse(upstream)
+        except BaseException:
+            with anyio.CancelScope(shield=True):
+                await upstream.aclose()
+            raise
     except httpx.RequestError as exc:
         raise HTTPException(status_code=503, detail=f"Service unavailable: {exc}")
 
@@ -780,7 +793,9 @@ async def get_recording_master_proxy(recording_id: int, request: Request):
 async def download_recording_master_mp3_proxy(recording_id: int, request: Request):
     """Forward request to Bot Manager for MP3 master audio."""
     url = f"{MEETING_API_URL}/recordings/{recording_id}/master/mp3"
-    return await forward_request(app.state.http_client, "GET", url, request, timeout=180.0)
+    return await forward_request(
+        app.state.http_client, "GET", url, request, timeout=180.0, stream_response=True
+    )
 
 @app.get("/recordings/{recording_id}/media/{media_file_id}/download",
          tags=["Recordings"],
@@ -800,7 +815,9 @@ async def download_media_proxy(recording_id: int, media_file_id: int, request: R
 async def download_media_raw_proxy(recording_id: int, media_file_id: int, request: Request):
     """Forward request to Bot Manager for raw media streaming."""
     url = f"{MEETING_API_URL}/recordings/{recording_id}/media/{media_file_id}/raw"
-    return await forward_request(app.state.http_client, "GET", url, request)
+    return await forward_request(
+        app.state.http_client, "GET", url, request, stream_response=True
+    )
 
 @app.get("/recordings/{recording_id}/media/{media_file_id}/mp3",
          tags=["Recordings"],
@@ -810,7 +827,9 @@ async def download_media_raw_proxy(recording_id: int, media_file_id: int, reques
 async def download_media_mp3_proxy(recording_id: int, media_file_id: int, request: Request):
     """Forward request to Bot Manager for MP3 media streaming."""
     url = f"{MEETING_API_URL}/recordings/{recording_id}/media/{media_file_id}/mp3"
-    return await forward_request(app.state.http_client, "GET", url, request, timeout=180.0)
+    return await forward_request(
+        app.state.http_client, "GET", url, request, timeout=180.0, stream_response=True
+    )
 
 @app.delete("/recordings/{recording_id}",
             tags=["Recordings"],

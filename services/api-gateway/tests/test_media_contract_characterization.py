@@ -17,7 +17,7 @@ async def test_R00_raw_range_preserves_headers():
         seen_requests.append(request)
         return httpx.Response(
             206,
-            content=b"abc",
+            stream=httpx.ByteStream(b"abc"),
             headers={
                 "Content-Type": "audio/webm",
                 "Content-Range": "bytes 2-4/10",

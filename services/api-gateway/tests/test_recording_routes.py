@@ -100,23 +100,31 @@ class TestGetRecording:
         assert "/recordings/5/master" in call_args[0][1]
         assert call_args[1].get("params", {}).get("type") == "audio"
 
-    async def test_download_recording_master_mp3_proxies(self, mock_http_client, mock_response):
-        mock_http_client.request = AsyncMock(return_value=mock_response(206, {"ok": True}))
-        app.state.http_client = mock_http_client
+    async def test_download_recording_master_mp3_proxies(self):
+        seen = []
 
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.get(
-                "/recordings/5/master/mp3?type=audio",
-                headers={"x-api-key": "k", "range": "bytes=0-2"},
-            )
+        def backend(request: httpx.Request):
+            seen.append(request)
+            return httpx.Response(206, stream=httpx.ByteStream(b"mp3"), request=request)
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(backend), timeout=30.0) as upstream:
+            app.state.http_client = upstream
+            async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+                resp = await ac.get(
+                    "/recordings/5/master/mp3?type=audio",
+                    headers={"x-api-key": "k", "range": "bytes=0-2"},
+                )
 
         assert resp.status_code == 206
-        call_args = mock_http_client.request.call_args
-        assert call_args[0][0] == "GET"
-        assert "/recordings/5/master/mp3" in call_args[0][1]
-        assert call_args[1].get("params", {}).get("type") == "audio"
-        assert call_args[1].get("headers", {}).get("range") == "bytes=0-2"
-        assert call_args[1].get("timeout") == 180.0
+        assert len(seen) == 1
+        request = seen[0]
+        assert request.method == "GET"
+        assert "/recordings/5/master/mp3" in str(request.url)
+        assert request.url.params.get("type") == "audio"
+        assert request.headers["range"] == "bytes=0-2"
+        assert request.extensions["timeout"] == {
+            "connect": 180.0, "read": 180.0, "write": 180.0, "pool": 180.0
+        }
 
 
 @pytest.mark.asyncio
@@ -132,32 +140,50 @@ class TestDownloadMedia:
         url = mock_http_client.request.call_args[0][1]
         assert "/recordings/5/media/3/download" in url
 
-    async def test_download_media_raw_proxies(self, mock_http_client, mock_response):
-        mock_http_client.request = AsyncMock(return_value=mock_response(200))
-        app.state.http_client = mock_http_client
+    async def test_download_media_raw_proxies(self):
+        seen = []
 
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.get("/recordings/5/media/3/raw", headers={"x-api-key": "k"})
+        def backend(request: httpx.Request):
+            seen.append(request)
+            return httpx.Response(200, stream=httpx.ByteStream(b"raw"), request=request)
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(backend), timeout=30.0) as upstream:
+            app.state.http_client = upstream
+            async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+                resp = await ac.get("/recordings/5/media/3/raw", headers={"x-api-key": "k"})
 
         assert resp.status_code == 200
-        url = mock_http_client.request.call_args[0][1]
-        assert "/recordings/5/media/3/raw" in url
+        assert len(seen) == 1
+        assert seen[0].method == "GET"
+        assert "/recordings/5/media/3/raw" in str(seen[0].url)
+        assert seen[0].extensions["timeout"] == {
+            "connect": 30.0, "read": 30.0, "write": 30.0, "pool": 30.0
+        }
 
-    async def test_download_media_mp3_proxies(self, mock_http_client, mock_response):
-        mock_http_client.request = AsyncMock(return_value=mock_response(206))
-        app.state.http_client = mock_http_client
+    async def test_download_media_mp3_proxies(self):
+        seen = []
 
-        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.get(
-                "/recordings/5/media/3/mp3",
-                headers={"x-api-key": "k", "range": "bytes=0-2"},
-            )
+        def backend(request: httpx.Request):
+            seen.append(request)
+            return httpx.Response(206, stream=httpx.ByteStream(b"mp3"), request=request)
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(backend), timeout=30.0) as upstream:
+            app.state.http_client = upstream
+            async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+                resp = await ac.get(
+                    "/recordings/5/media/3/mp3",
+                    headers={"x-api-key": "k", "range": "bytes=0-2"},
+                )
 
         assert resp.status_code == 206
-        call_args = mock_http_client.request.call_args
-        assert "/recordings/5/media/3/mp3" in call_args[0][1]
-        assert call_args[1].get("headers", {}).get("range") == "bytes=0-2"
-        assert call_args[1].get("timeout") == 180.0
+        assert len(seen) == 1
+        request = seen[0]
+        assert request.method == "GET"
+        assert "/recordings/5/media/3/mp3" in str(request.url)
+        assert request.headers["range"] == "bytes=0-2"
+        assert request.extensions["timeout"] == {
+            "connect": 180.0, "read": 180.0, "write": 180.0, "pool": 180.0
+        }
 
 
 @pytest.mark.asyncio

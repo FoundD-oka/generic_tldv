@@ -409,7 +409,18 @@ async function proxyRequest(
       });
     }
 
-    if (contentType.includes("audio") || contentType.includes("video") || contentType.includes("octet-stream")) {
+    const isUnsatisfiedDirectRecordingRange =
+      method === "GET" &&
+      response.status === 416 &&
+      (/^recordings\/\d+\/master\/mp3$/.test(pathString) ||
+        /^recordings\/\d+\/media\/\d+\/(raw|mp3)$/.test(pathString));
+
+    if (
+      contentType.includes("audio") ||
+      contentType.includes("video") ||
+      contentType.includes("octet-stream") ||
+      isUnsatisfiedDirectRecordingRange
+    ) {
       const mediaHeaders = new Headers({ "Cache-Control": "no-store" });
       for (const header of [
         "content-type",
