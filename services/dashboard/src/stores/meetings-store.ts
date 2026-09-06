@@ -142,6 +142,8 @@ let isForegroundMeetingRefreshInFlight = false;
 let detailEpoch = 0;
 let detailRequestGeneration = 0;
 let transcriptRequestGeneration = 0;
+let detailLoadingGeneration = 0;
+let transcriptLoadingGeneration = 0;
 let chatRequestGeneration = 0;
 let recordingReadGeneration = 0;
 let activeDetailId: string | null = null;
@@ -292,6 +294,7 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
     const epoch = detailEpoch;
     const requestGeneration = ++detailRequestGeneration;
     const recordingGeneration = ++recordingReadGeneration;
+    const loadingGeneration = silent ? null : ++detailLoadingGeneration;
     const stillCurrent = () =>
       epoch === detailEpoch &&
       requestGeneration === detailRequestGeneration &&
@@ -331,7 +334,10 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
       }
       set({ error: (error as Error).message });
     } finally {
-      if (!silent && stillCurrent()) {
+      if (loadingGeneration !== null &&
+          loadingGeneration === detailLoadingGeneration &&
+          epoch === detailEpoch &&
+          activeDetailId === ownerId) {
         set({ isLoadingMeeting: false });
       }
     }
@@ -413,6 +419,7 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
     const epoch = detailEpoch;
     const requestGeneration = ++transcriptRequestGeneration;
     const recordingGeneration = ++recordingReadGeneration;
+    const loadingGeneration = silent ? null : ++transcriptLoadingGeneration;
     const stillCurrent = () =>
       epoch === detailEpoch &&
       requestGeneration === transcriptRequestGeneration &&
@@ -451,7 +458,11 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
         console.error("Failed to silently refresh transcripts:", error);
       }
     } finally {
-      if (!silent && stillCurrent()) {
+      if (loadingGeneration !== null &&
+          loadingGeneration === transcriptLoadingGeneration &&
+          epoch === detailEpoch &&
+          activeDetailId === ownerId &&
+          String(get().currentMeeting?.id) === ownerId) {
         set({ isLoadingTranscripts: false });
       }
     }
