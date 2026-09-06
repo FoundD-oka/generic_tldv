@@ -1,0 +1,143 @@
+{
+  "schema_version": "1.0",
+  "task_id": "app-loading-recording-refactor-20260905",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "3ea13e3187196926d1d774a03ba630f1c8c4539b",
+  "reviewed_commit": "0ac294dc76ad705cb70893e0de8ba97c10321102",
+  "target_sha256": "sha256:e68a83ccd9e2fc3122be808c927fe5bc090985c69afc2e7d2610da57091a9a6c",
+  "contract_sha256": "sha256:8502c303d302e58884d11004d4b0346d2e0977173777e156fa085c788da1ec13",
+  "prompt_sha256": "sha256:997e63bdd4b02fbe021d8c1d541aef4f60c62e26bbf3a9dc37ccd8313831e7ca",
+  "response_sha256": "sha256:cd6a2a2290c68e8d2ebd1732beb4120f72ba89940ef0e9d22f04c63c3624c868",
+  "created_at": "2026-09-06T01:41:30.223624+00:00",
+  "chunked": true,
+  "chunk_count": 2,
+  "chunks": [
+    {
+      "index": 1,
+      "files": [
+        ".hw/fable_review.py",
+        ".hw/plans/app-loading-recording-refactor-20260905/adoption.json",
+        ".hw/plans/app-loading-recording-refactor-20260905/base-commit",
+        ".hw/tests/fable-review-chunking.test.py",
+        "services/api-gateway/main.py",
+        "services/api-gateway/media_streaming.py",
+        "services/api-gateway/tests/test_auth_availability.py",
+        "services/api-gateway/tests/test_media_contract_characterization.py",
+        "services/api-gateway/tests/test_media_streaming.py",
+        "services/api-gateway/tests/test_recording_routes.py",
+        "services/dashboard/src/app/api/auth/me/route.ts",
+        "services/dashboard/src/app/api/vexa/[...path]/route.ts",
+        "services/dashboard/src/app/meetings/page.tsx",
+        "services/dashboard/src/components/auth/auth-provider.tsx",
+        "services/dashboard/src/components/meetings/meeting-detail-page.tsx",
+        "services/dashboard/src/components/recording/audio-player.tsx",
+        "services/dashboard/src/hooks/use-meeting-live-data.ts",
+        "services/dashboard/src/hooks/use-meeting-playback.ts",
+        "services/dashboard/src/hooks/use-meeting-polling.ts",
+        "services/dashboard/src/lib/api.ts",
+        "services/dashboard/src/lib/single-flight-polling.ts",
+        "services/dashboard/src/stores/auth-store.ts",
+        "services/dashboard/src/stores/meetings-store.ts",
+        "services/dashboard/tests/test_audio_retry_lifecycle.test.tsx",
+        "services/dashboard/tests/test_auth_initialization.test.tsx",
+        "services/dashboard/tests/test_auth_me_availability.test.ts",
+        "services/dashboard/tests/test_loading_characterization.test.tsx",
+        "services/dashboard/tests/test_login_shared_auth.test.tsx",
+        "services/dashboard/tests/test_meeting_detail_request_scope.test.ts",
+        "services/dashboard/tests/test_meeting_polling_ownership.test.tsx",
+        "services/dashboard/tests/test_meetings_initial_load.test.tsx",
+        "services/dashboard/tests/test_recording_master_api.test.ts",
+        "services/dashboard/tests/test_recording_master_proxy_route.test.ts",
+        "services/dashboard/tests/test_single_flight_polling.test.ts"
+      ],
+      "material_sha256": "sha256:0ad9ba57a1e5d152adc0a2ff3f630bc8682803590ef7a62d2e562e208de89706",
+      "prompt_sha256": "sha256:4a5426f8bca68cbdfe835fe3d1948aba290687f9a62d0692e782539ef158d86a",
+      "response_sha256": "sha256:ffae2de0eeb5e78fc205afd230efcfa60de36c58453ce5bc21b99cadc0a30c68",
+      "verdict": "READY",
+      "confidence": "medium"
+    },
+    {
+      "index": 2,
+      "files": [
+        "services/dashboard/tests/test_meetings_proxy_contract.test.ts",
+        "services/dashboard/tests/test_playback_resolution.test.tsx",
+        "services/meeting-api/meeting_api/recordings.py",
+        "services/meeting-api/tests/test_recording_metadata_resolution.py"
+      ],
+      "material_sha256": "sha256:69ac58333eeefe685e3443378a13d09ff0edc99b9c30f9ee2a9c2623adf097fb",
+      "prompt_sha256": "sha256:68522b982c7fa1b6439fd98c7f2473c258740c9190ea743a859da0c09433cb1a",
+      "response_sha256": "sha256:0c8123cbf2611896099d473380543c7c75119e5e4c7d7751bed5fe93a373c71b",
+      "verdict": "READY",
+      "confidence": "medium"
+    }
+  ],
+  "verdict": "READY",
+  "summary": "[chunk 1/2] チャンク1/2(Gateway main.py/media_streaming.py、Dashboard の auth/me route・vexa proxy・meetings page・auth-store・meetings-store・playback/polling hooks・audio-player、および対応する新規/更新テスト)を C00〜C11 に照らして確認した。C03(3routeのみ stream_response=True、hop-by-hop除去、全exit経路でupstream.aclose、拒否時のstream要求0回)、C02(/bots単一ソース、fallback削除、5000ms AbortController がheaders/body両方を覆う、429 Retry-After保持、malformed 200→502、接続例外→502)、C05(owner+epoch+channel世代、録音世代、finallyの世代束縛)、C06(単一effect・flightRef・allSettled・同期throw吸収)、C07(descriptor key・10秒deadline・1500/3000/6000ms・4attempt・音声/映像エラー独立)、C08(3回×1500ms・timer1本・src/canplay/手動retryでreset)、C09(strict resolver は /auth/me のみ、Admin401のみ401、その他503、Redis get/set 1秒、全体8秒、TTL60/validate5秒維持)、C10(10s/12s/60s deadline、401のみCookie削除、network終端、single flight、epoch)は差分上で契約と整合し、失敗シナリオを伴う契約違反は見つからなかった。テスト削除・skip追加・assertion緩和・baseline追加・依存更新は差分に含まれない。契約外の懸念(plan外のハーネスcommit、R00特性testのfixture適応、fetchMeetingの非対称なowner採用、全件404打ち切り後にartifact pollingも停止する製品挙動など)は advisory として記録した。C04 と他チャンクのテストは本チャンクでは判定していない。\n[chunk 2/2] チャンク 2/2 の差分(test_meetings_proxy_contract.test.ts、test_playback_resolution.test.tsx、meeting_api/recordings.py、test_recording_metadata_resolution.py)に契約違反は見つからなかった。C04 は get_recording_master が download_media_file への直接呼出しを _build_media_download_metadata helper へ置換し、所有者付き DB 検索は 1 回に収束。同期 storage 処理(client 取得/file_exists/presign)は to_thread 内の closure に閉じ、closure が捕捉するのは storage_backend/storage_path/raw_fallback の文字列のみで DB/ORM は thread へ渡っていない。local→raw fallback、presign 空→raw fallback、404、expires_in=3600、metadata shape は旧実装と同一。download 側の所有者条件を含む前段ロジックは差分対象外で維持されている。test は master 1 回検索・download/master の shape 共有(local/MinIO/GCS/presign None/不在 404)・SDK 停止時の loop thread 非占有・所有者拒否時の storage 未呼出を検証。C02 test は /bots 1 回・/bots/status 0 回、401/402/403/429/503 の非変換、Retry-After 保持、no-store、Cookie 非削除、headers/body ハングの 5000ms 504 終端と timer 0、malformed 200 の 502、store の旧一覧保持を検証。C07 test は同値 descriptor 10 回 rerender で再取得 0、master 変更/meeting 切替の無効化、audio/video error 独立、1500/3000/6000ms の有限 retry と手動回復、401/403/4xx/不正 200 の非再送、playback_url 無しで探索 0、部分 playlist 非公開、created_at 順/404 除外/seek、cleanup abort を検証。route.ts と use-meeting-playback.ts の実装本体はチャンク 1 にあり、このチャンクからは test 側の期待値のみ確認できる。",
+  "confidence": "medium",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "plan外のレビューハーネス変更commitが差分範囲に含まれる",
+      "file": ".hw/fable_review.py",
+      "detail": "HW_FABLE_MAX_BUDGET_USD 既定値 1.00→10.00 と REG-BUDGET-001 テスト追加は R00–R11 の12項目のいずれにも属さない。C00の禁止事項(テスト削除/skip/assertion緩和/baseline/依存更新/本番操作)には該当しないため違反とはしないが、レビュー対象差分にレビューハーネス自身の変更が含まれる自己参照的な状態になっている。R11報告で「plan外commit(e20fd2a)」として明示し、12採用commitと分けて数えること。可能なら次回以降はハーネス変更をタスクbranch外で先行させる。"
+    },
+    {
+      "title": "R00特性testのfixture適応(assertionは不変)を報告に明記",
+      "file": "services/api-gateway/tests/test_media_contract_characterization.py",
+      "detail": "test_R00_raw_range_preserves_headers の MockTransport 応答を content=b\"abc\" から stream=httpx.ByteStream(b\"abc\") に変更している。httpx.Response(content=...) は生成時に read() 済みとなり、client.send(stream=True)+aiter_raw が StreamConsumed になるため必要な適応で、assertion自体は変わっていない。同様に test_loading_characterization.test.tsx は useMeetingPlayback の第1引数 meetingId=\"42\" 追加のみ。いずれも契約違反ではないが、C00で凍結した特性testへの変更としてR11報告に「変更箇所と理由」を記載すること。"
+    },
+    {
+      "title": "fetchMeeting は seed のみの currentMeeting を採用せず null に落とす(refreshMeeting と非対称)",
+      "file": "services/dashboard/src/stores/meetings-store.ts",
+      "detail": "再現: useMeetingsStore.setState({ currentMeeting: meeting(\"1\") }) のみ(activeDetailId=null)の状態で fetchMeeting(\"1\") を呼ぶと、activeDetailId !== ownerId により currentMeeting/transcripts/recordings が即座に空になり、その後ロードされる。refreshMeeting は同条件で owner を採用(adopt)するため挙動が非対称。setCurrentMeeting や fetchMeeting 経由で入る通常経路では影響しないが、store内の他actionが set({currentMeeting}) で直接seedする流れがある場合、詳細画面遷移直後に一瞬スケルトン表示へ戻る。契約C05は refresh の seed 採用のみ規定しているため advisory。"
+    },
+    {
+      "title": "fetchTranscripts/fetchChatMessages が owner 未設定時にサイレント no-op になる",
+      "file": "services/dashboard/src/stores/meetings-store.ts",
+      "detail": "再現: setState({ currentMeeting: meeting(\"1\") }) のみで fetchTranscripts(\"google_meet\", \"native-1\", \"1\") を呼ぶと activeDetailId !== ownerId で早期return し、API呼出しは0回。currentMeeting が null、platform/nativeId 不一致でも同様。useMeetingLiveData 経由の本番呼出しは currentMeeting 由来の platform/nativeId を渡すため影響しないが、WS再接続や再文字起こし完了後など別経路からの呼出しがあれば取得が起きなくなる。契約外だが、早期return に console.debug を1行入れると追跡が容易。"
+    },
+    {
+      "title": "全件404の打ち切り後は artifact polling も停止し手動再試行が必要になる",
+      "file": "services/dashboard/src/hooks/use-meeting-playback.ts",
+      "detail": "契約C07どおり 4attempt(1500/3000/6000ms、約10.5秒)で resolved が0件なら audioResolutionError=PREPARATION_ERROR を立てる。use-meeting-live-data の pollArtifacts は !audioResolutionError を条件に含むため、この時点で artifact polling(5000ms)も止まる。playback_url.audio が master 生成前に公開されるケースがあると、master 生成に数分かかる録音は自動回復せずユーザーの「再試行」クリックが必要になる。契約に沿った挙動なので違反ではないが、playback_url の公開タイミング(master 実在時のみか)を人間が確認しておくこと。"
+    },
+    {
+      "title": "browser session の active 中は chat bootstrap が0回になる",
+      "file": "services/dashboard/src/hooks/use-meeting-live-data.ts",
+      "detail": "旧コードは shouldUseWebSocket 時に fetchChatMessages を行う第2 effect を持ち、isBrowserSession かつ active でも chat を1回取得していた。差分でこの effect を削除し、第1 effect は isBrowserSession && status not in (stopping, completed) で早期return するため、browser session の active 中は chat が取得されない。browser session に chat が存在しない前提なら問題なし。契約C06「通常active bootstrapは各1回」は bot session を指すと解釈した。"
+    },
+    {
+      "title": "/api/auth/me は email 欠落の正常200を503(outage)として扱う",
+      "file": "services/dashboard/src/app/api/auth/me/route.ts",
+      "detail": "identity.email が非空文字列でないと 503 を返し、auth-store 側は network 終端(再試行UI、redirectなし)になる。Gateway /auth/me が常に email を返すなら問題ないが、email が null になり得るユーザーが存在すると恒久的に「サーバーに接続できません」状態となる。旧実装は data.email をそのまま通していた。"
+    },
+    {
+      "title": "同会議の単一flightに上限時間が無い",
+      "file": "services/dashboard/src/hooks/use-meeting-polling.ts",
+      "detail": "flightRef により同会議の poll batch は最大1件だが、refreshMeeting/fetchTranscripts/fetchChatMessages 側にクライアントtimeoutが無い場合、settlement しない要求が1つあると以後のpollが永久に発生しない。契約C06の設計どおりで違反ではないが、vexaAPI 側の要求に deadline があるかを R11 報告で触れておくと安全。"
+    },
+    {
+      "title": "C02 接続例外→502 のケースがこのチャンクの test に無い",
+      "file": "services/dashboard/tests/test_meetings_proxy_contract.test.ts",
+      "detail": "契約 C02 は「接続例外502」を要求するが、本ファイルには fetch が reject(TypeError 等)する場合の test が無い。route.ts はチャンク 1 にあり実装の有無は判定できないため violation にはしない。plan.md の R02 test 名一覧に該当 test が含まれているなら、別ファイルまたはチャンク 1 で担保されているか確認を推奨。"
+    },
+    {
+      "title": "C07 の batch deadline 10 秒と meeting 切替後の旧 seek 非反映が直接検証されていない",
+      "file": "services/dashboard/tests/test_playback_resolution.test.tsx",
+      "detail": "契約 C07 の「batch deadline10秒」は timer を 10 秒進めて未応答 fetch が abort されることを見る test が無く、cleanup 時の abort のみ検証している。また「meeting切替後に旧seekを反映しない」は旧結果(src)の非反映のみ検証され、旧 seek の非反映は assert されていない。「video無しならvideo error無し」も videoResolutionError が null であることを明示 assert していない。実装はチャンク 1 のため違反とはしないが、回帰検出力を上げるなら追加を推奨。"
+    },
+    {
+      "title": "event loop heartbeat の assert は識別力が弱い",
+      "file": "services/meeting-api/tests/test_recording_metadata_resolution.py",
+      "detail": "test_R04_slow_storage_does_not_block_event_loop の heartbeat は request_task より後に schedule され、loop が同期 block されても block 解除後に set されるため、heartbeat 単独では blocking 実装を落とせない可能性がある。実際の識別は sdk_thread_ids[0] != loop_thread_id と sdk_release.wait 失敗による 500 で担保されているため契約上は問題ない。heartbeat を厳密に見るなら、SDK が block 中(sdk_started 後・sdk_release 前)に heartbeat が set されることを wall-clock 付きで確認する形が望ましい。"
+    },
+    {
+      "title": "_meeting() の exists 引数が未使用",
+      "file": "services/meeting-api/tests/test_recording_metadata_resolution.py",
+      "detail": "_meeting(*, backend, fmt, exists) は exists を del しており実質未使用。呼出側も渡していない。動作影響は無いが、可読性のため引数を削除するか _storage 側に寄せると整理される。"
+    }
+  ]
+}
