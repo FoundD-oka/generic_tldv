@@ -207,6 +207,62 @@ describe("meeting detail request scope", () => {
     expect((useMeetingsStore.getState().currentMeeting?.data.recordings as RecordingData[]).map((item) => item.id)).toEqual([10]);
   });
 
+  it("R05 silent detail refresh cannot strand foreground loading", async () => {
+    const foregroundDetail = deferred<Meeting>();
+    const owner = meeting("1", "native-a");
+    const refreshed = { ...owner, updated_at: "2026-09-05T00:01:00Z" };
+    vi.spyOn(vexaAPI, "getMeeting")
+      .mockImplementationOnce(() => foregroundDetail.promise)
+      .mockResolvedValueOnce(refreshed);
+
+    useMeetingsStore.getState().setCurrentMeeting(owner);
+    const foregroundRequest = useMeetingsStore.getState().fetchMeeting("1");
+    expect(useMeetingsStore.getState().isLoadingMeeting).toBe(true);
+
+    await useMeetingsStore.getState().refreshMeeting("1");
+    expect(useMeetingsStore.getState().isLoadingMeeting).toBe(true);
+
+    foregroundDetail.resolve(owner);
+    await foregroundRequest;
+    expect(useMeetingsStore.getState().isLoadingMeeting).toBe(false);
+  });
+
+  it("R05 silent transcript refresh cannot strand foreground loading", async () => {
+    const foregroundTranscripts = deferred<{
+      meeting: Meeting;
+      segments: TranscriptSegment[];
+      recordings: RecordingData[];
+    }>();
+    const owner = meeting("1", "native-a");
+    vi.spyOn(vexaAPI, "getMeetingWithTranscripts")
+      .mockImplementationOnce(() => foregroundTranscripts.promise)
+      .mockResolvedValueOnce({ meeting: owner, segments: [], recordings: [] });
+
+    useMeetingsStore.getState().setCurrentMeeting(owner);
+    const foregroundRequest = useMeetingsStore.getState().fetchTranscripts(
+      "google_meet",
+      "native-a",
+      "1"
+    );
+    expect(useMeetingsStore.getState().isLoadingTranscripts).toBe(true);
+
+    await useMeetingsStore.getState().fetchTranscripts(
+      "google_meet",
+      "native-a",
+      "1",
+      { silent: true }
+    );
+    expect(useMeetingsStore.getState().isLoadingTranscripts).toBe(true);
+
+    foregroundTranscripts.resolve({
+      meeting: owner,
+      segments: [segment("1", "foreground")],
+      recordings: [],
+    });
+    await foregroundRequest;
+    expect(useMeetingsStore.getState().isLoadingTranscripts).toBe(false);
+  });
+
   it("R05 current empty recordings remain authoritative", async () => {
     const owner = meeting("1", "native-a", [recording(1)]);
     useMeetingsStore.getState().setCurrentMeeting(owner);
