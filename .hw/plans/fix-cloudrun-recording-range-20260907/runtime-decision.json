@@ -1,0 +1,13 @@
+{
+  "runtime": "inline",
+  "task_id": "fix-cloudrun-recording-range-20260907",
+  "decided_at": "2026-09-07",
+  "revised": "2026-09-07 (実装前改訂 r2)",
+  "axes": {
+    "duration": false,
+    "state_volume": false,
+    "delegation": false,
+    "recurrence": false
+  },
+  "reason": "変更は新規 lib 1 ファイル(純関数 + 定数)、route.ts の import と適用 2 箇所、新規テスト 1 ファイルで、実装・検証・レビューは 1 セッションに収まる(数時間未満)。参照する状態は route.ts・既存テスト・api.ts の URL 生成箇所・Cloud Run describe 出力程度でコンテキストに載る。並行委譲は不要で、反復手順として資産化する性質でもない。Phase D の反映は gcloud/curl の少数コマンドと手動ブラウザ確認で、別段階として人間承認下に実施する。よって既定の inline(Opus 5 implementer)。"
+}
