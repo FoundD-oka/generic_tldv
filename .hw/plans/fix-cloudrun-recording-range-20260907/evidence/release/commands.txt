@@ -1,0 +1,15 @@
+本番反映: 2026-09-07 UTC
+PR: https://github.com/FoundD-oka/generic_tldv/pull/82 (未マージ)
+検証済み反映SHA: 1bbc72a7078b51140a386f88bc3d42993a34b428
+反映時点: Fable READY, pr-ready-gate ready, clean checkout, GitHub CI成功
+実行:
+gcloud builds submit . --project=pm-qe-mgmt-20260624 --config=deploy/gcp/cloudbuild-dashboard.yaml --substitutions=_VEXA_API_URL=https://kabosu-api.bonginkan.com,_DEPLOY_SHA=1bbc72a7078b51140a386f88bc3d42993a34b428 --quiet
+Cloud Build: 012ccfe8-23f9-45f9-8716-826277f98f43 / SUCCESS
+新revision: kabosu-dashboard-00070-ltj / traffic 100%
+反映前revision: kabosu-dashboard-00069-7q8
+before/afterでenv名一覧・http1:3000のports一致。image更新のみ。env変更・.env編集・compose up・workflow外のgcloud deploy引数なし。
+反映成功のため切り戻し未実行。
+この後のコミットはリリース証跡・レビュー結果のみで、デプロイしたアプリコードは変わらない。
+HTTP検証: curl相当のurllib GET。Cookieをメモリ内のみで設定し、先頭/途中/終端/64KiBの4応答を保存。証跡に認証値・署名URLを含めない。
+リリース証跡commit前 detect-changes --scope all --limit 500: No changes detected (新規証跡のみ、アプリコード変更なし)。
+stage後の再確認: Diff touched 8 file(s) but no indexed symbols overlap those hunks — not a clean tree. 証跡8テキスト+1画像の追加のみ。アプリの既存compare解析(11 symbols, low risk, partial/truncatedなし)はevidence/detect_changes.txtを参照。
