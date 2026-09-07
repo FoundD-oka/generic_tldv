@@ -1,0 +1,25 @@
+{
+  "size": "M",
+  "task_id": "fix-cloudrun-recording-range-20260907",
+  "decided_at": "2026-09-07",
+  "revised": "2026-09-07 (実装前改訂 r2)",
+  "axes": {
+    "requirement_ambiguity": {
+      "level": "S",
+      "reason": "修正方針(8MiB 固定の Range 切り詰め)はユーザー合意済み。適用範囲を GET の master proxy=1 と recordings/{id}/media/{id}/raw の 2 経路に限定し、mp3 経路・suffix・複数範囲・不正値・Range なしは既存互換で据え置くと確定した。env 可変上限は要望がなく設けない。"
+    },
+    "technical_unknown": {
+      "level": "M",
+      "reason": "要求より短い 206 をブラウザが再要求して seek を成立させる挙動は Chrome では確度が高いが Safari/Firefox は中。単体テストでは保証できず、反映後の実ブラウザ確認(AT-104)で初めて閉じる。route.ts の named export 制限は build で機械確認できるので未知ではない。"
+    },
+    "impact_scope": {
+      "level": "M",
+      "reason": "worktree index は生成済みで、proxyRequest の編集前 impact は MEDIUM(直接呼出 5 = GET/POST/PUT/PATCH/DELETE、1 module、processes 0)。ただし index の process 探索に truncation があり、HTTP 越しの呼出(api.ts の URL 生成)と動的呼出は text 裏取りが必要。変更点は新規 lib + route.ts の import と適用 2 箇所だが、Range を扱う分岐を経路ごとに分ける必要があり、mp3 経路への非適用を回帰テストで守る。"
+    },
+    "verifiability": {
+      "level": "M",
+      "reason": "HTTP 意味論・適用範囲・overflow guard は vitest で決定的に検証できる一方、主目的(Cloud Run 上での 52MB 録音の再生・seek)は image 限定反映と手動ブラウザ確認でしか実証できない。"
+    }
+  },
+  "rationale": "4 軸のうち 3 軸が M 相当で L 相当は無い。要求は確定し検証手段も定義済みのため L に上げる根拠は無く M。M なので Fable 契約レビュー必須(レビュー対象はコード契約のみ、READY/ゲート/反映後確認は後続フェーズ)。"
+}

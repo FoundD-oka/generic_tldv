@@ -1,0 +1,8 @@
+
+  GitNexus Detect Changes (1.6.11)
+Changes: 3 files, 1 symbols
+Affected processes: 0
+Risk level: low
+
+Changed symbols:
+  Function proxyRequest → services/dashboard/src/app/api/vexa/[...path]/route.ts

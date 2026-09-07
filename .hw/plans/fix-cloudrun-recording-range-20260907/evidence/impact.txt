@@ -1,0 +1,110 @@
+{
+  "target": {
+    "id": "Function:services/dashboard/src/app/api/vexa/[...path]/route.ts:proxyRequest",
+    "name": "proxyRequest",
+    "type": "Function",
+    "filePath": "services/dashboard/src/app/api/vexa/[...path]/route.ts"
+  },
+  "direction": "upstream",
+  "impactedCount": 5,
+  "risk": "MEDIUM",
+  "riskSharedAxes": "MEDIUM",
+  "riskScale": {
+    "comparableAcrossKinds": true,
+    "unusedAxes": []
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 5,
+    "processes_affected": 0,
+    "modules_affected": 1
+  },
+  "byDepthCounts": {
+    "1": 5
+  },
+  "affected_processes": [],
+  "affected_modules": [
+    {
+      "name": "[...path]",
+      "hits": 5,
+      "impact": "direct"
+    }
+  ],
+  "byDepth": {
+    "1": [
+      {
+        "depth": 1,
+        "id": "Function:services/dashboard/src/app/api/vexa/[...path]/route.ts:DELETE",
+        "name": "DELETE",
+        "filePath": "services/dashboard/src/app/api/vexa/[...path]/route.ts",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:services/dashboard/src/app/api/vexa/[...path]/route.ts:GET",
+        "name": "GET",
+        "filePath": "services/dashboard/src/app/api/vexa/[...path]/route.ts",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:services/dashboard/src/app/api/vexa/[...path]/route.ts:PATCH",
+        "name": "PATCH",
+        "filePath": "services/dashboard/src/app/api/vexa/[...path]/route.ts",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:services/dashboard/src/app/api/vexa/[...path]/route.ts:POST",
+        "name": "POST",
+        "filePath": "services/dashboard/src/app/api/vexa/[...path]/route.ts",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:services/dashboard/src/app/api/vexa/[...path]/route.ts:PUT",
+        "name": "PUT",
+        "filePath": "services/dashboard/src/app/api/vexa/[...path]/route.ts",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      }
+    ]
+  }
+}
+
+=== Truncation 補完 (HTTP 越し/動的呼出は index の process 探索に載らないため text で裏取り) ===
+-- route.ts: rangeHeader 使用箇所 --
+215:  const rangeHeader = request.headers.get("range");
+216:  if (rangeHeader) {
+219:        ? boundMediaRangeHeader(rangeHeader)
+220:        : rangeHeader;
+355:      const mediaRange = boundMediaRangeHeader(rangeHeader);
+-- route.ts: mediaHeaders 組立箇所 --
+329:      const mediaHeaders: HeadersInit = {};
+338:        mediaHeaders["X-API-Key"] = userToken;
+346:          mediaHeaders["X-API-Key"] = userToken;
+357:        mediaHeaders["Range"] = mediaRange;
+367:          headers: mediaHeaders,
+400:      const mediaHeaders = new Headers({ "Cache-Control": "no-store" });
+409:        if (value) mediaHeaders.set(header, value);
+413:        headers: mediaHeaders,
+-- lib/api.ts: 経路A(master proxy=1) / 経路B(raw fallback) の URL 生成 --
+549:      `/api/vexa/recordings/${recordingId}/media/${mediaFileId}/raw`
+570:      withBasePath(`/api/vexa/recordings/${recordingId}/master?type=${type}`)
+592:      url: withBasePath(`/api/vexa/recordings/${recordingId}/master?type=${type}&proxy=1`),
+602:    return withBasePath(`/api/vexa/recordings/${recordingId}/media/${mediaFileId}/raw`);
+606:    return withBasePath(`/api/vexa/recordings/${recordingId}/media/${mediaFileId}/raw`);
+-- 対象外: mp3 取得経路の URL 生成 (lib/meeting-detail-api.ts) と route.ts の分岐 --
+services/dashboard/src/lib/meeting-detail-api.ts:23:export function mp3MasterUrl(recordingId: number): string {
+services/dashboard/src/lib/meeting-detail-api.ts:24:  return withBasePath(`/api/vexa/recordings/${recordingId}/master/mp3?type=audio`);
+services/dashboard/src/app/api/vexa/[...path]/route.ts:245:      /^recordings\/\d+\/master\/mp3$/.test(pathString) ||
+services/dashboard/src/app/api/vexa/[...path]/route.ts:246:      /^recordings\/\d+\/media\/\d+\/mp3$/.test(pathString);

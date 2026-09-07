@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getAuthCookieName, getUserInfoCookieName } from "@/lib/auth-cookies";
+import { boundMediaRangeHeader } from "@/lib/media-proxy-range";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -106,6 +107,18 @@ export async function readBoundedVoiceprintProxyBody(
   return new TextDecoder("utf-8", { fatal: true }).decode(body);
 }
 
+// recordings/{id}/media/{mediaId}/raw のみが Range 上限の対象。
+// route.ts は HTTP メソッド以外の named export を持てないため非 export で定義する。
+function isRawMediaPath(pathString: string): boolean {
+  const segments = pathString.split("/");
+  return (
+    segments.length === 5 &&
+    segments[0] === "recordings" &&
+    segments[2] === "media" &&
+    segments[4] === "raw"
+  );
+}
+
 async function proxyRequest(
   request: NextRequest,
   params: Promise<{ path: string[] }>,
@@ -201,7 +214,13 @@ async function proxyRequest(
 
   const rangeHeader = request.headers.get("range");
   if (rangeHeader) {
-    headers["Range"] = rangeHeader;
+    const upstreamRange =
+      method === "GET" && isRawMediaPath(pathString)
+        ? boundMediaRangeHeader(rangeHeader)
+        : rangeHeader;
+    if (upstreamRange) {
+      headers["Range"] = upstreamRange;
+    }
   }
 
   const isDirectVoiceprintEnrollmentRequest =
@@ -333,8 +352,9 @@ async function proxyRequest(
         }
       }
 
-      if (rangeHeader) {
-        mediaHeaders["Range"] = rangeHeader;
+      const mediaRange = boundMediaRangeHeader(rangeHeader);
+      if (mediaRange) {
+        mediaHeaders["Range"] = mediaRange;
       }
       const mediaController = new AbortController();
       const mediaTimeoutId = setTimeout(
