@@ -1,0 +1,18 @@
+=== git diff --name-only d7a4d729e95981f59c3653351e41089d0d523184..HEAD ===
+.hw/plans/fix-cloudrun-recording-range-20260907/base-commit
+.hw/plans/fix-cloudrun-recording-range-20260907/evidence/deployment-before.json
+.hw/plans/fix-cloudrun-recording-range-20260907/evidence/detect_changes.txt
+.hw/plans/fix-cloudrun-recording-range-20260907/evidence/impact-original.txt
+.hw/plans/fix-cloudrun-recording-range-20260907/evidence/impact.txt
+.hw/plans/fix-cloudrun-recording-range-20260907/evidence/investigation.md
+.hw/plans/fix-cloudrun-recording-range-20260907/evidence/release/revision-before.json
+.hw/plans/fix-cloudrun-recording-range-20260907/plan.md
+.hw/plans/fix-cloudrun-recording-range-20260907/runtime-decision.json
+.hw/plans/fix-cloudrun-recording-range-20260907/sml-decision.json
+.hw/plans/fix-cloudrun-recording-range-20260907/verification-contract.md
+services/dashboard/src/app/api/vexa/[...path]/route.ts
+services/dashboard/src/lib/media-proxy-range.ts
+services/dashboard/tests/test_media_proxy_range_bound.test.ts
+
+=== FP-005: route.ts の追加行に export 文が無いこと ===
+0 件 (追加された export 文なし。コメント中の 'named export' 言及のみ)
