@@ -18,22 +18,20 @@ output="$(make smoke 2>&1)"
 smoke_status=$?
 printf '%s\n' "$output"
 
-# PreToolUse フック自身の退行検査。全 Bash コマンドで走るフックなので、壊すと
-# 全エージェントが止まる。「CI > ローカルゲート > エージェント」の序列にフックを載せる。
+# 以下3件は保存した旧実装への回帰検査。通常の入口・CIはv2 runtimeを使う。
+# 旧 PreToolUse フックの worktree 判定を、実行先を記録する fixture で検証する。
 if [ -f .hw/tests/pr-create-intercept.test.sh ]; then
-  bash .hw/tests/pr-create-intercept.test.sh .hw/hooks/pr-create-intercept.sh || exit 1
+  bash .hw/tests/pr-create-intercept.test.sh .hw/legacy/v1/hooks/pr-create-intercept.sh || exit 1
 fi
 
-# fable_review.py のチャンク分割レビューの退行検査。壊すと M/L の差分が
-# 静かに一部しかレビューされない(READY の意味が消える)ので毎回実行する。
+# 旧 fable_review.py の差分分割・対象hashの照合を、モデルを呼ばない fixture で検証する。
 if [ -f .hw/tests/fable-review-chunking.test.py ]; then
-  python3 .hw/tests/fable-review-chunking.test.py .hw/fable_review.py || exit 1
+  python3 .hw/tests/fable-review-chunking.test.py .hw/legacy/v1/fable_review.py || exit 1
 fi
 
-# prime_run.py の worktree ガードの退行検査。壊すと既存 worktree/branch を無検査で
-# 再利用し、前回の成果物の上に次の実行を積む(実験と成果の汚染)ので毎回実行する。
+# 旧 prime_run.py の worktree 再利用ガードを検証する。実 Prime Agent は起動しない。
 if [ -f .hw/tests/prime-worktree-guard.test.sh ]; then
-  bash .hw/tests/prime-worktree-guard.test.sh .hw/prime_run.py || exit 1
+  bash .hw/tests/prime-worktree-guard.test.sh .hw/legacy/v1/prime_run.py || exit 1
 fi
 
 # docker 資源監査 CLI の unit test。FakeRunner だけで動くのでライブ daemon を要求せず、

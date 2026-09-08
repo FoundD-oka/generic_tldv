@@ -204,3 +204,6 @@ tests3/.state-*
 .harness-init/tmp/
 .hw/gates/
 .hw/state/
+/.hw/evidence/
+/.hw/state/
+/.hw/gates/
