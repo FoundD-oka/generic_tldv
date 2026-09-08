@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0",
+  "task_id": "fix-cloudrun-recording-range-20260907",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "d7a4d729e95981f59c3653351e41089d0d523184",
+  "reviewed_commit": "70c57ab170e29f3d508f0998a37d101cc909b61b",
+  "target_sha256": "sha256:ae40228882b83bdc3c918122b0ad033eaa33ed2f903115c7f8751bfe908d0ef3",
+  "contract_sha256": "sha256:668a5b29824a24970683e215c7cfce4f3297e5dcefc45b81b482ade31bb1ec3c",
+  "prompt_sha256": "sha256:139c85ce3fbf6ee6baaadb0f4f56a4d41f0127b2c8fdbc5dbeebe4b17bd6e9c7",
+  "response_sha256": "sha256:4be4437ab20b129669c658ef729e50211c476e6a38e9f901cfc4893497277b98",
+  "created_at": "2026-09-07T15:04:52.324967+00:00",
+  "verdict": "READY",
+  "summary": "対象差分(d7a4d729..70c57ab)はコード契約 AT-001〜AT-013、FP-001〜FP-007、NFT-002 をすべて満たす。boundMediaRangeHeader の実装は仕様表の全行(null/空→null、8MiB ちょうど不変、8MiB+1 切り詰め、open-end 切り詰め、suffix・不正値・複数範囲・E<S・safe integer 超過・和の overflow guard は元文字列返却、trim 後判定)と一致し、テストが各行を直接検証している。route.ts は import 1 行、非 export の isRawMediaPath、経路 A(mediaHeaders)と経路 B(GET かつ recordings/{id}/media/{mediaId}/raw のみ)の適用 2 箇所に限定され、非対象経路では upstreamRange = rangeHeader となり既存挙動と同一。新規 named export なし、既存テストファイル無変更、lint-baseline.json 無変更、npm test 341/341 緑、tsc/build 成功、lint ratchet OK(errors 50/50、warnings 70/75)、verify.sh は既知 3 件のみ。impact(MEDIUM/直接 5/1 module/processes 0)と Grep 裏取り、detect_changes complete(11 symbols、partial/truncated なし)も記録済み。差分ファイルは許可パターン内のみで、evidence 配下(release/** 含む)に X-Amz-Signature / vxa_ / Cookie: は無い。Phase C/D の証跡は審査対象外だが FP-007 のみ確認し問題なし。違反 0 件。",
+  "confidence": "high",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "diff-files.txt と secret-scan.txt が HEAD より古い",
+      "file": ".hw/plans/fix-cloudrun-recording-range-20260907/evidence/diff-files.txt",
+      "detail": "両ファイルは release/** 追加前に生成されており、現在の base..HEAD には evidence/release/** など約 10 ファイルが追加で含まれる。実際の差分ファイル一覧は AT-013 の許可パターン内に収まり、release 配下を手動走査しても FP-007 のパターンは検出されなかったため違反ではない。ただし証跡としての再現性を保つため、HEAD に対して両ファイルを再生成しておくと後続の監査で齟齬が出ない。"
+    },
+    {
+      "title": "lint ratchet が baseline 引き下げを提案している",
+      "file": "services/dashboard/lint-baseline.json",
+      "detail": "lint-ratchet の出力は warnings 70 < baseline 75 のため baseline を {errors: 50, warnings: 70} へ下げるよう促している。本契約(AT-010)は lint-baseline.json 無変更を要求しているので今回は正しく据え置かれているが、別タスクで baseline を下げると負債の再増加を機械的に防げる。"
+    },
+    {
+      "title": "AT-008 のテストコメントが引用するファイル名が契約表記と異なる",
+      "file": "services/dashboard/tests/test_media_proxy_range_bound.test.ts",
+      "detail": "契約は「route.ts/api.ts の根拠」と書いているが、テストコメントは mp3 URL 生成元として src/lib/meeting-detail-api.ts を引用している。impact.txt の Grep 結果でも mp3MasterUrl は meeting-detail-api.ts にあり、テスト側の引用が実態に即しているため違反ではない。次回以降の契約では「URL 生成元の lib ファイル」など実ファイルに合わせた表記にすると齟齬が消える。"
+    },
+    {
+      "title": "test-output.txt に個別テスト名が残っていない",
+      "file": ".hw/plans/fix-cloudrun-recording-range-20260907/evidence/test-output.txt",
+      "detail": "vitest の既定 reporter は集計(41 files / 341 tests)のみを出力するため、AT-002〜AT-008 の各ケースが実行されたことをテスト名で追跡できない。差分中のテストコードから各契約行に対応するケースの存在は確認できるので違反ではないが、`vitest run --reporter=verbose` で保存すると契約 ID と実行結果の対応が証跡だけで読める。"
+    },
+    {
+      "title": "Range 起点の先頭ゼロが正規化される",
+      "file": "services/dashboard/src/lib/media-proxy-range.ts",
+      "detail": "`bytes=007-` のように先頭ゼロを含む起点は Number 変換により `bytes=7-8388614` として転送される。HTTP 意味論上は同値であり契約の仕様表にも該当行がないため問題ないが、仕様表に「先頭ゼロは数値として解釈」と一行足しておくと将来の再実装時の判断が揺れない。"
+    }
+  ]
+}

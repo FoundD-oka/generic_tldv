@@ -1,0 +1,204 @@
+
+  doc checks
+  ──────────────────────────────────────────────
+  [32m ok [0m  PAGE_EXISTS
+  [32m ok [0m  NAV_COMPLETE
+  [32m ok [0m  LINKS_RESOLVE
+  [32m ok [0m  OWNERSHIP_COMPLETE
+  ──────────────────────────────────────────────
+  [32mAll 4 checks pass.[0m
+
+
+  static checks
+  ──────────────────────────────────────────────
+  [32m ok [0m  LOGIN_REDIRECT
+  [32m ok [0m  IDENTITY_NO_FALLBACK
+  [31mFAIL[0m  SECURE_COOKIE_SEND_MAGIC_LINK
+  [32m ok [0m  SECURE_COOKIE_VERIFY
+  [32m ok [0m  SECURE_COOKIE_ADMIN_VERIFY
+  [32m ok [0m  SECURE_COOKIE_NEXTAUTH
+  [32m ok [0m  ROUTE_COLLISION
+  [32m ok [0m  GRACEFUL_LEAVE
+  [32m ok [0m  URL_PARSER_EXISTS
+  [32m ok [0m  MAP_MEETING
+  [32m ok [0m  COMPOSE_ADMIN_KEY_DEFAULT
+  [32m ok [0m  PASSWORD_STORE_BASIC
+  [32m ok [0m  HELM_CHART_VALID
+  [32m ok [0m  HELM_TEMPLATE_RENDERS
+  [32m ok [0m  NO_NESTED_COMPOSE_VARS
+  [32m ok [0m  NO_DEV_FALLBACK_COMPOSE
+  [32m ok [0m  NO_EXPORT_IMAGE_TAG
+  [32m ok [0m  BROWSER_IMAGE_IN_ENV
+  [32m ok [0m  NO_IMAGETOOLS_CREATE
+  [32m ok [0m  ENV_EXAMPLE_LATEST_ON_MAIN
+  [32m ok [0m  LITE_RECORDING_ENABLED
+  [32m ok [0m  GATEWAY_TIMEOUT_ADEQUATE
+  [32m ok [0m  LITE_PROCESS_BACKEND
+  [32m ok [0m  VM_LITE_USES_MAKE
+  [32m ok [0m  HELM_VALUES_RESOURCES_SET
+  [32m ok [0m  HELM_GLOBAL_SECURITY_HARDENED
+  [32m ok [0m  HELM_REDIS_MAXMEMORY_SET
+  [32m ok [0m  HELM_MEETING_API_DB_POOL_TUNED
+  [32m ok [0m  HELM_PDB_TEMPLATE_EXISTS
+  [32m ok [0m  CDP_WS_SCHEME_PRESERVED
+  [32m ok [0m  CDP_NO_SLASH_REDIRECT
+  [32m ok [0m  H11_PINNED_SAFE_EVERYWHERE
+  [31mFAIL[0m  DOCS_ENV_GATED_EVERYWHERE
+  [32m ok [0m  VEXA_BOT_NO_HIGH_NPM_VULNS
+  [32m ok [0m  RECORDING_UPLOAD_SUPPORTS_CHUNK_SEQ
+  [32m ok [0m  ENGINE_POOL_RESET_ON_RETURN_ROLLBACK
+  [32m ok [0m  HELM_DEPLOYMENT_STRATEGY_HELPER_DEFINED
+  [32m ok [0m  PACKAGES_CI_WORKFLOW_EXISTS
+  [32m ok [0m  RUNTIME_API_IDLE_LOOP_SWEEPS_PENDING_CALLBACKS
+  [32m ok [0m  RUNTIME_API_STOP_GRACE_MATCHES_POD_SPEC
+  [32m ok [0m  HELM_API_GATEWAY_REPLICA_COUNT_HA
+  [32m ok [0m  LITE_POSTGRES_NOT_PUBLIC
+  [32m ok [0m  LITE_INTERNAL_SERVICES_LOOPBACK_ONLY
+  [32m ok [0m  LITE_REDIS_NOT_PUBLIC
+  [32m ok [0m  COMPOSE_PORTS_LOOPBACK_ONLY
+  [32m ok [0m  BOT_VIDEO_DEFAULT_OFF
+  [32m ok [0m  RUNTIME_API_MEETING_PROFILE_MEMORY_2560MI
+  [32m ok [0m  HELM_CHART_RUNTIME_API_MEMORY_2560MI
+  [32m ok [0m  CHART_VERSION_CURRENT
+  [32m ok [0m  CHART_PUBLISH_WORKFLOW_EXISTS
+  [32m ok [0m  ZOOM_WEB_AUDIO_RESEARCH_NOTE_EXISTS
+  [32m ok [0m  REDIS_CLIENT_HARDENED_TIMEOUTS
+  [32m ok [0m  MEETING_API_READYZ_GATES_CONSUMER
+  [32m ok [0m  MEETING_API_COLLECTOR_LIVENESS
+  [32m ok [0m  K8S_BACKEND_CONTAINER_ID_IS_NAME
+  [32m ok [0m  BOT_DELETE_DURABLE_RETRY
+  [32m ok [0m  RECORDING_FINALIZE_OUTBOX_CONSUMER_IDEMPOTENT
+  [32m ok [0m  AGGREGATION_FAILURE_CLASS_VIA_TYPED_HELPER
+  [32m ok [0m  DELAYED_STOP_FINALIZER_REMOVED
+  [31mFAIL[0m  BOTS_LIST_ENDPOINT_SLIM
+  [32m ok [0m  BOT_LOGS_STRUCTURED_JSON
+  [32m ok [0m  PACK_E1A_CONCURRENT_CHUNKS_REPRODUCER_PASSES
+  [32m ok [0m  PACK_E1A_CHUNK_WRITE_LOG_LINE
+  [32m ok [0m  PACK_X_DRY_RUN_FLAG_GATED
+  [32m ok [0m  PACK_X_DRY_RUN_SCHEMA_FIELD
+  [32m ok [0m  URL_PLUS_PLATFORM_TRUST_MODEL
+  [32m ok [0m  URL_PARSER_BEST_EFFORT_NOT_GATE
+  [32m ok [0m  REQUIRE_FM001_STAMP
+  [32m ok [0m  BOT_IMAGE_HAS_HALLUCINATION_PHRASES
+  [32m ok [0m  PACK_E1A_PER_CHUNK_MEDIA_FILES_WRITE
+  [32m ok [0m  PACK_Q_POD_NAME_USES_MEETING_ID
+  [32m ok [0m  PACK_S_WEBHOOK_RETRY_LOG_NON_EMPTY_ERROR
+  [32m ok [0m  NO_VIDEO_TRANSCEIVER_DIRECTION_FLIP
+  [32m ok [0m  RECORDING_MEDIA_FILES_CUMULATIVE_BYTES
+  [32m ok [0m  POST_MEETING_FINALIZES_IN_PROGRESS_RECORDINGS
+  [32m ok [0m  GMEET_FALSE_LEFT_ALONE_AUDIO_CROSS_VALIDATE
+  [32m ok [0m  GMEET_PARTICIPANT_COUNTER_MULTI_SELECTOR_FALLBACK
+  [32m ok [0m  ZOOM_LEAVE_MULTI_SELECTOR_FALLBACK
+  [32m ok [0m  FIND_MEDIA_ELEMENTS_TWO_PASS_FILTER
+  [32m ok [0m  CLASSIFIER_RECORDING_AWARE_NO_AUDIO
+  [32m ok [0m  RUNTIME_API_STATE_KEYED_BY_NAME
+  [32m ok [0m  CONTAINERS_TEST_ACCEPTS_CLEAN_STOP_FAILED
+  [32m ok [0m  HELM_SETUP_PASSES_TX_TOKEN_TO_SECRET
+  [32m ok [0m  PACK_T_TERMINAL_IDEMPOTENT_REFIRE_BENIGN
+  [32m ok [0m  POST_MEETING_RECORDING_STATUS_IMPORT_PATH
+  [32m ok [0m  RECORDING_STATUS_TERMINAL_STICKY
+  [32m ok [0m  MEETING_URL_REJECTS_MALFORMED
+  [32m ok [0m  MEETING_API_STORES_NAME_NOT_CONTAINER_ID
+  [32m ok [0m  TEAMS_CONTINUE_WITHOUT_MEDIA_HANDLER
+  [32m ok [0m  PACK2_GMEET_LOCALE_AGNOSTIC_JOIN_SELECTOR
+  [32m ok [0m  PACK2_GMEET_LOCALE_AGNOSTIC_NAME_SELECTOR
+  [32m ok [0m  PACK2_GMEET_WAIT_FOR_ANY_SELECTOR
+  [32m ok [0m  PACK2_GMEET_ADMISSION_OUTCOME_TYPED
+  [32m ok [0m  PACK2_GMEET_HUMANIZED_ENDPOINT_VERIFY
+  [32m ok [0m  GMEET_BOT_NO_CERT_ERROR_FLAGS
+  [32m ok [0m  GMEET_BOT_ANTI_AUTOMATION_FLAG
+  [32m ok [0m  GMEET_K8S_EGRESS_PROXY_KNOB
+  ──────────────────────────────────────────────
+
+  [31mSECURE_COOKIE_SEND_MAGIC_LINK[0m
+    file: services/dashboard/src/app/api/auth/send-magic-link/route.ts
+    expected: isSecureRequest()
+    bug (2026-04-07): Login loop on HTTP — Secure cookie flag set based on NODE_ENV instead of actual protocol
+
+  [31mDOCS_ENV_GATED_EVERYWHERE[0m
+    missing VEXA_ENV-gated docs in: services/wake-stt/app/main.py
+    bug (2026-04-19): /docs exposed on a production deployment; internal admin endpoints listed to any client
+
+  [31mBOTS_LIST_ENDPOINT_SLIM[0m
+    file: services/meeting-api/meeting_api/meetings.py
+    expected: if include_full_data else _data_summary
+    bug (2026-04-27): Every /meetings list response carries full meetings.data JSONB blob (potentially MB per row × N rows); dashboard list page payloads grow unbounded; gateway timeouts at scale (#272#... user concern).
+
+  [31m3 failed[0m out of 97 checks
+
+make[1]: *** [locks] Error 1
+make: *** [smoke] Error 2
+[hook] /private/tmp/generic_tldv-recording-range-fix/.hw/hooks/pr-create-intercept.sh
+[fixture] R=/private/var/folders/w3/d3b15zqs1_x3lpxmqkrpzbp80000gn/T/tmp.SPvWSm92Q2/R W=/private/var/folders/w3/d3b15zqs1_x3lpxmqkrpzbp80000gn/T/tmp.SPvWSm92Q2/W
+ok   AT-001 (exit=0 gate_pwd=-)
+ok   AT-001b (exit=0 gate_pwd=-)
+ok   AT-002 (exit=0 gate_pwd=/private/var/folders/w3/d3b15zqs1_x3lpxmqkrpzbp80000gn/T/tmp.SPvWSm92Q2/W)
+ok   AT-003 (exit=0 gate_pwd=/private/var/folders/w3/d3b15zqs1_x3lpxmqkrpzbp80000gn/T/tmp.SPvWSm92Q2/W)
+ok   AT-004 (exit=0 gate_pwd=/private/var/folders/w3/d3b15zqs1_x3lpxmqkrpzbp80000gn/T/tmp.SPvWSm92Q2/W)
+ok   AT-005 (exit=0 gate_pwd=/private/var/folders/w3/d3b15zqs1_x3lpxmqkrpzbp80000gn/T/tmp.SPvWSm92Q2/R)
+ok   AT-006 (exit=0 gate_pwd=/private/var/folders/w3/d3b15zqs1_x3lpxmqkrpzbp80000gn/T/tmp.SPvWSm92Q2/R)
+ok   AT-007 (exit=2 gate_pwd=-)
+ok   AT-008 (exit=0 gate_pwd=/private/var/folders/w3/d3b15zqs1_x3lpxmqkrpzbp80000gn/T/tmp.SPvWSm92Q2/R)
+ok   AT-009 (exit=2 gate_pwd=/private/var/folders/w3/d3b15zqs1_x3lpxmqkrpzbp80000gn/T/tmp.SPvWSm92Q2/R)
+ok   AT-010 (exit=2 gate_pwd=-)
+ok   AT-011 (exit=2 gate_pwd=-)
+ok
+ok   AT-001
+ok   AT-002
+ok   AT-003
+ok   AT-004
+ok   NFT-001
+ok   AT-005
+ok   AT-006
+ok   NFT-003
+ok   AT-007
+ok   AT-008
+ok   FP-002
+ok   NFT-002
+ok   AT-009
+ok
+[prime_run] /private/tmp/generic_tldv-recording-range-fix/.hw/prime_run.py
+[fixture] TMP=/var/folders/w3/d3b15zqs1_x3lpxmqkrpzbp80000gn/T/tmp.dmBiFjrxul
+[case] AT-101
+ok   AT-101
+[case] AT-110
+ok   AT-110
+[case] FP-103
+ok   FP-103
+[case] AT-102
+ok   AT-102
+[case] NFT-101
+ok   NFT-101
+[case] AT-103
+ok   AT-103
+[case] AT-104
+ok   AT-104
+[case] AT-105a
+ok   AT-105a
+[case] AT-105b
+ok   AT-105b
+[case] AT-106 (mode未設定)
+ok   AT-106 (mode未設定)
+[case] AT-106 (HW_PRIME_WORKTREE_MODE=resume)
+ok   AT-106 (HW_PRIME_WORKTREE_MODE=resume)
+[case] AT-106 (HW_PRIME_WORKTREE_MODE=fresh)
+ok   AT-106 (HW_PRIME_WORKTREE_MODE=fresh)
+[case] AT-107
+ok   AT-107
+[case] AT-108
+ok   AT-108
+[case] AT-109
+ok   AT-109
+[case] FP-101
+ok   FP-101
+[case] FP-102
+ok   FP-102
+ok
+.........引数エラー: unrecognized arguments: --no-such-flag
+.引数エラー: argument --disk-warn-percent: invalid float value: 'abc'
+..........................
+----------------------------------------------------------------------
+Ran 36 tests in 0.021s
+
+OK
+[hw][verify] ok: 既知の失敗のみ(3 件)。新規回帰なし

@@ -1,0 +1,26 @@
+
+  GitNexus Detect Changes (1.6.11)
+Changes: 3 files, 1 symbols
+Affected processes: 0
+Risk level: low
+
+Changed symbols:
+  Function proxyRequest → services/dashboard/src/app/api/vexa/[...path]/route.ts
+
+追加検証: 新規lib/テストを含む変更後indexを生成し、base..HEADのgraph変更を再解析。以下は11 symbolsすべてを含み、partial/truncated表示なし。indexのprocess探索上限はimpact.txtのHTTP/text裏取りで補完。
+Changes: 20 files, 11 symbols
+Affected processes: 0
+Risk level: low
+
+Changed symbols:
+  Function isRawMediaPath → services/dashboard/src/app/api/vexa/[...path]/route.ts
+  Function proxyRequest → services/dashboard/src/app/api/vexa/[...path]/route.ts
+  Const MEDIA_PROXY_RANGE_MAX_BYTES → services/dashboard/src/lib/media-proxy-range.ts
+  Const SINGLE_BYTE_RANGE_PATTERN → services/dashboard/src/lib/media-proxy-range.ts
+  Function boundMediaRangeHeader → services/dashboard/src/lib/media-proxy-range.ts
+  Function get → services/dashboard/tests/test_media_proxy_range_bound.test.ts
+  Function masterJsonResponse → services/dashboard/tests/test_media_proxy_range_bound.test.ts
+  Function masterRequest → services/dashboard/tests/test_media_proxy_range_bound.test.ts
+  Property params → services/dashboard/tests/test_media_proxy_range_bound.test.ts
+  Function partialResponse → services/dashboard/tests/test_media_proxy_range_bound.test.ts
+  Function get → services/dashboard/tests/test_media_proxy_range_bound.test.ts

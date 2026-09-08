@@ -1,0 +1,19 @@
+{
+  "service": "kabosu-dashboard",
+  "project": "pm-qe-mgmt-20260624",
+  "region": "asia-northeast1",
+  "revision": "kabosu-dashboard-00069-7q8",
+  "image": "asia-northeast1-docker.pkg.dev/pm-qe-mgmt-20260624/pm-qe-management/kabosu-dashboard:d7a4d729e95981f59c3653351e41089d0d523184",
+  "url": "https://kabosu-dashboard-yye63pfv3a-an.a.run.app",
+  "traffic": [
+    {
+      "latestRevision": true,
+      "percent": 100,
+      "revisionName": "kabosu-dashboard-00069-7q8"
+    }
+  ],
+  "config": {
+    "VEXA_API_URL": "https://kabosu-api.bonginkan.com",
+    "VEXA_AUTH_COOKIE_NAME": "kabosu-token-cloudrun"
+  }
+}

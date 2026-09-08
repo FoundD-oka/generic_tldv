@@ -1,0 +1,82 @@
+{
+  "target": {
+    "id": "Function:services/dashboard/src/app/api/vexa/[...path]/route.ts:proxyRequest",
+    "name": "proxyRequest",
+    "type": "Function",
+    "filePath": "services/dashboard/src/app/api/vexa/[...path]/route.ts"
+  },
+  "direction": "upstream",
+  "impactedCount": 5,
+  "risk": "MEDIUM",
+  "riskSharedAxes": "MEDIUM",
+  "riskScale": {
+    "comparableAcrossKinds": true,
+    "unusedAxes": []
+  },
+  "epistemic": "exact",
+  "summary": {
+    "direct": 5,
+    "processes_affected": 0,
+    "modules_affected": 1
+  },
+  "byDepthCounts": {
+    "1": 5
+  },
+  "affected_processes": [],
+  "affected_modules": [
+    {
+      "name": "[...path]",
+      "hits": 5,
+      "impact": "direct"
+    }
+  ],
+  "byDepth": {
+    "1": [
+      {
+        "depth": 1,
+        "id": "Function:services/dashboard/src/app/api/vexa/[...path]/route.ts:DELETE",
+        "name": "DELETE",
+        "filePath": "services/dashboard/src/app/api/vexa/[...path]/route.ts",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:services/dashboard/src/app/api/vexa/[...path]/route.ts:GET",
+        "name": "GET",
+        "filePath": "services/dashboard/src/app/api/vexa/[...path]/route.ts",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:services/dashboard/src/app/api/vexa/[...path]/route.ts:PATCH",
+        "name": "PATCH",
+        "filePath": "services/dashboard/src/app/api/vexa/[...path]/route.ts",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:services/dashboard/src/app/api/vexa/[...path]/route.ts:POST",
+        "name": "POST",
+        "filePath": "services/dashboard/src/app/api/vexa/[...path]/route.ts",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      },
+      {
+        "depth": 1,
+        "id": "Function:services/dashboard/src/app/api/vexa/[...path]/route.ts:PUT",
+        "name": "PUT",
+        "filePath": "services/dashboard/src/app/api/vexa/[...path]/route.ts",
+        "relationType": "CALLS",
+        "confidence": 0.85,
+        "processes": []
+      }
+    ]
+  }
+}
