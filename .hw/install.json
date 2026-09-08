@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "version": "2.1.3",
+  "release_sha256": "f5783ed40644db45761539e6a1b320fabbf82bd33face8b083c7a32fe6d14a10",
+  "files": {
+    ".claude/agents/hw-builder.md": "66806c56a8b1734efd54421e92e6214154d1020516aadfb83e042a1dca0c6953",
+    ".claude/agents/hw-intent-reviewer.md": "3c6906206f3c7591c51c55bcce47f4eec75ae7ab2003b8d451504fe23e3b6260",
+    ".claude/agents/hw-researcher.md": "7089f9d952ea22ebc6211edc10e8123aa0af298a30133be81f50e1fc494efd92",
+    ".claude/agents/hw-verifier.md": "c62b0ad5822f003566b1eb5c73be8b480f7dd8e08be9073553c7a0247e8c69e1",
+    ".claude/hooks/pr-ready-gate.sh": "3f8ca75249115845f5e2321f9ccb1ee13385d9b6cbb35addc3f69766ed15114f",
+    ".claude/settings.json": "4a7399f55379dfd1b1d5b58818fe525da7bd3cddd26d0acc9abbef377dc7e142",
+    ".github/workflows/hw-ci.yml": "e0ba00fd455614b198ef4dd37c9a0d46236175319e048b9053326df379c6cfd9",
+    ".gitignore": "70c777f562653c8af0350b810be668c7f18df4d1142285128fc085e7d18cb57b",
+    ".hw/instructions.md": "f7174932f7a9773272f1499237531137c342adc72dc396000521349e0c479eff",
+    ".hw/roles/builder.md": "7fbd982522288c8741bcdba6aef275e21ccb5831191690661f140e42f12d4952",
+    ".hw/roles/intent-reviewer.md": "aa7217f71751313b4d681960ef4c9b1561f147999a4513ee90f5a87709d19952",
+    ".hw/roles/researcher.md": "6c4ca19eba8dfa8343a4ffe2a0354cb8849452d8e64520d25648de92dd820249",
+    ".hw/roles/verifier.md": "30b67345f9faa43f30d37ea2679d9f77962265bd8550603530a41db6cdd1a164",
+    ".hw/runtime/hw.py": "465ed2a9428034c4d52db0bd32b214be59e4ed90afa69363fe2e8aa2007610b7",
+    ".hw/usage.md": "8f5aeeff3fcbb17e1f5783bf395fa03e61778119c4b27ada8773aa687eb9eeba",
+    "AGENTS.md": "4f772720cf8208ad19f9fa4b08fcbe7ceefef55bbe14b1216e20cc61ef8d0f48",
+    "CLAUDE.md": "f08363ba4250d4c65a9903565393a943ab01b04d6a0a0756f4bbfcc4b3fe99b3"
+  },
+  "overrides": {
+    ".github/workflows/hw-ci.yml": {
+      "template_sha256": "245d7912c1ac7f4f21cb3aa919b7080a4df931ce14802ff54982b6cf9c4e1e3c"
+    }
+  }
+}
