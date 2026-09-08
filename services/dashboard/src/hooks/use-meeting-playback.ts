@@ -5,6 +5,7 @@ import type { AudioFragment, AudioPlayerHandle } from "@/components/recording/au
 import type { VideoPlayerHandle } from "@/components/recording/video-player";
 import { vexaAPI } from "@/lib/api";
 import type { RecordingData, TranscriptSegment } from "@/types/vexa";
+import { toast } from "sonner";
 
 export type MeetingPlayback = {
   audioPlayerRef: React.RefObject<AudioPlayerHandle | null>;
@@ -19,7 +20,7 @@ export type MeetingPlayback = {
   recordingDownloadTarget: { recordingId: number; webmUrl: string } | null;
   handlePlaybackTimeUpdate: (time: number) => void;
   handleFragmentChange: (index: number) => void;
-  handleSegmentClick: (startTimeSeconds: number, absoluteStartTime?: string) => void;
+  handleSegmentClick: (startTimeSeconds: number, endTimeSeconds: number, absoluteStartTime?: string) => void;
 };
 
 export function useMeetingPlayback(recordings: RecordingData[], transcripts: TranscriptSegment[]): MeetingPlayback {
@@ -27,7 +28,9 @@ export function useMeetingPlayback(recordings: RecordingData[], transcripts: Tra
   const videoPlayerRef = useRef<VideoPlayerHandle>(null);
   const [playbackTime, setPlaybackTime] = useState<number | null>(null);
   const [isPlaybackActive, setIsPlaybackActive] = useState(false);
-  const [pendingSeekTime, setPendingSeekTime] = useState<number | null>(null);
+  const [pendingSegment, setPendingSegment] = useState<{
+    start: number; end: number; absoluteStartTime?: string;
+  } | null>(null);
   const [, setActiveFragmentIndex] = useState(0);
   const [recordingFragments, setRecordingFragments] = useState<AudioFragment[]>([]);
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
@@ -93,16 +96,21 @@ export function useMeetingPlayback(recordings: RecordingData[], transcripts: Tra
   const hasRecordingAudio = recordingFragments.length > 0;
   const handlePlaybackTimeUpdate = useCallback((time: number) => { setPlaybackTime(time); setIsPlaybackActive(true); }, []);
   const handleFragmentChange = useCallback((index: number) => setActiveFragmentIndex(index), []);
-  const handleSegmentClick = useCallback((startTimeSeconds: number, absoluteStartTime?: string) => {
+  const handleSegmentClick = useCallback((startTimeSeconds: number, endTimeSeconds: number, absoluteStartTime?: string) => {
+    if (!Number.isFinite(startTimeSeconds) || startTimeSeconds < 0 ||
+        !Number.isFinite(endTimeSeconds) || endTimeSeconds <= startTimeSeconds) {
+      toast.error("この発言の再生区間を確認できません");
+      return;
+    }
     if (!hasRecordingAudio) {
-      setPendingSeekTime(startTimeSeconds);
+      setPendingSegment({ start: startTimeSeconds, end: endTimeSeconds, absoluteStartTime });
       return;
     }
 
     if (recordingFragments.length <= 1) {
       // Single recording — start_time is the seek position
-      audioPlayerRef.current?.seekTo(startTimeSeconds);
-      videoPlayerRef.current?.seekTo(startTimeSeconds);
+      audioPlayerRef.current?.seekTo(startTimeSeconds, endTimeSeconds);
+      videoPlayerRef.current?.seekTo(startTimeSeconds, endTimeSeconds);
       setPlaybackTime(startTimeSeconds);
       setIsPlaybackActive(true);
       return;
@@ -133,26 +141,23 @@ export function useMeetingPlayback(recordings: RecordingData[], transcripts: Tra
       }
     }
 
-    audioPlayerRef.current?.seekToFragment(targetFragmentIndex, startTimeSeconds);
+    audioPlayerRef.current?.seekToFragment(targetFragmentIndex, startTimeSeconds, endTimeSeconds);
     const virtualOffset = recordingFragments
       .slice(0, targetFragmentIndex)
       .reduce((sum, f) => sum + (f.duration || 0), 0);
-    videoPlayerRef.current?.seekTo(virtualOffset + startTimeSeconds);
+    videoPlayerRef.current?.seekTo(virtualOffset + startTimeSeconds, virtualOffset + endTimeSeconds);
     setPlaybackTime(virtualOffset + startTimeSeconds);
     setIsPlaybackActive(true);
   }, [hasRecordingAudio, recordingFragments, transcripts, sessionStarts]);
 
   useEffect(() => {
-    if (!hasRecordingAudio || pendingSeekTime == null) return;
+    if (!hasRecordingAudio || pendingSegment == null) return;
     const timer = setTimeout(() => {
-      audioPlayerRef.current?.seekTo(pendingSeekTime);
-      videoPlayerRef.current?.seekTo(pendingSeekTime);
-      setPlaybackTime(pendingSeekTime);
-      setIsPlaybackActive(true);
-      setPendingSeekTime(null);
+      handleSegmentClick(pendingSegment.start, pendingSegment.end, pendingSegment.absoluteStartTime);
+      setPendingSegment(null);
     }, 0);
     return () => clearTimeout(timer);
-  }, [hasRecordingAudio, pendingSeekTime]);
+  }, [hasRecordingAudio, pendingSegment, handleSegmentClick]);
   const playbackAbsoluteTime = useMemo(() => {
     if (playbackTime == null || !isPlaybackActive || !recordingFragments.length) return null;
     let remaining = playbackTime;

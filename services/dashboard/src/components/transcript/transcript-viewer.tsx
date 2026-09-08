@@ -113,7 +113,7 @@ interface TranscriptViewerProps {
   /** ISO absolute timestamp of current playback position (for multi-fragment matching) */
   playbackAbsoluteTime?: string | null;
   isPlaybackActive?: boolean;
-  onSegmentClick?: (startTimeSeconds: number, absoluteStartTime?: string) => void;
+  onSegmentClick?: (startTimeSeconds: number, endTimeSeconds: number, absoluteStartTime?: string) => void;
   onTranscribeStatusChange?: (status: string) => void;
   onTranscribeComplete?: () => void;
 }
@@ -1415,7 +1415,7 @@ export function TranscriptViewer({
                       searchQuery={searchQuery}
                       isHighlighted={searchQuery.length > 0}
                       isActivePlayback={isActivePlayback}
-                      onClickSegment={onSegmentClick ? () => onSegmentClick(group.startTimeSeconds, group.startTime) : undefined}
+                      onClickSegment={onSegmentClick ? () => onSegmentClick(group.startTimeSeconds, group.endTimeSeconds, group.startTime) : undefined}
                       showSpeakerHeader={showSpeakerHeader}
                       canEdit={canEditSpeakers}
                       onSpeakerEdit={(toName, scope) => {

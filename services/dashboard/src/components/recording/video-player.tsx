@@ -4,9 +4,10 @@ import { useRef, useState, useEffect, useImperativeHandle, forwardRef } from "re
 import { Play, Pause, Volume2, VolumeX, Maximize2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useMediaPlaybackRange } from "@/hooks/use-media-playback-range";
 
 export interface VideoPlayerHandle {
-  seekTo: (seconds: number) => void;
+  seekTo: (seconds: number, endTime?: number) => void;
 }
 
 interface VideoPlayerProps {
@@ -18,11 +19,14 @@ interface VideoPlayerProps {
 export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
 function VideoPlayer({ src, className, onTimeUpdate }, ref) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const { setPlaybackEnd } = useMediaPlaybackRange(videoRef);
 
   useImperativeHandle(ref, () => ({
-    seekTo: (seconds: number) => {
+    seekTo: (seconds: number, endTime?: number) => {
       const video = videoRef.current;
       if (!video) return;
+      if (endTime !== undefined && (!Number.isFinite(endTime) || endTime <= seconds)) return;
+      setPlaybackEnd(endTime);
       video.currentTime = seconds;
       setCurrentTime(seconds);
       video.play();
@@ -81,6 +85,7 @@ function VideoPlayer({ src, className, onTimeUpdate }, ref) {
   const togglePlay = () => {
     const video = videoRef.current;
     if (!video) return;
+    setPlaybackEnd();
     if (video.paused) {
       video.play();
     } else {
@@ -98,6 +103,7 @@ function VideoPlayer({ src, className, onTimeUpdate }, ref) {
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const video = videoRef.current;
     if (!video) return;
+    setPlaybackEnd();
     const value = parseFloat(e.target.value);
     video.currentTime = value;
     setCurrentTime(value);
