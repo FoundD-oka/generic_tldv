@@ -9,6 +9,18 @@ import {
 } from "./selectors";
 import { HumanizedInteractor, MOCAP_LIBRARY } from "./humanized";
 
+// Match the actual action, not any jsname/span button (e.g. settings).
+// An authenticated user can still need host approval: Ask to join is valid.
+const authenticatedJoinLabels = [
+  'Join now', 'Ask to join', 'Switch here',
+  '今すぐ参加', '参加をリクエスト', '参加を申請', 'ここに切り替え',
+];
+const authenticatedJoinSelectors = authenticatedJoinLabels.flatMap(label => [
+  `button:text-is("${label}")`,
+  `button:has(:text-is("${label}"))`,
+  `button[aria-label="${label}"]`,
+]);
+
 // Google Meet now blocks browser-synthetic input (Playwright/CDP clicks have
 // isTrusted=false and no real pointer movement). "humanized" mode routes join
 // interactions through real OS-level XTEST input along recorded-style mouse
@@ -162,52 +174,26 @@ export async function joinGoogleMeeting(
       log("Camera already off or not found.");
     }
 
-    // Authenticated users may see different buttons:
-    // - "Join now" — standard authenticated join
-    // - "Switch here" — same account already in the meeting
-    // - "Ask to join" — cookies didn't load (fallback to anonymous)
-    const joinNowSelector = 'button:has-text("Join now")';
-    const switchHereSelector = 'button:has-text("Switch here")';
-    const askToJoinSelector = googleJoinButtonSelectors[0];
-
     try {
-      // Race: wait for any join button
-      const joinButton = await Promise.race([
-        page.waitForSelector(joinNowSelector, { timeout: 30000 }).then(el => ({ el, type: 'join_now' as const })),
-        page.waitForSelector(switchHereSelector, { timeout: 30000 }).then(el => ({ el, type: 'switch_here' as const })),
-        page.waitForSelector(askToJoinSelector, { timeout: 30000 }).then(el => ({ el, type: 'ask_to_join' as const })),
-      ]);
-
-      if (joinButton.type === 'join_now') {
-        await clickHandle(joinButton.el!, "join_now");
-        log("Bot joined Google Meet as authenticated user (Join now).");
-      } else if (joinButton.type === 'switch_here') {
-        await clickHandle(joinButton.el!, "switch_here");
-        log("Bot joined Google Meet as authenticated user (Switch here — same account already in call).");
-      } else {
-        // Cookies didn't work — fall back to anonymous join
-        log("WARNING: Authenticated mode but 'Ask to join' found instead of 'Join now'. Cookies may not be loaded.");
-        log("Falling back to anonymous-style join...");
-
-        // Fill name since we're in anonymous territory
-        try {
-          const nameFieldSelector = googleNameInputSelectors[0];
-          const nameField = await page.$(nameFieldSelector);
-          if (nameField) {
-            await fillField(nameField, nameFieldSelector, botName, "name");
-            log(`Filled bot name: ${botName}`);
-          }
-        } catch (e) {
-          log("No name field to fill.");
+      const { handle } = await waitForAnySelector(
+        page, authenticatedJoinSelectors, 60000, "authenticated join button"
+      );
+      // Only an actual visible name field indicates an anonymous lobby.
+      // Do not infer login failure merely from a request-for-admission button.
+      for (const selector of googleNameInputSelectors) {
+        const nameField = await page.$(selector);
+        if (nameField && await nameField.isVisible()) {
+          await fillField(nameField, selector, botName, "name");
+          log("WARNING: Anonymous name field shown despite authenticated configuration.");
+          break;
         }
-
-        await clickHandle(joinButton.el!, "ask_to_join");
-        log(`Bot joined Google Meet via fallback (Ask to join).`);
       }
+      await clickHandle(handle, "authenticated_join");
+      log("Google Meet join action sent; admission will be checked separately.");
     } catch (e) {
       // No button found — take diagnostic screenshot and fail
       await page.screenshot({ path: '/app/storage/screenshots/bot-checkpoint-auth-failed.png', fullPage: true });
-      log("📸 Screenshot: No join button found after 30s");
+      log("📸 Screenshot: Authenticated join action failed");
       throw e;
     }
 

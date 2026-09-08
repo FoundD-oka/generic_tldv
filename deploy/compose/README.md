@@ -189,6 +189,16 @@ Everything else has working defaults for local dev.
 | `KABOSU_BOT_OWNER_USER_ID` | Vexa user ID that owns calendar-created bots; use the same owner as `VEXA_API_KEY` for wake replies. |
 | `KABOSU_DRIVE_FOLDER_ID` | Google Drive folder ID for Markdown transcript exports. |
 | `CALENDAR_LEAD_TIME` | Minutes before the event start to create the bot. Default: `2`. |
+| `BROWSER_FRAME_ANCESTORS` | Extra origins allowed to embed the public VNC page, comma separated (`https://dashboard.example.run.app`). Each entry must be a bare `scheme://host[:port]`. Passed to `api-gateway`. Default: empty = localhost/same-host only. |
+| `KABOSU_MEET_AUTHENTICATED` | Join Google Meet with the saved bot login instead of anonymously. Passed to `calendar-service`. Default: `false`. |
+
+Enable them in this order: set `BROWSER_FRAME_ANCESTORS` first, recreate
+`api-gateway`, and confirm the public VNC response carries the allowed origin in
+its `frame-ancestors` CSP. Use that VNC view to sign the bot into Google and save
+the profile; only once a profile is stored, set `KABOSU_MEET_AUTHENTICATED=true`
+and recreate `calendar-service`. Enabling it without a stored login makes joins
+fail rather than fall back to a guest join. Rollback is the reverse: empty
+`BROWSER_FRAME_ANCESTORS`, `KABOSU_MEET_AUTHENTICATED=false`, recreate.
 
 Start it with `docker compose --profile calendar up -d calendar-service`.
 

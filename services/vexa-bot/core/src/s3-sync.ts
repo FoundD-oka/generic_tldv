@@ -45,10 +45,15 @@ export function syncBrowserDataFromS3(config: S3Config): void {
   s3Sync(BROWSER_DATA_DIR, `${config.userdataS3Path}/browser-data`, config, 'down', BROWSER_CACHE_EXCLUDES);
 }
 
+// Session cookies (no Expires/Max-Age) never reach Default/Cookies on disk, so they
+// are exported here by browser-cookie-store.ts and uploaded alongside the profile.
+export const CDP_COOKIE_FILE = 'Default/cdp-cookies.json';
+
 // Upload only auth-essential files via individual cp commands.
 // ~200KB total, takes <2 seconds vs minutes for full sync.
-const AUTH_ESSENTIAL_FILES = [
+export const AUTH_ESSENTIAL_FILES = [
   'Local State',
+  CDP_COOKIE_FILE,
   'Default/Cookies',
   'Default/Cookies-journal',
   'Default/Preferences',

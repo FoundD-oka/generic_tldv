@@ -14,6 +14,7 @@ vi.mock("@/lib/utils", async (importOriginal) => {
 
 import {
   formatTranscriptForProvider,
+  buildRetryBotRequest,
   recordingDownloadBaseName,
 } from "@/hooks/use-meeting-actions";
 import type { Meeting, TranscriptSegment } from "@/types/vexa";
@@ -27,6 +28,20 @@ const segment = (overrides: Partial<TranscriptSegment>): TranscriptSegment =>
   }) as TranscriptSegment;
 
 const meeting = (): Meeting => ({ data: {} }) as Meeting;
+
+describe("再接続の認証設定", () => {
+  it.each([true, false])("明示されたauthenticated=%sを引き継ぐ", (authenticated) => {
+    const source = { platform: 'google_meet', platform_specific_id: 'abc-defg-hij', data: {
+      authenticated, transcribe_enabled: false, meeting_url: 'https://meet.google.com/abc-defg-hij', passcode: 'test',
+    } } as Meeting;
+    expect(buildRetryBotRequest(source)).toEqual({
+      platform: source.platform, native_meeting_id: source.platform_specific_id, ...source.data,
+    });
+  });
+  it.each([undefined, 'true', null])("未指定・不正な旧データから認証を推測しない: %s", (authenticated) => {
+    expect(buildRetryBotRequest({ ...meeting(), data: { authenticated } } as Meeting)).not.toHaveProperty('authenticated');
+  });
+});
 
 describe("録音ダウンロードのファイル名サニタイズ", () => {
   it("バックスラッシュを含むタイトルを置換する", () => {

@@ -19,7 +19,7 @@ Persistent browser sessions with S3-backed profile sync. Lets users log into web
 
 ## Known Issue: Session Cookies Lost on S3 Save
 
-**Status:** needs fix, user-visible impact
+**Status:** fixed in code (`browser-cookie-store.ts` + `browser-data-saver.ts`); end-to-end login persistence still needs a manual container-restart check
 
 **Problem:** Chromium only writes *persistent* cookies (those with an `Expires` or `Max-Age` header) to the `Default/Cookies` SQLite file on disk. Most login flows (Google, Microsoft, etc.) use *session* cookies — no expiry, valid until browser close. These live in memory only.
 
@@ -62,7 +62,7 @@ Before each S3 save, use Playwright's cookie API to export all cookies (includin
 
 **Definition of done:**
 - [ ] `fire_post_meeting_hooks` resolves real email from users table *(done: fe13226)*
-- [ ] Before each S3 save, export all cookies via `page.context().cookies()` to `Default/cdp-cookies.json`
-- [ ] On browser session start, restore cookies from `cdp-cookies.json` via `page.context().addCookies(...)`
-- [ ] Add `Default/cdp-cookies.json` to `AUTH_ESSENTIAL_FILES` in `s3-sync.ts`
+- [x] Before each S3 save, export all cookies via `context.cookies()` to `Default/cdp-cookies.json` *(`createBrowserDataSaver` serializes every save path: `save_storage`, `stop`, `leave`, SIGTERM/SIGINT and the 60s auto-save)*
+- [x] On browser session start, restore cookies from `cdp-cookies.json` via `context.addCookies(...)` *(missing/empty/corrupt files warn and continue)*
+- [x] Add `Default/cdp-cookies.json` to `AUTH_ESSENTIAL_FILES` in `s3-sync.ts`
 - [ ] Login persists across browser session restarts (manual test: log into Google, restart container, verify still logged in)
