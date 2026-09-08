@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "base_ref": "origin/main",
+  "verify": [
+    [
+      "bash",
+      ".hw/verify.sh"
+    ]
+  ],
+  "timeout_seconds": 900,
+  "review": {
+    "paths": [],
+    "check_name": null,
+    "app_id": null
+  },
+  "notes": "プロジェクト固有の静的smoke・既知失敗ベースライン・旧実装の回帰テストを維持する。dashboardのテスト・型検査・lintは既存Test Dashboard CIでも実行する。独立GitHub Appのcheck_name/app_idは未設定で、必要な変更はCIで停止する。本番権限は付与しない。",
+  "intent_review": {
+    "paths": [],
+    "check_name": null,
+    "app_id": null,
+    "model": "fable"
+  }
+}

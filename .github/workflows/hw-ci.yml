@@ -1,27 +1,44 @@
-# hw Layer 3 — 最終権威。エージェントが編集できない場所でローカルゲートと同じ検査を再実行する。
 name: hw-ci
 on:
   pull_request:
-
+    types: [opened, synchronize, reopened, ready_for_review]
+permissions:
+  contents: read
+  checks: read
 jobs:
   gates:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # base-commit..HEAD の差分検査に全履歴が必要
-      # 依存インストールは不要。.hw/verify.sh は make smoke(tests3 の docs + 静的locks)
-      # だけを呼び、ubuntu-latest 標準の python3 と git で完結する。
-      # ライブ層の検証を verify.sh に足すときは、ここに setup-python / setup-node と
-      # 依存インストールを追加すること。
-      - name: pr-ready gate
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      # Static smoke parses the chart workflow with PyYAML; verification needs no live services.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install static verification dependency
+        run: python3 -m pip install PyYAML==6.0.3
+      - name: Use gate from the protected base revision
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          if [ -f .hw/current/task-id ]; then
-            bash .hw/hooks/pr-ready-gate.sh "$(cat .hw/current/task-id)"
-          elif [ -f .hw/verify.sh ]; then
-            echo "[hw-ci] task-id なし。.hw/verify.sh のみ実行(fail-closed の縮退)"
-            bash .hw/verify.sh
-          else
-            echo "[hw-ci][FAIL] .hw/current/task-id も .hw/verify.sh もない。強制対象が定義されていない(fail-closed)"
-            exit 1
-          fi
+          test "$GITHUB_EVENT_NAME" = pull_request || { echo 'Run on a pull request; no reduced-check fallback.'; exit 1; }
+          git show "$BASE_SHA:.hw/runtime/hw.py" > "$RUNNER_TEMP/hw-trusted-gate.py"
+      - name: Verify full PR and required independent check
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 "$RUNNER_TEMP/hw-trusted-gate.py" --project "$GITHUB_WORKSPACE" gate --ci
+      - name: Show verification evidence on failure
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          for path in sorted(Path('.hw/evidence').glob('verify-*/*')):
+              if path.is_file() and path.suffix in {'.log', '.json'}:
+                  print(f'[hw evidence] {path}')
+                  for line in path.read_text(errors='replace').splitlines():
+                      print(f'[hw evidence] {line}')
+          PY
