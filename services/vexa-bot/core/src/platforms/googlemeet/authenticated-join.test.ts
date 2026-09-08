@@ -4,8 +4,14 @@ import { resolve } from 'node:path';
 import { chromium } from 'playwright';
 import { joinGoogleMeeting, waitForAnySelector } from './join';
 import { BotConfig } from '../../types';
+import { checkForWaitingRoomIndicators, checkForGoogleRejection, waitForGoogleMeetingAdmission, AdmissionError } from './admission';
+import { googleWaitingRoomIndicators, googleRejectionIndicators } from './selectors';
 
 async function main() {
+  const callbacks = require('../../utils');
+  const originalAwaitingCallback = callbacks.callAwaitingAdmissionCallback;
+  let awaitingCallbacks = 0;
+  callbacks.callAwaitingAdmissionCallback = async () => { awaitingCallbacks++; };
   // Startup wiring matters: testing the cookie helper alone missed this regression.
   const source = readFileSync(resolve('src/index.ts'), 'utf8');
   const launch = source.indexOf('await chromium.launchPersistentContext(BROWSER_DATA_DIR');
@@ -51,8 +57,41 @@ async function main() {
     const result = await waitForAnySelector(page, ['invalid[', '#late'], 500, 'join-test');
     assert.equal(result.selector, '#late', 'one rejected selector must not defeat a matching selector');
     await assert.rejects(waitForAnySelector(page, ['#missing'], 30, 'missing-test'));
+    // Exercise every selector so invalid selector engines cannot silently hide failures.
+    for (const selector of [...googleWaitingRoomIndicators, ...googleRejectionIndicators]) {
+      await page.locator(selector).count();
+    }
+    page.screenshot = async () => Buffer.alloc(0);
+    for (const text of ['参加をリクエストしています...', '主催者が参加を承認するまでお待ちください', 'Asking to be let in...']) {
+      awaitingCallbacks = 0;
+      await page.setContent(`<p>${text}</p>`);
+      assert.equal(await checkForWaitingRoomIndicators(page), true, text);
+      assert.equal(await checkForGoogleRejection(page), false, text);
+      await assert.rejects(
+        waitForGoogleMeetingAdmission(page, 0, {} as BotConfig),
+        (error: unknown) => error instanceof AdmissionError && error.outcome === 'lobby_timeout',
+        'a waiting room timeout must not be classified as a connection failure',
+      );
+      assert.equal(awaitingCallbacks, 1, 'notify awaiting_admission before waiting for the host');
+    }
+    awaitingCallbacks = 0;
+    await page.setContent('<p>参加をリクエストしています...</p>');
+    page.waitForTimeout = async () => { await page.setContent('<div data-participant-id="fixture">参加者</div>'); };
+    assert.equal(await waitForGoogleMeetingAdmission(page, 5000, {} as BotConfig), true);
+    assert.equal(awaitingCallbacks, 1, 'waiting → admitted preserves the awaiting_admission callback');
+    for (const text of ['参加リクエストが拒否されました', 'The host denied your request to join']) {
+      await page.setContent(`<p>${text}</p>`);
+      assert.equal(await checkForGoogleRejection(page), true, text);
+      await assert.rejects(
+        waitForGoogleMeetingAdmission(page, 0, {} as BotConfig),
+        (error: unknown) => error instanceof AdmissionError && error.outcome === 'denial',
+      );
+    }
+    await page.setContent('<p>会議に参加しました</p><div data-participant-id="fixture"></div>');
+    assert.equal(await waitForGoogleMeetingAdmission(page, 0, {} as BotConfig), true);
     await page.close();
   } finally {
+    callbacks.callAwaitingAdmissionCallback = originalAwaitingCallback;
     await browser.close();
   }
   console.log('Authenticated Google Meet join regressions passed');
