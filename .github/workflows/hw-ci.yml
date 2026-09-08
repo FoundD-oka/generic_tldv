@@ -15,10 +15,12 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           persist-credentials: false
-      # Project verification is offline: static smoke, baseline, and regression tests.
+      # Static smoke parses the chart workflow with PyYAML; verification needs no live services.
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install static verification dependency
+        run: python3 -m pip install PyYAML==6.0.3
       - name: Use gate from the protected base revision
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -29,3 +31,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: python3 "$RUNNER_TEMP/hw-trusted-gate.py" --project "$GITHUB_WORKSPACE" gate --ci
+      - name: Show verification evidence on failure
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          for path in sorted(Path('.hw/evidence').glob('verify-*/*')):
+              if path.is_file() and path.suffix in {'.log', '.json'}:
+                  print(f'[hw evidence] {path}')
+                  for line in path.read_text(errors='replace').splitlines():
+                      print(f'[hw evidence] {line}')
+          PY
