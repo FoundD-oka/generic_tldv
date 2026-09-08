@@ -1,0 +1,13 @@
+
+> vexa-dashboard@0.1.0 test
+> vitest run
+
+
+ RUN  v4.1.0 /private/tmp/generic_tldv-recording-range-fix/services/dashboard
+
+
+ Test Files  41 passed (41)
+      Tests  341 passed (341)
+   Start at  23:35:10
+   Duration  2.32s (transform 2.11s, setup 0ms, import 6.57s, tests 596ms, environment 680ms)
+

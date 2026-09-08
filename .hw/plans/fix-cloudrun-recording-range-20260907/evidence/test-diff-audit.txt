@@ -1,0 +1,8 @@
+=== 既存テストファイルの変更なし / 削除・skip・期待値緩和なし (FP-001) ===
+-- tests/ 配下の差分ファイル --
+services/dashboard/tests/test_media_proxy_range_bound.test.ts
+-- 追加テストのみ (新規1ファイル)。skip/only 検索 --
+(該当なし)
+-- lint-baseline.json 差分 --
+(上が空なら無変更)
+-- テスト総数: 341 passed / 41 files (test-output.txt) --

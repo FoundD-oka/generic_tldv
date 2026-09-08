@@ -1,0 +1,38 @@
+[
+  {
+    "range": "bytes=0-",
+    "status": 206,
+    "content_range": "bytes 0-8388607/52676203",
+    "content_length": "8388608",
+    "bytes_read": 8388608,
+    "elapsed_s": 3.78,
+    "sha256": "9e4612c0b7d54980618b6fceb007e4a45b838243e979ecfe04a4df65c868e771"
+  },
+  {
+    "range": "bytes=30000000-",
+    "status": 206,
+    "content_range": "bytes 30000000-38388607/52676203",
+    "content_length": "8388608",
+    "bytes_read": 8388608,
+    "elapsed_s": 2.07,
+    "sha256": "fd4ecf1edb0452510221d93497fee0c227f23d68d9e8edafd9cbdac40f75a150"
+  },
+  {
+    "range": "bytes=52676000-",
+    "status": 206,
+    "content_range": "bytes 52676000-52676202/52676203",
+    "content_length": "203",
+    "bytes_read": 203,
+    "elapsed_s": 1.03,
+    "sha256": "62e309433254f22bb4308db1d9e34be6ad4222998f6551822475b67c526a9145"
+  },
+  {
+    "range": "bytes=0-65535",
+    "status": 206,
+    "content_range": "bytes 0-65535/52676203",
+    "content_length": "65536",
+    "bytes_read": 65536,
+    "elapsed_s": 0.84,
+    "sha256": "8f91839b896b006dc74aa402c095574ad50fad16573a5369a6384ded412ba803"
+  }
+]
