@@ -14,13 +14,18 @@ export const googleInitialAdmissionIndicators: string[] = [
 export const googleWaitingRoomIndicators: string[] = [
   // Modern waiting room text patterns (2024 Google Meet UI)
   'text="Asking to be let in..."',
-  'text*="Asking to be let in"',
+  'text=Asking to be let in',
   'text="You\'ll join the call when someone lets you in"',
-  'text*="You\'ll join the call when someone lets you"',
+  'text=You\'ll join the call when someone lets you',
   'text="Please wait until a meeting host brings you into the call"',
   'text="Waiting for the host to let you in"',
   'text="You\'re in the waiting room"',
   'text="Asking to be let in"',
+  'text=参加をリクエストしています',
+  'text=参加リクエストを送信しました',
+  'text=主催者が参加するのを待っています',
+  'text=主催者が参加を承認するまでお待ちください',
+  'text=参加が承認されるまでお待ちください',
 
   // Aria labels and waiting room indicators
   '[aria-label*="waiting room"]',
@@ -32,16 +37,20 @@ export const googleRejectionIndicators: string[] = [
   // Waiting-room denial patterns. Google Meet can leave some lobby text in
   // the DOM after a host rejects the bot, so these must be checked before
   // waiting-room indicators in admission polling.
-  'text*="denied your request"',
-  'text*="denied your request to join"',
-  'text*="Your request to join was denied"',
-  'text*="You were denied"',
-  'text*="weren\'t allowed to join"',
-  'text*="not allowed to join"',
-  'text*="not admitted"',
-  'text*="can\'t join this call"',
-  'text*="cannot join this call"',
-  'text*="Ask to join again"',
+  'text=denied your request',
+  'text=denied your request to join',
+  'text=Your request to join was denied',
+  'text=You were denied',
+  'text=weren\'t allowed to join',
+  'text=not allowed to join',
+  'text=not admitted',
+  'text=can\'t join this call',
+  'text=cannot join this call',
+  'text=Ask to join again',
+  'text=参加リクエストが拒否されました',
+  'text=参加リクエストは拒否されました',
+  'text=この通話には参加できません',
+  'text=この会議に参加することはできません',
   'button:has-text("Ask to join again")',
   'button:has-text("Return to home screen")',
 
