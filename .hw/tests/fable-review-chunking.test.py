@@ -31,8 +31,8 @@ MATERIAL_FLOOR = 246456  # PR #77 実測値。これ以上の材料でチャン�
 TESTS_DIR = pathlib.Path(__file__).resolve().parent
 HW_DIR = TESTS_DIR.parent
 ROOT = HW_DIR.parent
-FABLE = pathlib.Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else HW_DIR / "fable_review.py"
-CHECKER = HW_DIR / "check_review_verdict.py"
+FABLE = pathlib.Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else HW_DIR / "legacy" / "v1" / "fable_review.py"
+CHECKER = FABLE.parent / "check_review_verdict.py"
 VERIFY = HW_DIR / "verify.sh"
 
 MATERIAL_MARKER = re.compile(r"^--- レビュー対象差分[^\n]*\n", re.M)

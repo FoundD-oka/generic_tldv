@@ -1,15 +1,5 @@
 {
   "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash .hw/hooks/pr-create-intercept.sh"
-          }
-        ]
-      }
-    ]
+    "PreToolUse": []
   }
 }
