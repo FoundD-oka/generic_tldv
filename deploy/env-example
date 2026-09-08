@@ -62,6 +62,11 @@ ADMIN_TOKEN=changeme
 # `make build` writes a local tag to .last-tag which overrides this.
 IMAGE_TAG=latest
 BROWSER_IMAGE=vexaai/vexa-bot:latest
+# Extra origins allowed to iframe the browser-session VNC pages, comma separated
+# (e.g. a Cloud Run dashboard on another host). Each entry must be a bare
+# scheme://host[:port] — entries with a path, credentials, query or fragment are
+# ignored. Empty (default) keeps only 'self' and localhost.
+BROWSER_FRAME_ANCESTORS=
 
 
 # Database (embedded postgres by default)
@@ -116,6 +121,11 @@ KABOSU_DRIVE_FOLDER_ID=
 KABOSU_BOT_NAME=カボス
 KABOSU_BOT_LANGUAGE=ja
 KABOSU_VOICE_AGENT_ENABLED=false
+# Reuse the saved browser-session profile (KABOSU_CALENDAR_ACCOUNT_EMAIL) so
+# calendar-launched Google Meet bots join signed in instead of waiting in the
+# lobby as a guest. Requires a prior manual login in the browser session.
+# Default false — turning it on without a saved profile makes joins fail.
+KABOSU_MEET_AUTHENTICATED=false
 # Issue #25 — 参加者別音声レーン録音（Google Meet、opt-in）。
 # ストレージ/STTコストが参加者数に比例して増えるため既定はfalse。
 RECORD_PARTICIPANT_LANES=false

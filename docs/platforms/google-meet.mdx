@@ -28,6 +28,22 @@ Typical lifecycle:
 
 If the bot is never admitted, you will not get a meaningful transcript or recording.
 
+## Authenticated auto-join from the calendar
+
+Calendar-launched bots join as anonymous guests by default, so they sit in the lobby until a host admits them. Reusing the saved browser-session profile lets them join signed in instead.
+
+Setup:
+
+1. **Save the login once.** Open the browser session VNC page, sign in to Google as `KABOSU_CALENDAR_ACCOUNT_EMAIL`, then trigger a save (`save_storage`, or stop the session). Cookies — including in-memory session cookies — are written to `Default/cdp-cookies.json` and uploaded with the rest of the profile.
+2. **Enable the flag.** Set `KABOSU_MEET_AUTHENTICATED=true` for calendar-service and restart it. Only Google Meet events get `authenticated: true`; other platforms are unchanged.
+3. **Embed the VNC page from another host (optional).** If the dashboard runs on a different origin (e.g. Cloud Run), list it in `BROWSER_FRAME_ANCESTORS` on meeting-api, comma separated: `BROWSER_FRAME_ANCESTORS=https://dashboard.example.run.app`. Each entry must be a bare `scheme://host[:port]`; entries with a path, credentials, query or fragment are ignored with a warning.
+
+Rollback: set `KABOSU_MEET_AUTHENTICATED=false` (or unset it) and restart calendar-service — bots go back to anonymous joins. Clearing `BROWSER_FRAME_ANCESTORS` restores the localhost/same-host-only `frame-ancestors` policy. Neither change touches the saved profile.
+
+<Note>
+If no profile has been saved yet, leave `KABOSU_MEET_AUTHENTICATED=false`. Enabling it without a stored login makes joins fail rather than fall back to a guest join.
+</Note>
+
 ## API example
 
 ```bash

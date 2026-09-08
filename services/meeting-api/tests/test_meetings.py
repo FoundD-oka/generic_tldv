@@ -101,6 +101,35 @@ async def test_meeting_list_search_includes_calendar_title():
 class TestCreateMeeting:
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("authenticated", [True, False, None])
+    async def test_preserves_authenticated_setting(self, client, mock_db, authenticated):
+        _setup_create_meeting_db(mock_db)
+        runtime_resp = {"container_id": TEST_CONTAINER_ID, "name": TEST_CONTAINER_NAME}
+        with patch("meeting_api.meetings._spawn_via_runtime_api", new_callable=AsyncMock, return_value=runtime_resp) as spawn, \
+             patch("meeting_api.meetings.mint_meeting_token", return_value="fake.jwt.token"), \
+             patch("meeting_api.meetings.async_session_local") as factory:
+            inner = AsyncMock()
+            inner.add = MagicMock()
+            factory.return_value.__aenter__ = AsyncMock(return_value=inner)
+            factory.return_value.__aexit__ = AsyncMock(return_value=False)
+            payload = {"platform": "google_meet", "native_meeting_id": "abc-defg-hij"}
+            if authenticated is not None:
+                payload["authenticated"] = authenticated
+            response = await client.post("/bots", json=payload)
+        assert response.status_code == 201
+        stored = response.json()["data"]
+        if authenticated is None:
+            assert "authenticated" not in stored
+        else:
+            assert stored["authenticated"] is authenticated
+        config = json.loads(spawn.call_args.kwargs["config"]["env"]["BOT_CONFIG"])
+        assert config.get("authenticated", False) is bool(authenticated)
+        if authenticated:
+            assert config["userdataS3Path"] == f"users/{TEST_USER_ID}/browser-userdata"
+        else:
+            assert "userdataS3Path" not in config
+
+    @pytest.mark.asyncio
     async def test_create_meeting_success(self, client, mock_db, mock_redis):
         """POST /bots with valid request → 201 with MeetingResponse shape."""
         _setup_create_meeting_db(mock_db)

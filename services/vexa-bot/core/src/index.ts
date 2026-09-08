@@ -28,6 +28,7 @@ import { Page, Browser, BrowserContext } from 'playwright-core';
 import { execSync } from 'child_process';
 import * as net from 'net';
 import { ensureBrowserDataDir, syncBrowserDataFromS3, syncBrowserDataToS3, cleanStaleLocks, BROWSER_DATA_DIR } from './s3-sync';
+import { persistCookies, restoreCookies } from './browser-cookie-store';
 // HTTP imports removed - using unified callback service instead
 
 // Per-speaker transcription pipeline
@@ -894,6 +895,9 @@ async function performGracefulLeave(
   if (currentBotConfig?.authenticated && currentBotConfig?.userdataS3Path) {
     try {
       log("[Graceful Leave] Syncing browser data to S3 (authenticated bot)...");
+      if (page && !page.isClosed()) {
+        await persistCookies(page.context(), { log });
+      }
       syncBrowserDataToS3(currentBotConfig);
       log("[Graceful Leave] Browser data synced to S3.");
     } catch (syncErr: any) {
@@ -2484,6 +2488,9 @@ export async function runBot(botConfig: BotConfig): Promise<void> {// Store botC
     });
 
     log('[Bot] Authenticated persistent context launched');
+    // Chromium's on-disk cookie database is not portable across containers.
+    // Restore the browser-session export before the first Meet navigation.
+    await restoreCookies(context, { log });
 
     // Apply init scripts to the persistent context
     const isVoiceAgent = !!botConfig.voiceAgentEnabled;

@@ -7,7 +7,9 @@ import { getBrowserSessionArgs } from './constans';
 import { BrowserSessionConfig } from './types';
 import { TTSPlaybackService } from './services/tts-playback';
 import { MeetingChatService } from './services/chat';
-import { s3Sync, syncBrowserDataFromS3, syncBrowserDataToS3, cleanStaleLocks, BROWSER_DATA_DIR, BROWSER_CACHE_EXCLUDES } from './s3-sync';
+import { s3Sync, syncBrowserDataFromS3, cleanStaleLocks, BROWSER_DATA_DIR, BROWSER_CACHE_EXCLUDES } from './s3-sync';
+import { restoreCookies } from './browser-cookie-store';
+import { createBrowserDataSaver } from './browser-data-saver';
 
 const WORKSPACE_DIR = '/workspace';
 
@@ -97,7 +99,10 @@ function syncWorkspaceUp(config: BrowserSessionConfig): void {
   }
 }
 
-function saveAll(config: BrowserSessionConfig): { success: boolean; error?: string } {
+async function saveAll(
+  config: BrowserSessionConfig,
+  saveBrowserData: () => Promise<void>,
+): Promise<{ success: boolean; error?: string }> {
   try {
     console.log('[browser-session] Saving workspace...');
     syncWorkspaceUp(config);
@@ -107,7 +112,7 @@ function saveAll(config: BrowserSessionConfig): { success: boolean; error?: stri
   }
   try {
     console.log('[browser-session] Saving browser data...');
-    syncBrowserDataToS3(config);
+    await saveBrowserData();
     console.log('[browser-session] Save complete');
     return { success: true };
   } catch (err: any) {
@@ -137,6 +142,12 @@ export async function runBrowserSession(config: BrowserSessionConfig): Promise<v
     args: getBrowserSessionArgs(),
     viewport: null,
   });
+
+  // Restore session cookies that Chromium never wrote to Default/Cookies.
+  await restoreCookies(context);
+
+  // Single serialized save path shared by every trigger below.
+  const saveBrowserData = createBrowserDataSaver({ context, config });
 
   // Get or create a page
   const pages = context.pages();
@@ -179,7 +190,7 @@ export async function runBrowserSession(config: BrowserSessionConfig): Promise<v
 
       // Legacy plain-string commands (save_storage / stop)
       if (message === 'save_storage') {
-        const result = saveAll(config);
+        const result = await saveAll(config, saveBrowserData);
         if (result.success) {
           await publisher.publish(channelName, 'save_storage:done');
         } else {
@@ -188,7 +199,7 @@ export async function runBrowserSession(config: BrowserSessionConfig): Promise<v
         return;
       } else if (message === 'stop') {
         console.log('[browser-session] Stop command received, saving and exiting...');
-        saveAll(config);
+        await saveAll(config, saveBrowserData);
         await context.close();
         process.exit(0);
         return;
@@ -230,7 +241,7 @@ export async function runBrowserSession(config: BrowserSessionConfig): Promise<v
         ttsPlaybackService.interrupt();
       } else if (command.action === 'leave') {
         console.log('[browser-session] Leave command received, saving and exiting...');
-        saveAll(config);
+        await saveAll(config, saveBrowserData);
         await context.close();
         process.exit(0);
       } else if (command.action === 'chat_send') {
@@ -279,7 +290,7 @@ export async function runBrowserSession(config: BrowserSessionConfig): Promise<v
   // Graceful shutdown
   const shutdown = async () => {
     console.log('[browser-session] Shutting down, saving...');
-    saveAll(config);
+    await saveAll(config, saveBrowserData);
     await context.close();
     process.exit(0);
   };
@@ -290,11 +301,9 @@ export async function runBrowserSession(config: BrowserSessionConfig): Promise<v
   // Auto-save browser data every 60s — ensures login state persists
   // even if the container is killed without graceful shutdown
   const autoSaveInterval = setInterval(() => {
-    try {
-      syncBrowserDataToS3(config);
-    } catch (err: any) {
+    saveBrowserData().catch((err: any) => {
       console.error(`[browser-session] Auto-save failed: ${err.message}`);
-    }
+    });
   }, 60_000);
 
   // Keep alive

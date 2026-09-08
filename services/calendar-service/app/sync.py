@@ -53,6 +53,9 @@ def _env_bool(name: str, default: bool) -> bool:
 
 
 KABOSU_VOICE_AGENT_ENABLED = _env_bool("KABOSU_VOICE_AGENT_ENABLED", False)
+# Reuse the stored browser-session profile so calendar-launched bots join Google Meet
+# as a signed-in participant instead of an anonymous guest stuck in the lobby.
+KABOSU_MEET_AUTHENTICATED = _env_bool("KABOSU_MEET_AUTHENTICATED", False)
 
 
 def single_account_mode_enabled() -> bool:
@@ -272,6 +275,8 @@ async def schedule_upcoming_bots(db: AsyncSession) -> int:
                     "max_time_left_alone": KABOSU_POST_MEETING_AUTO_STOP_TIMEOUT_MS,
                 },
             }
+            if KABOSU_MEET_AUTHENTICATED and event.platform == "google_meet":
+                payload["authenticated"] = True
             async with httpx.AsyncClient() as client:
                 resp = await client.post(
                     f"{MEETING_API_URL}/bots",

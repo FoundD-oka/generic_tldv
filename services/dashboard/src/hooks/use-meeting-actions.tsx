@@ -33,6 +33,16 @@ export type MeetingActionsOptions = {
   deleteMeeting: (platform: Meeting["platform"], nativeId: string, id?: string) => Promise<void>;
 };
 
+export function buildRetryBotRequest(meeting: Meeting): CreateBotRequest {
+  const data = meeting.data ?? {};
+  const request: CreateBotRequest = { platform: meeting.platform, native_meeting_id: meeting.platform_specific_id };
+  if (typeof data.passcode === "string" && data.passcode) request.passcode = data.passcode;
+  if (typeof data.meeting_url === "string" && data.meeting_url) request.meeting_url = data.meeting_url;
+  if (data.transcribe_enabled === false) request.transcribe_enabled = false;
+  if (typeof data.authenticated === "boolean") request.authenticated = data.authenticated;
+  return request;
+}
+
 export function formatTranscriptForProvider(meeting: Meeting, segments: TranscriptSegment[]): string {
   let output = "会議文字起こし\n\n";
   const title = getCustomMeetingTitle(meeting.data);
@@ -108,11 +118,7 @@ export function useMeetingActions(options: MeetingActionsOptions) {
     if (!currentMeeting || isRetryingBot) return;
     setIsRetryingBot(true);
     try {
-      const data = currentMeeting.data ?? {};
-      const request: CreateBotRequest = { platform: currentMeeting.platform, native_meeting_id: currentMeeting.platform_specific_id };
-      if (typeof data.passcode === "string" && data.passcode) request.passcode = data.passcode;
-      if (typeof data.meeting_url === "string" && data.meeting_url) request.meeting_url = data.meeting_url;
-      if (data.transcribe_enabled === false) request.transcribe_enabled = false;
+      const request = buildRetryBotRequest(currentMeeting);
       const meeting = await vexaAPI.createBot(applyBotCreationDefaults(withPostMeetingAutoStop(request)));
       toast.success("新しいボットをリクエストしました"); router.push(`/meetings/${meeting.id}`);
     } catch (error) { toast.error("ボットの再リクエストに失敗しました", { description: (error as Error).message }); }

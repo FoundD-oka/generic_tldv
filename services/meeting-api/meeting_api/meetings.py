@@ -997,6 +997,8 @@ async def request_bot(
 
     # Create meeting record
     meeting_data: Dict[str, Any] = {}
+    if "authenticated" in req.model_fields_set and req.authenticated is not None:
+        meeting_data["authenticated"] = bool(req.authenticated)
     if req.passcode:
         meeting_data["passcode"] = req.passcode
     if req.meeting_url:

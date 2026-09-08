@@ -290,6 +290,9 @@ services:
       - VOICEPRINT_SEGMENTS_BODY_MAX_BYTES=${VOICEPRINT_SEGMENTS_BODY_MAX_BYTES:-65536}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
+      # Extra origins allowed to embed the public VNC page (comma separated,
+      # bare scheme://host[:port]). Empty = localhost/same-host only.
+      - BROWSER_FRAME_ANCESTORS=${BROWSER_FRAME_ANCESTORS:-}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
       interval: 30s
@@ -855,6 +858,9 @@ services:
       - KABOSU_BOT_NAME=${KABOSU_BOT_NAME:-カボス}
       - KABOSU_BOT_LANGUAGE=${KABOSU_BOT_LANGUAGE:-ja}
       - KABOSU_VOICE_AGENT_ENABLED=${KABOSU_VOICE_AGENT_ENABLED:-false}
+      # Google Meet joins reuse the saved bot login. Keep false until a profile
+      # has been stored; enabling it without one makes joins fail.
+      - KABOSU_MEET_AUTHENTICATED=${KABOSU_MEET_AUTHENTICATED:-false}
       - MEETING_API_URL=http://meeting-api:8080
       - BOT_API_TOKEN=${BOT_API_TOKEN:-}
       - SYNC_INTERVAL_SECONDS=${CALENDAR_SYNC_INTERVAL:-300}
