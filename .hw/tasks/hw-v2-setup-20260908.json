@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "purpose": "既存プロジェクトの検証・運用条件を保ちながら、新しいcheckoutと進行中の文字起こし修正でhw v2.1.3を利用可能にする",
+  "acceptance": [
+    "新しいcheckoutが必要なハーネスファイルを取得できる",
+    "既知失敗ベースラインと旧回帰検証・過去の計画を保持する",
+    "verifyとgateを区別し、検証不能・レビュー欠落を成功扱いしない",
+    "文字起こし修正の差分に対してv2 gateを実行できる"
+  ],
+  "constraints": [
+    "本番権限とGitHub外部保護をローカルJSONで代用しない",
+    "既存Test Dashboard CIを保持する",
+    "無関係な計画・.env・本番デプロイ資材を変更しない"
+  ],
+  "sources": [
+    ".hw/plans/hw-v2-setup-20260908/requirements.md"
+  ],
+  "review_required": true,
+  "review_paths": [
+    ".hw/*",
+    ".claude/*",
+    ".codex/*",
+    ".github/workflows/hw-ci.yml",
+    "AGENTS.md",
+    "CLAUDE.md",
+    ".gitignore"
+  ]
+}
