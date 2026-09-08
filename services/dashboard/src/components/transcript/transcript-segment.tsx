@@ -269,8 +269,8 @@ export function TranscriptSegment({
                     ? "opacity-100 border-primary/40 bg-primary/10 text-primary"
                     : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 group-hover:border-primary/40 group-hover:bg-primary/10 group-hover:text-primary"
                 )}
-                aria-label="この時刻から再生"
-                title="この発話から再生"
+                aria-label="この発言を再生"
+                title="この発言を再生"
               >
                 <Play className="h-3 w-3" />
                 再生

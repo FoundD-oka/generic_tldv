@@ -4,6 +4,7 @@ import { useRef, useState, useEffect, useCallback, forwardRef, useImperativeHand
 import { Play, Pause, Volume2, VolumeX, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useMediaPlaybackRange } from "@/hooks/use-media-playback-range";
 
 /**
  * Describes a single recording fragment in a multi-fragment timeline.
@@ -26,9 +27,9 @@ export interface AudioPlayerHandle {
    * @param fragmentIndex Which fragment to seek into
    * @param timeInFragment Seconds offset within that fragment
    */
-  seekToFragment: (fragmentIndex: number, timeInFragment: number) => void;
+  seekToFragment: (fragmentIndex: number, timeInFragment: number, endTime?: number) => void;
   /** Legacy: seek by virtual (stitched) time across all fragments */
-  seekTo: (time: number) => void;
+  seekTo: (time: number, endTime?: number) => void;
 }
 
 interface AudioPlayerProps {
@@ -53,6 +54,7 @@ function formatTime(seconds: number): string {
 export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
   function AudioPlayer({ src, fragments, onTimeUpdate, onFragmentChange, className, compact = false }, ref) {
     const audioRef = useRef<HTMLAudioElement>(null);
+    const { setPlaybackEnd, hasPlaybackEnd } = useMediaPlaybackRange(audioRef);
     const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
@@ -110,10 +112,12 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
     }, [fragments, src]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Seek to a specific fragment and time within it
-    const seekToFragment = useCallback((fragmentIndex: number, timeInFragment: number) => {
+    const seekToFragment = useCallback((fragmentIndex: number, timeInFragment: number, endTime?: number) => {
       const audio = audioRef.current;
       if (!audio) return;
       if (fragmentIndex < 0 || fragmentIndex >= effectiveFragments.length) return;
+      if (endTime !== undefined && (!Number.isFinite(endTime) || endTime <= timeInFragment)) return;
+      setPlaybackEnd(endTime);
 
       if (fragmentIndex === currentFragmentIndex) {
         // Same fragment — just seek within it
@@ -124,20 +128,23 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
         }
       } else {
         // Different fragment — switch source then seek
+        audio.pause();
         wasPlayingRef.current = true;
         setCurrentFragmentIndex(fragmentIndex);
         setCurrentTime(timeInFragment);
         // The seek will happen in the effect that handles fragment changes
       }
-    }, [currentFragmentIndex, effectiveFragments.length]);
+    }, [currentFragmentIndex, effectiveFragments.length, setPlaybackEnd]);
 
     // Expose seekTo / seekToFragment to parent via ref
     useImperativeHandle(ref, () => ({
       seekToFragment,
-      seekTo(time: number) {
+      seekTo(time: number, endTime?: number) {
+        if (endTime !== undefined && (!Number.isFinite(endTime) || endTime <= time)) return;
         if (!isMultiFragment) {
           const audio = audioRef.current;
           if (!audio) return;
+          setPlaybackEnd(endTime);
           audio.currentTime = time;
           setCurrentTime(time);
           if (audio.paused) {
@@ -149,13 +156,13 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
         let remaining = time;
         for (let i = 0; i < fragmentDurations.length; i++) {
           if (remaining <= fragmentDurations[i] || i === fragmentDurations.length - 1) {
-            seekToFragment(i, remaining);
+            seekToFragment(i, remaining, endTime === undefined ? undefined : remaining + endTime - time);
             return;
           }
           remaining -= fragmentDurations[i];
         }
       },
-    }), [isMultiFragment, fragmentDurations, seekToFragment]);
+    }), [isMultiFragment, fragmentDurations, seekToFragment, setPlaybackEnd]);
 
     // When fragment index changes, update the audio source and seek
     const pendingSeekRef = useRef<number | null>(null);
@@ -225,6 +232,11 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
       const handlePlaying = () => { setIsLoading(false); setIsPlaying(true); };
       const handlePause = () => setIsPlaying(false);
       const handleEnded = () => {
+        if (hasPlaybackEnd()) {
+          wasPlayingRef.current = false;
+          setIsPlaying(false);
+          return;
+        }
         // Multi-fragment: auto-advance to next fragment
         if (isMultiFragment && currentFragmentIndex < effectiveFragments.length - 1) {
           wasPlayingRef.current = true;
@@ -285,11 +297,12 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
         audio.removeEventListener("ended", handleEnded);
         audio.removeEventListener("error", handleError);
       };
-    }, [onTimeUpdate, isMultiFragment, currentFragmentIndex, currentSrc, effectiveFragments.length, fragmentDurations, updateFragmentDuration]);
+    }, [onTimeUpdate, isMultiFragment, currentFragmentIndex, currentSrc, effectiveFragments.length, fragmentDurations, updateFragmentDuration, hasPlaybackEnd]);
 
     const togglePlay = useCallback(() => {
       const audio = audioRef.current;
       if (!audio) return;
+      setPlaybackEnd();
       if (isPlaying) {
         audio.pause();
       } else {
@@ -297,7 +310,7 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
           setErrorCount((count) => count + 1);
         });
       }
-    }, [isPlaying]);
+    }, [isPlaying, setPlaybackEnd]);
 
     const toggleMute = useCallback(() => {
       const audio = audioRef.current;
@@ -322,6 +335,7 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
     }, []);
 
     const handleSeekBarChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+      setPlaybackEnd();
       const time = parseFloat(e.target.value);
       if (!isMultiFragment) {
         const audio = audioRef.current;
@@ -340,7 +354,7 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
         }
         remaining -= fragmentDurations[i];
       }
-    }, [isMultiFragment, fragmentDurations, seekToFragment]);
+    }, [isMultiFragment, fragmentDurations, seekToFragment, setPlaybackEnd]);
 
     const displayDuration = isMultiFragment ? totalDuration : duration;
     const displayTime = isMultiFragment ? virtualCurrentTime : currentTime;

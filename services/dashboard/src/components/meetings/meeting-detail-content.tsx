@@ -22,7 +22,7 @@ export type MeetingDetailContentProps = {
   fetchMeeting: (id: string) => Promise<void>; refreshMeeting: (id: string) => Promise<Meeting | null>; fetchTranscripts: (platform: Meeting["platform"], nativeId: string, id?: string) => Promise<void>;
   wsConnecting: boolean; wsConnected: boolean; wsError: string | null; reconnectAttempts: number; recordingTopBar: ReactNode;
   playbackTime: number | null; playbackAbsoluteTime: string | null; isPlaybackActive: boolean; canUseSegmentPlayback: boolean;
-  handleSegmentClick: (seconds: number, absoluteStartTime?: string) => void; setCurrentMeeting: (meeting: Meeting) => void;
+  handleSegmentClick: (seconds: number, endTimeSeconds: number, absoluteStartTime?: string) => void; setCurrentMeeting: (meeting: Meeting) => void;
 };
 
 export function MeetingDetailContent(props: MeetingDetailContentProps) {
