@@ -9,7 +9,7 @@
     ".claude/agents/hw-verifier.md": "c62b0ad5822f003566b1eb5c73be8b480f7dd8e08be9073553c7a0247e8c69e1",
     ".claude/hooks/pr-ready-gate.sh": "3f8ca75249115845f5e2321f9ccb1ee13385d9b6cbb35addc3f69766ed15114f",
     ".claude/settings.json": "4a7399f55379dfd1b1d5b58818fe525da7bd3cddd26d0acc9abbef377dc7e142",
-    ".github/workflows/hw-ci.yml": "e0ba00fd455614b198ef4dd37c9a0d46236175319e048b9053326df379c6cfd9",
+    ".github/workflows/hw-ci.yml": "1d1059a7677c239cf0138a3e7a420db4bdbc3f8b41146370940f09fede3c34ad",
     ".gitignore": "70c777f562653c8af0350b810be668c7f18df4d1142285128fc085e7d18cb57b",
     ".hw/instructions.md": "f7174932f7a9773272f1499237531137c342adc72dc396000521349e0c479eff",
     ".hw/roles/builder.md": "7fbd982522288c8741bcdba6aef275e21ccb5831191690661f140e42f12d4952",
