@@ -37,6 +37,7 @@ Idempotency:
 """
 
 import asyncio
+import copy
 import io
 import logging
 import os
@@ -51,6 +52,7 @@ from .media_types import is_audio_like_media_type, is_lane_media_type
 
 from .models import Meeting
 from .storage import StorageClient, create_storage_client
+from .video_mux import mux_recording_video
 
 logger = logging.getLogger("meeting_api.recording_finalizer")
 
@@ -578,7 +580,7 @@ async def finalize_recording_master(meeting_id: int, db: AsyncSession) -> None:
         )
         return
 
-    meeting_data = dict(meeting.data or {})
+    meeting_data = copy.deepcopy(meeting.data or {})
     rec_list = list(meeting_data.get("recordings") or [])
 
     if not rec_list:
@@ -597,7 +599,7 @@ async def finalize_recording_master(meeting_id: int, db: AsyncSession) -> None:
                 .execution_options(populate_existing=True)
             )
             meeting = meeting_q.scalars().first()
-            meeting_data = dict(meeting.data or {})
+            meeting_data = copy.deepcopy(meeting.data or {})
             rec_list = list(meeting_data.get("recordings") or [])
         if not rec_list:
             logger.info(
@@ -618,6 +620,10 @@ async def finalize_recording_master(meeting_id: int, db: AsyncSession) -> None:
         media_files = list(rec_payload.get("media_files") or [])
         if not media_files:
             continue
+        mixed_audio = next((mf for mf in media_files if isinstance(mf, dict) and mf.get("type") == "audio"), None)
+        if mixed_audio is None and "audio" in (meeting_data.get("capture_modes") or []):
+            if any(isinstance(mf, dict) and mf.get("type") == "video" for mf in media_files):
+                raise ValueError("Video recording is waiting for its mixed audio")
 
         for mf_idx, mf in enumerate(media_files):
             if not isinstance(mf, dict):
@@ -626,6 +632,11 @@ async def finalize_recording_master(meeting_id: int, db: AsyncSession) -> None:
             mf_format = (mf.get("format") or "").lower()
             mf_path = mf.get("storage_path") or ""
             mf_id = mf.get("id")
+
+            # Screen recordings are uploaded as complete files. Assemble the
+            # mixed audio first, then mux it with the original video below.
+            if mf_type == "video" and mixed_audio is not None:
+                continue
 
             # Lanes (issue #25) are concatenated into per-lane masters just
             # like audio/video, but never gain a playback_url (see below —
@@ -665,7 +676,7 @@ async def finalize_recording_master(meeting_id: int, db: AsyncSession) -> None:
             if master_key is None:
                 # No-fallback: leave storage_path alone if list returned 0 chunks.
                 continue
-            if mf.get("storage_path") == master_key:
+            if mf.get("storage_path") == master_key and mf.get("finalized_by") == "recording_finalizer.master":
                 # Idempotent re-run.
                 continue
 
@@ -686,6 +697,14 @@ async def finalize_recording_master(meeting_id: int, db: AsyncSession) -> None:
                 "[FINALIZER] [DATA] meeting_id=%s mf_id=%s storage_path → master: %s",
                 meeting_id, mf_id, master_key,
             )
+
+        if mixed_audio is not None:
+            for mf_idx, mf in enumerate(media_files):
+                if isinstance(mf, dict) and mf.get("type") == "video":
+                    media_files[mf_idx] = await asyncio.to_thread(
+                        mux_recording_video, storage, mf, mixed_audio,
+                    )
+                    finalized_any = True
 
         rec_payload["media_files"] = media_files
 
