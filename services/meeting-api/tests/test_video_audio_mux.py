@@ -113,6 +113,16 @@ def test_failed_mux_does_not_publish_and_retries(media_pair):
     assert mux_recording_video(storage, video, audio)["video_audio_mux"]
 
 
+@pytest.mark.parametrize("missing", ["video", "audio"])
+def test_partial_capture_timestamp_does_not_publish_unsynchronized_video(media_pair, missing):
+    storage, video, audio = media_pair
+    (video if missing == "video" else audio).pop("start_time_utc")
+    with pytest.raises(ValueError, match="Both capture timestamps are required"):
+        mux_recording_video(storage, video, audio)
+    assert not storage.file_exists(f"{BASE}/video/master.av.{video['format']}")
+    assert needs_video_audio_mux({"media_files": [video, audio]})
+
+
 def test_legacy_media_without_timestamps_warns_and_still_has_sound(media_pair, tmp_path, caplog):
     storage, video, audio = media_pair
     video.pop("start_time_utc")
