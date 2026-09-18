@@ -1109,6 +1109,13 @@ async def request_bot(
     resolved_max_time_left_alone = resolve_timeout("max_time_left_alone")
     resolved_no_one_joined_timeout = resolve_timeout("no_one_joined_timeout")
 
+    # Persist the effective capture intent before launching the bot, including
+    # user/environment defaults. Finalization must know to wait for audio even
+    # when video was enabled outside the per-request flag.
+    meeting_data.setdefault("capture_modes", user_recording_config.get(
+        "capture_modes", os.getenv("CAPTURE_MODES", "audio").split(","),
+    ))
+
     # Store resolved timeouts in meeting.data for GET /bots visibility
     meeting_data["resolved_timeouts"] = {
         "max_bot_time": resolved_max_bot_time,
@@ -1143,7 +1150,7 @@ async def request_bot(
         "internalSecret": os.getenv("INTERNAL_API_SECRET", ""),
         "recordingEnabled": user_recording_config.get("enabled", os.getenv("RECORDING_ENABLED", "true").lower() == "true"),
         "transcribeEnabled": transcribe,
-        "captureModes": user_recording_config.get("capture_modes", os.getenv("CAPTURE_MODES", "audio").split(",")),
+        "captureModes": meeting_data["capture_modes"],
         "recordingUploadUrl": f"{MEETING_API_URL}/internal/recordings/upload",
         "transcriptionServiceUrl": os.getenv("TRANSCRIPTION_SERVICE_URL"),
         "transcriptionServiceToken": os.getenv("TRANSCRIPTION_SERVICE_TOKEN"),

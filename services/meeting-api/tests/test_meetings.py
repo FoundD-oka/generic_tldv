@@ -101,6 +101,43 @@ async def test_meeting_list_search_includes_calendar_title():
 class TestCreateMeeting:
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("user_modes,environment_modes,video,expected", [
+        (["audio", "video"], "audio", False, ["audio", "video"]),
+        (None, "audio,video", False, ["audio", "video"]),
+        (["video"], "audio,video", False, ["video"]),
+        (["video"], "video", True, ["audio", "video"]),
+    ])
+    async def test_effective_capture_modes_persist_for_finalization(
+        self, client, mock_db, monkeypatch, user_modes, environment_modes, video, expected,
+    ):
+        _setup_create_meeting_db(mock_db)
+        normal_execute = mock_db.execute.side_effect
+
+        async def execute(statement, *args, **kwargs):
+            if "SELECT data FROM users" in str(statement):
+                config = {} if user_modes is None else {"capture_modes": user_modes}
+                return MockResult(scalar_value={"recording_config": config})
+            return await normal_execute(statement, *args, **kwargs)
+
+        mock_db.execute.side_effect = execute
+        monkeypatch.setenv("CAPTURE_MODES", environment_modes)
+        with patch("meeting_api.meetings._spawn_via_runtime_api", new_callable=AsyncMock,
+                   return_value={"container_id": TEST_CONTAINER_ID, "name": TEST_CONTAINER_NAME}) as spawn, \
+             patch("meeting_api.meetings.mint_meeting_token", return_value="fake.jwt.token"), \
+             patch("meeting_api.meetings.async_session_local") as factory:
+            inner = AsyncMock()
+            inner.add = MagicMock()
+            factory.return_value.__aenter__ = AsyncMock(return_value=inner)
+            factory.return_value.__aexit__ = AsyncMock(return_value=False)
+            response = await client.post("/bots", json={
+                "platform": "google_meet", "native_meeting_id": "abc-defg-hij", "video": video,
+            })
+        assert response.status_code == 201
+        config = json.loads(spawn.call_args.kwargs["config"]["env"]["BOT_CONFIG"])
+        assert config["captureModes"] == expected
+        assert response.json()["data"]["capture_modes"] == expected
+
+    @pytest.mark.asyncio
     @pytest.mark.parametrize("authenticated", [True, False, None])
     async def test_preserves_authenticated_setting(self, client, mock_db, authenticated):
         _setup_create_meeting_db(mock_db)
