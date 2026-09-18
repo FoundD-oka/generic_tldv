@@ -533,6 +533,7 @@ async def _sweep_unfinalized_recordings(
     """
     from datetime import datetime, timedelta
     from .recording_finalizer import finalize_recording_master
+    from .video_mux import needs_video_audio_mux
 
     cutoff = datetime.utcnow() - timedelta(seconds=UNFINALIZED_RECORDINGS_MIN_AGE_SECONDS)
     swept = 0
@@ -570,6 +571,7 @@ async def _sweep_unfinalized_recordings(
                 and (
                     not _recording_has_playback_url(rec)
                     or _recording_has_unfinalized_lane(rec)
+                    or needs_video_audio_mux(rec)
                 )
                 for rec in recordings
             )

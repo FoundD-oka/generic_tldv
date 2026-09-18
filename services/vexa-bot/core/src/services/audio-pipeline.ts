@@ -272,6 +272,7 @@ export class UnifiedRecordingPipeline {
     // boilerplate that was duplicated in googlemeet, msteams, and
     // zoom/web recording.ts.
     this.source.on("started", () => {
+      this.recordingService.setCaptureStartTime(Date.now());
       const publisher = getSegmentPublisher();
       if (publisher) {
         publisher.resetSessionStart();
