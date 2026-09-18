@@ -35,15 +35,13 @@ python -m pytest services/meeting-api/tests/test_record*.py \
 `recording-capture-time.test.ts` は実HTTPアップロードを使い、文字起こしが無効でも開始時刻が
 遅延アップロードや重複開始通知で変化しないことを検証する。Bot の `npm test` に登録済み。
 
-Bot 全体のビルドは、基点 `13ce34dc` でも次の既存エラーを再現する。同一依存関係で比較し、
-今回の変更による新規のTypeScriptエラーはない。
-
-- `index.ts:2545,2620`: `browserInstance` が null の可能性。
-- `playwright-extra` の型定義: `playwright-core` の解決失敗。
+Bot の依存関係は `core` 内で `npm ci --workspaces=false` により単体のロックファイルから導入する。
+親workspaceに巻き込まれたインストールでは `playwright-core` が解決できず、`browserInstance`
+の型エラーも連鎖していた。単体の依存関係を復元した後、コード変更なしでビルド成功を確認した。
 
 ## 適用と限界
 
 新規録画の同期には meeting-api と Bot の両方への反映が必要。
-本変更では本番デプロイや本番録画の書換えは実施していない。
+本番反映は後続の明示依頼に従い `docs/video-audio-mux-release-request.md` の範囲で行う。
 旧録画の開始時刻が保存されていない場合は両方を時刻0から合成し、ログに明示する。
 その場合の同期精度は保証できない。取得時点のアップロード時刻を録音開始時刻の代用にはしない。

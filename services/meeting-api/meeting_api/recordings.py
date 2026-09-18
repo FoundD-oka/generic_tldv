@@ -9,6 +9,7 @@ import logging
 import os
 import subprocess
 import tempfile
+import threading
 import uuid as uuid_lib
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
@@ -69,12 +70,15 @@ def _compute_delete_after(anchor_iso: Optional[str]) -> Optional[str]:
 
 # --- Storage client (lazy init) ---
 _storage_client = None
+_storage_client_lock = threading.Lock()
 
 
 def get_storage_client():
     global _storage_client
     if _storage_client is None:
-        _storage_client = create_storage_client()
+        with _storage_client_lock:
+            if _storage_client is None:
+                _storage_client = create_storage_client()
     return _storage_client
 
 
@@ -510,8 +514,11 @@ async def internal_upload_recording(
     content_type = media_content_type(media_type, media_format)
 
     try:
-        storage = get_storage_client()
-        storage.upload_file(storage_path, file_data, content_type=content_type)
+        # SDK initialization and upload may both perform blocking network I/O.
+        storage = await asyncio.to_thread(get_storage_client)
+        await asyncio.to_thread(
+            storage.upload_file, storage_path, file_data, content_type=content_type,
+        )
     except Exception as e:
         logger.error(f"Storage upload failed for {session_uid}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to upload recording to storage")
