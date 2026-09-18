@@ -52,6 +52,19 @@ async function testCaptureTimestampSurvivesDelayedUploads() {
     assert.ok(received.every((m) => m.start_time_utc === '2026-09-18T01:00:00.000Z'));
     assert.equal(recordingService.getStartTime(), start);
     console.log('PASS capture timestamps survive delayed chunk uploads without live transcription');
+    const oneShot = new RecordingService(43, 'one-shot-timestamp-test');
+    const oneShotStart = now;
+    try {
+      oneShot.start();
+      oneShot.appendChunk(new Float32Array([0.1, -0.1]));
+      now += 30000;
+      await oneShot.upload(`http://127.0.0.1:${address.port}/internal/recordings/upload`, 'test');
+      assert.equal(received.length, 3);
+      assert.equal(received[2].start_time_utc, new Date(oneShotStart).toISOString());
+      console.log('PASS one-shot upload retains capture time instead of upload time');
+    } finally {
+      await oneShot.cleanup();
+    }
   } finally {
     Date.now = originalNow;
     await new Promise<void>((resolve) => server.close(() => resolve()));

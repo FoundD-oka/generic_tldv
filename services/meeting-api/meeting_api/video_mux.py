@@ -27,11 +27,13 @@ def _audio_delay_seconds(video: dict, audio: dict) -> float:
         return stamp if stamp.tzinfo else stamp.replace(tzinfo=timezone.utc)
 
     video_start, audio_start = video.get("start_time_utc"), audio.get("start_time_utc")
-    if not video_start or not audio_start:
+    if not video_start and not audio_start:
         # Legacy recordings did not persist capture timestamps. Do not infer
         # them from upload time (video arrives only after the meeting ends).
         logger.warning("[VIDEO MUX] Capture timestamps unavailable; aligning legacy media at zero")
         return 0.0
+    if not video_start or not audio_start:
+        raise ValueError("Both capture timestamps are required when either media has a start time")
     return (parse(audio_start) - parse(video_start)).total_seconds()
 
 
