@@ -1021,6 +1021,12 @@ async def request_bot(
     else:
         meeting_data["recording_enabled"] = os.getenv("RECORDING_ENABLED", "true").lower() == "true"
 
+    # Persist the resolved voice agent toggle so every downstream path
+    # (/speak, wake auto-discovery) can enforce it. Missing key = enabled.
+    meeting_data["voice_agent_enabled"] = (
+        True if req.voice_agent_enabled is None else bool(req.voice_agent_enabled)
+    )
+
     video_receive_enabled = req.video_receive_enabled
     if video_receive_enabled is None and req.video:
         video_receive_enabled = True
