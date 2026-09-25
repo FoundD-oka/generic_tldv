@@ -28,8 +28,11 @@ describe("meeting detail wiring contract", () => {
 
   it("AT-003: carries meeting identity and optional bot options into the retry request", () => {
     const source = pageSource();
-    expect(source).toContain("platform: currentMeeting.platform");
-    expect(source).toContain("native_meeting_id: currentMeeting.platform_specific_id");
+    // The request is assembled by buildRetryBotRequest(meeting) and handed the
+    // current meeting; identity comes from that meeting.
+    expect(source).toContain("buildRetryBotRequest(currentMeeting)");
+    expect(source).toContain("platform: meeting.platform");
+    expect(source).toContain("native_meeting_id: meeting.platform_specific_id");
     expect(source).toContain("request.passcode");
     expect(source).toContain("request.meeting_url");
     expect(source).toContain("data.transcribe_enabled === false");

@@ -33,7 +33,7 @@ describe("再接続の認証設定", () => {
   it.each([true, false])("明示されたauthenticated=%sを引き継ぐ", (authenticated) => {
     const source = { platform: 'google_meet', platform_specific_id: 'abc-defg-hij', data: {
       authenticated, transcribe_enabled: false, meeting_url: 'https://meet.google.com/abc-defg-hij', passcode: 'test',
-    } } as Meeting;
+    } } as unknown as Meeting;
     expect(buildRetryBotRequest(source)).toEqual({
       platform: source.platform, native_meeting_id: source.platform_specific_id, ...source.data,
     });
