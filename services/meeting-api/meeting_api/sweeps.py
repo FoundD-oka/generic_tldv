@@ -533,10 +533,14 @@ async def _sweep_unfinalized_recordings(
     """
     from datetime import datetime, timedelta
     from .recording_finalizer import finalize_recording_master
+    from .video_mux import needs_video_audio_mux
 
     cutoff = datetime.utcnow() - timedelta(seconds=UNFINALIZED_RECORDINGS_MIN_AGE_SECONDS)
     swept = 0
     storage = None
+    # One snapshot per user per sweep, including empty/failed listings. A new
+    # sweep retries failures and sees chunks that arrived after this snapshot.
+    keys_by_prefix: dict[str, Optional[list[str]]] = {}
 
     async with db_session_factory() as db:
         id_rows = (await db.execute(
@@ -570,6 +574,7 @@ async def _sweep_unfinalized_recordings(
                 and (
                     not _recording_has_playback_url(rec)
                     or _recording_has_unfinalized_lane(rec)
+                    or needs_video_audio_mux(rec)
                 )
                 for rec in recordings
             )
@@ -590,16 +595,22 @@ async def _sweep_unfinalized_recordings(
                     continue
 
                 prefix = f"recordings/{meeting.user_id}/"
-                try:
-                    if storage is None:
-                        storage = _get_default_storage_client()
-                    keys = storage.list_objects_bounded(prefix)
-                except Exception as e:
-                    logger.warning(
-                        "[sweep] unfinalized-recordings storage list failed "
-                        "meeting_id=%s prefix=%s error=%s",
-                        meeting.id, prefix, str(e)[:200],
-                    )
+                if prefix not in keys_by_prefix:
+                    try:
+                        if storage is None:
+                            storage = await asyncio.to_thread(_get_default_storage_client)
+                        keys_by_prefix[prefix] = await asyncio.to_thread(
+                            storage.list_objects_bounded, prefix,
+                        )
+                    except Exception as e:
+                        keys_by_prefix[prefix] = None
+                        logger.warning(
+                            "[sweep] unfinalized-recordings storage list failed "
+                            "meeting_id=%s prefix=%s error=%s",
+                            meeting.id, prefix, str(e)[:200],
+                        )
+                keys = keys_by_prefix[prefix]
+                if keys is None:
                     continue
 
                 grouped: dict[tuple[int, str, str], list[str]] = {}

@@ -160,6 +160,7 @@ export class RecordingService {
       channels: this.channels,
       duration_seconds: durationSeconds,
       file_size_bytes: fileStats.size,
+      start_time_utc: this.startTime ? new Date(this.startTime).toISOString() : undefined,
     });
 
     // Build multipart body
@@ -213,6 +214,14 @@ export class RecordingService {
     }
   }
 
+  setCaptureStartTime(timestampMs: number): void {
+    // Chunked capture has no local WAV/start() call. Record the actual first
+    // sample time once, independently of upload timing or transcription.
+    if (!this.startTime && Number.isFinite(timestampMs) && timestampMs > 0) {
+      this.startTime = timestampMs;
+    }
+  }
+
   /**
    * Upload a single recording chunk to the meeting-api internal endpoint.
    *
@@ -253,6 +262,7 @@ export class RecordingService {
       file_size_bytes: chunkData.length,
       chunk_seq: chunkSeq,
       is_final: isFinal,
+      start_time_utc: this.startTime ? new Date(this.startTime).toISOString() : undefined,
       // Issue #25 — per-participant lane chunks. media_type keys both the
       // storage prefix and the media_files entry server-side, so lanes
       // never touch the mixed master's /audio/ path.
