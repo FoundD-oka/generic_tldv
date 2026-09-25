@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "purpose": "会議動画の音声合成修正をビルド・検証して本番のmeeting-apiとBotへ反映する",
+  "sources": ["docs/video-audio-mux-release-request.md"],
+  "acceptance": [
+    "同じ録画に保存した音声と映像を同期して合成し、音声付きで再生・ダウンロードできる",
+    "音声の開始前後差を補正し、音声が短くても動画を切り詰めない",
+    "合成失敗は成功として公開せず再試行でき、元の音声と映像を保持する",
+    "本番反映済みのストレージI/O非同期化と初期化ロックを保持する",
+    "本番の依存環境でmeeting-apiとBotをビルドし、関連テストとclean tree最終gateを実行する",
+    "本番の稼働会議を停止せず、ロールバック用イメージを保持して対象サービスだけ反映する",
+    "反映後の稼働イメージと対象コード、health/readyz、再起動・新規エラーを確認する"
+  ],
+  "constraints": ["秘密情報を出力しない", "元workspaceの未コミット変更を破壊しない", "本番データをテストfixtureにしない", "テスト削除・skip追加・期待値緩和をしない", "過去録画の時刻欠落による同期精度の限界を明示する"],
+  "review_required": true,
+  "review_paths": ["services/meeting-api/*", "services/vexa-bot/*", ".hw/tasks/video-audio-mux-release.json", "docs/video-audio-mux*"]
+}

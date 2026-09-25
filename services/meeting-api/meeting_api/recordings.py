@@ -9,6 +9,7 @@ import logging
 import os
 import subprocess
 import tempfile
+import threading
 import uuid as uuid_lib
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
@@ -69,12 +70,15 @@ def _compute_delete_after(anchor_iso: Optional[str]) -> Optional[str]:
 
 # --- Storage client (lazy init) ---
 _storage_client = None
+_storage_client_lock = threading.Lock()
 
 
 def get_storage_client():
     global _storage_client
     if _storage_client is None:
-        _storage_client = create_storage_client()
+        with _storage_client_lock:
+            if _storage_client is None:
+                _storage_client = create_storage_client()
     return _storage_client
 
 
@@ -158,6 +162,8 @@ def media_content_type(media_type: str, media_format: str) -> str:
         "wav": "audio/wav",
         "opus": "audio/opus",
         "mp3": "audio/mpeg",
+        "mp4": "video/mp4" if typ == "video" else "audio/mp4",
+        "mkv": "video/x-matroska",
         "jpg": "image/jpeg",
         "png": "image/png",
     }
@@ -420,6 +426,7 @@ async def internal_upload_recording(
     lane_label: Optional[str] = None
     lane_id_source: Optional[str] = None
     lane_start_offset_ms: Optional[float] = None
+    start_time_utc: Optional[str] = None
     if metadata:
         try:
             meta = json.loads(metadata)
@@ -430,6 +437,12 @@ async def internal_upload_recording(
         media_format = meta.get("format", media_format)
         duration_seconds = meta.get("duration_seconds", duration_seconds)
         sample_rate = meta.get("sample_rate", sample_rate)
+        start_time_utc = meta.get("start_time_utc")
+        if start_time_utc is not None:
+            try:
+                datetime.fromisoformat(start_time_utc.replace("Z", "+00:00"))
+            except (AttributeError, TypeError, ValueError):
+                raise HTTPException(status_code=422, detail="Invalid start_time_utc")
         lane_id = meta.get("lane_id")
         lane_label = meta.get("lane_label")
         lane_id_source = meta.get("lane_id_source")
@@ -501,8 +514,11 @@ async def internal_upload_recording(
     content_type = media_content_type(media_type, media_format)
 
     try:
-        storage = get_storage_client()
-        storage.upload_file(storage_path, file_data, content_type=content_type)
+        # SDK initialization and upload may both perform blocking network I/O.
+        storage = await asyncio.to_thread(get_storage_client)
+        await asyncio.to_thread(
+            storage.upload_file, storage_path, file_data, content_type=content_type,
+        )
     except Exception as e:
         logger.error(f"Storage upload failed for {session_uid}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to upload recording to storage")
@@ -628,6 +644,9 @@ async def internal_upload_recording(
         "duration_seconds": duration_seconds,
         "chunk_seq": chunk_seq,
         "first_chunk_at": first_chunk_at,
+        "start_time_utc": (prior_same_type or {}).get("start_time_utc") or start_time_utc,
+        "source_video_path": (prior_same_type or {}).get("source_video_path"),
+        "video_audio_mux": (prior_same_type or {}).get("video_audio_mux"),
         "metadata": {"sample_rate": sample_rate} if sample_rate else {},
         "created_at": datetime.utcnow().isoformat(),
         "is_final": new_is_final,
