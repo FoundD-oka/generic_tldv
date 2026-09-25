@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import redis.asyncio as aioredis
 
 from ..database import get_db, async_session_local
+from ..meeting_summary import meeting_list_data_summary
 from ..models import Meeting, Transcription, MeetingSession, Recording
 from ..storage import create_storage_client
 from ..schemas import (
@@ -459,14 +460,20 @@ async def _get_full_transcript_segments(
 @router.get("/meetings",
             response_model=MeetingListResponse,
             summary="Get list of all meetings for the current user",
+            description=(
+                "認証ユーザーの会議一覧。既定は summary 化した `data` の slim 応答で、"
+                "1ページ 50件(最大 100件)。`has_more` が次ページの有無を示す。"
+                "`include=data` を付けたときだけ従来どおり full data(JSONB 全体)を返す。"
+            ),
             dependencies=[Depends(get_current_user)])
 async def get_meetings(
     current_user: UserProxy = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    limit: Optional[int] = Query(None, ge=1, le=100, description="Max meetings to return"),
-    offset: Optional[int] = Query(None, ge=0, description="Number of meetings to skip"),
+    limit: int = Query(50, ge=1, le=100, description="Max meetings to return (default 50, max 100)"),
+    offset: int = Query(0, ge=0, description="Number of meetings to skip"),
     status: Optional[str] = Query(None, description="Filter by status (active, completed, failed)"),
     platform: Optional[str] = Query(None, description="Filter by platform (google_meet, teams, zoom)"),
+    include: Optional[str] = Query(None, description="`data` を指定すると full data を返す(既定は summary)"),
 ):
     """Returns a list of meetings initiated by the authenticated user."""
     stmt = select(Meeting).where(Meeting.user_id == current_user.id)
@@ -474,14 +481,22 @@ async def get_meetings(
         stmt = stmt.where(Meeting.status == status)
     if platform:
         stmt = stmt.where(Meeting.platform == platform)
-    stmt = stmt.order_by(Meeting.created_at.desc())
-    if limit:
-        stmt = stmt.limit(limit)
-    if offset:
-        stmt = stmt.offset(offset)
+    # limit + 1 row peek → has_more without a second COUNT query (same shape
+    # as meetings.py::list_user_bots).
+    stmt = stmt.order_by(Meeting.created_at.desc()).offset(offset).limit(limit + 1)
     result = await db.execute(stmt)
-    meetings = result.scalars().all()
-    return MeetingListResponse(meetings=[MeetingResponse.model_validate(m) for m in meetings])
+    rows = result.scalars().all()
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+
+    include_full_data = include == "data"
+    meetings = []
+    for m in rows:
+        item = MeetingResponse.model_validate(m)
+        if not include_full_data:
+            item = item.model_copy(update={"data": meeting_list_data_summary(m.data)})
+        meetings.append(item)
+    return MeetingListResponse(meetings=meetings, has_more=has_more)
 
 @router.get("/transcripts/{platform}/{native_meeting_id}",
             response_model=TranscriptionResponse,

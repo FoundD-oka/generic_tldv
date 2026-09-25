@@ -142,18 +142,22 @@ async function proxyRequest(
   const { path } = await params;
   const pathString = path.join("/");
 
-  // /meetings list: primary source is GET /bots (meeting-api DB — all statuses).
-  // Fallback to /bots/status (running containers only) if /bots fails.
+  // /meetings list: the only source is GET /bots (meeting-api DB — all
+  // statuses). There is no /bots/status fallback: it only knows running
+  // containers, so falling back turned an upstream failure into a 200 with a
+  // truncated (often empty) history — a silent "your meetings disappeared"
+  // failure. Upstream errors are now surfaced with the upstream status so the
+  // client can keep the rows it already has and offer a retry.
   if (pathString === "meetings" && method === "GET") {
-    // Try GET /bots first — returns all meetings from DB (active + completed)
+    const searchParams = request.nextUrl.searchParams;
+    const qs = new URLSearchParams();
+    qs.set("limit", searchParams.get("limit") || "50");
+    qs.set("offset", searchParams.get("offset") || "0");
+    if (searchParams.get("search")) qs.set("search", searchParams.get("search")!);
+    if (searchParams.get("status")) qs.set("status", searchParams.get("status")!);
+    if (searchParams.get("platform")) qs.set("platform", searchParams.get("platform")!);
+
     try {
-      const searchParams = request.nextUrl.searchParams;
-      const qs = new URLSearchParams();
-      qs.set("limit", searchParams.get("limit") || "50");
-      qs.set("offset", searchParams.get("offset") || "0");
-      if (searchParams.get("search")) qs.set("search", searchParams.get("search")!);
-      if (searchParams.get("status")) qs.set("status", searchParams.get("status")!);
-      if (searchParams.get("platform")) qs.set("platform", searchParams.get("platform")!);
       const botsResp = await fetch(`${VEXA_API_URL}/bots?${qs.toString()}`, {
         headers: { "X-API-Key": meetingsListAPIKey },
         signal: AbortSignal.timeout(5000),
@@ -162,37 +166,42 @@ async function proxyRequest(
         const data = await botsResp.json();
         return NextResponse.json({ meetings: data.meetings || [], has_more: data.has_more ?? false });
       }
-    } catch (e) {
-      console.error("[proxy] GET /bots failed, falling back to /bots/status:", e);
-    }
 
-    // Fallback: running containers only (no history)
-    const meetings: Array<Record<string, unknown>> = [];
-    try {
-      const statusResp = await fetch(`${VEXA_API_URL}/bots/status`, {
-        headers: { "X-API-Key": meetingsListAPIKey },
-      });
-      if (statusResp.ok) {
-        const data = await statusResp.json();
-        for (const b of data.running_bots || []) {
-          if (!b.platform || !b.native_meeting_id) continue;
-          const id = b.meeting_id_from_name || b.container_name;
-          meetings.push({
-            id: parseInt(id) || 0,
-            platform: b.platform,
-            native_meeting_id: b.native_meeting_id,
-            status: b.meeting_status || "active",
-            start_time: b.start_time || b.created_at,
-            end_time: null,
-            data: b.data || {},
-            created_at: b.created_at,
-          });
+      const bodyText = await botsResp.text().catch(() => "");
+      let message = bodyText;
+      try {
+        const parsed = JSON.parse(bodyText);
+        if (parsed && typeof parsed === "object") {
+          message = (parsed.detail ?? parsed.error ?? bodyText) as string;
+          if (typeof message !== "string") message = bodyText;
         }
+      } catch {
+        // not JSON — keep the raw text
       }
+      console.error(`[proxy] GET /bots failed with ${botsResp.status}`);
+      return NextResponse.json(
+        {
+          error: message || `Upstream error ${botsResp.status}`,
+          upstream_status: botsResp.status,
+          retryable: botsResp.status >= 500 || botsResp.status === 429,
+        },
+        { status: botsResp.status, headers: { "Cache-Control": "no-store" } }
+      );
     } catch (e) {
-      console.error("[proxy] /bots/status failed:", e);
+      const err = e as Error;
+      if (err?.name === "AbortError" || err?.name === "TimeoutError") {
+        console.error("[proxy] GET /bots timed out");
+        return NextResponse.json(
+          { error: "Request timeout", retryable: true },
+          { status: 504, headers: { "Cache-Control": "no-store" } }
+        );
+      }
+      console.error("[proxy] GET /bots failed:", e);
+      return NextResponse.json(
+        { error: `Failed to connect to API: ${err?.message ?? String(e)}`, retryable: true },
+        { status: 502, headers: { "Cache-Control": "no-store" } }
+      );
     }
-    return NextResponse.json({ meetings });
   }
 
   // Everything else: proxy through api-gateway (handles /transcripts, /recordings, /bots, etc.)

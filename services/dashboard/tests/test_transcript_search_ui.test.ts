@@ -13,6 +13,7 @@ import {
 import { getDashboardCopy } from "@/lib/dashboard-copy";
 
 const pageSource = readFileSync("src/app/meetings/page.tsx", "utf8");
+const queryHookSource = readFileSync("src/hooks/use-meeting-list-query.ts", "utf8");
 const sectionSource = readFileSync(
   "src/components/meetings/transcript-search-results.tsx",
   "utf8",
@@ -165,8 +166,18 @@ describe("スニペットのリテラル強調", () => {
 
 describe("会議一覧ページの配線", () => {
   it("既存の300msデバウンスでタイトル検索に加えて文字起こし検索を発行する", () => {
-    expect(pageSource).toContain("applyFilters(value, statusFilter, platformFilter);\n      runTranscriptSearch(value);");
-    expect(pageSource).toContain("}, 300);");
+    // ページは文字起こし検索コールバックを一覧クエリhookのデバウンスへ配線する。
+    expect(pageSource).toContain(
+      "useMeetingListQuery({ onDebouncedSearch: runTranscriptSearch })",
+    );
+    // hook 側でタイトル検索の直後に同じ値でコールバックを呼ぶ。
+    expect(queryHookSource).toContain(
+      "applyFilters(value, statusFilter, platformFilter);\n      onDebouncedSearch?.(value);",
+    );
+    // 300ms デバウンスは維持されている。
+    expect(queryHookSource).toContain("const SEARCH_DEBOUNCE_MS = 300;");
+    expect(queryHookSource).toContain("debounceRef.current = setTimeout(() => {");
+    expect(queryHookSource).toContain("}, SEARCH_DEBOUNCE_MS);");
   });
 
   it("2文字未満ではセクションを出さない", () => {
@@ -182,9 +193,9 @@ describe("会議一覧ページの配線", () => {
   });
 
   it("既存の一覧絞り込み(タイトル検索・status・platform)は従来どおり", () => {
-    expect(pageSource).toContain("fetchMeetings({\n      search: search || undefined,");
-    expect(pageSource).toContain('status: status === "all" ? undefined : status,');
-    expect(pageSource).toContain('platform: platform === "all" ? undefined : platform,');
+    expect(queryHookSource).toContain("fetchMeetings({\n      search: search || undefined,");
+    expect(queryHookSource).toContain('status: status === "all" ? undefined : status,');
+    expect(queryHookSource).toContain('platform: platform === "all" ? undefined : platform,');
     expect(pageSource).toContain("const filteredMeetings = meetings;");
   });
 });

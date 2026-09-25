@@ -92,6 +92,10 @@ interface MeetingsState {
 
   // Error states
   error: string | null;
+  // True when the failed list fetch is worth retrying (transient upstream /
+  // network error). Lets the UI keep the rows it already has and show a retry
+  // affordance instead of replacing the list with a dead end.
+  errorRetryable: boolean;
   subscriptionRequired: boolean;
 
   // Filters (server-side)
@@ -158,6 +162,7 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
   isLoadingTranscripts: false,
   isUpdatingMeeting: false,
   error: null,
+  errorRetryable: false,
   subscriptionRequired: false,
 
   // Fetch first page of meetings (with optional server-side filters)
@@ -174,7 +179,7 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
     if (silent) {
       set({ _filters: activeFilters });
     } else {
-      set({ isLoadingMeetings: true, error: null, _filters: activeFilters, _offset: 0 });
+      set({ isLoadingMeetings: true, error: null, errorRetryable: false, _filters: activeFilters, _offset: 0 });
     }
     try {
       const PAGE = 50;
@@ -210,8 +215,14 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
         console.error("Failed to silently refresh meetings:", error);
         return;
       }
+      // Keep `meetings` untouched: a failed refresh must not erase the list the
+      // user is looking at.
+      const status = error instanceof VexaAPIError ? error.status : undefined;
       set({
         error: (error as Error).message,
+        errorRetryable:
+          isTransientRefreshError(error) ||
+          (typeof status === "number" && (status === 429 || (status >= 500 && status <= 599))),
         isLoadingMeetings: false
       });
     } finally {
@@ -551,6 +562,6 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
   },
 
   clearError: () => {
-    set({ error: null });
+    set({ error: null, errorRetryable: false });
   },
 }));

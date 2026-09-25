@@ -1,0 +1,61 @@
+{
+  "schema_version": "1.0",
+  "task_id": "meeting-list-stability",
+  "provider": "claude-fable-cli",
+  "reviewer_engine": "fable",
+  "model": "fable",
+  "review_mode": "contract",
+  "reviewed_base": "67ea03210c2de4c8723780402d302948b138d939",
+  "reviewed_commit": "7fe8712f80e969ccabc8fe5b6bd7f36ad4315369",
+  "target_sha256": "sha256:010a430a31d6eba116ed739426ca8252992763fc9aede883b45ea66efd5a3ba5",
+  "contract_sha256": "sha256:7b2e6774b865b49018e0df0436265f633d1d44ab1ade44282fa31a4c886c9d52",
+  "prompt_sha256": "sha256:76bc0b9388c65a03a0179205be6ad6902b69aec8e80eb50b1c4cec6181564d16",
+  "response_sha256": "sha256:cba90d97791f626d8378f3edb0a9a08c2e8cbbb3d9a8bec05416b168714dcd86",
+  "created_at": "2026-08-27T10:57:00.020483+00:00",
+  "verdict": "READY",
+  "summary": "契約 AT-001〜AT-012 / FP-001〜FP-007 の各項目について、差分内に対応する実装とテスト(または source check 根拠)が存在し、具体的な違反は確認できなかった。collector `GET /meetings` は limit=50(le=100)/offset/`include=data`/limit+1 peek による `has_more` を実装し、summary は `meeting_summary.py` の単一実装へ移動(meetings.py は import alias で参照維持)。SDK は `get_meetings_page` 追加・`get_meetings` List 維持・`get_meeting_by_id` のページ走査を実装しテストあり。proxy は `/bots/status` fallback を削除し上流 status を保持(500/401/504/502 + `error`/`retryable`)。store は失敗時に `meetings` を保持し `errorRetryable` を設定。一覧 hook は mount+filter の1 effect に一本化され呼び出し回数テストあり。sweep/finalizer/recover は read→rollback→I/O→refresh(with_for_update)→冪等マージ→commit の3相に分割され、順序・冪等性・id 一致更新・commit 1回のテストあり。既存 race/single-flight/sweep テストと `finalize_recording_master_job`、api-gateway main.py は差分なし。テストの削除・skip・緩和は見当たらない。NFT-001〜003 のコマンド結果は差分からは検証できないため evidence pack に依存する。契約外の懸念(finalizer 書き込み相が再読込後の dict を commit しているかが差分外で確認できない点、`recover_recordings_jsonb_from_storage` の rollback 後に呼び出し側が ORM 属性へ触ると expired 再読込で失敗し得る点など)は advisory として記載。",
+  "confidence": "medium",
+  "violations": [],
+  "advisory": [
+    {
+      "title": "finalizer 書き込み相が commit する dict が再読込後のものか差分外で確認できない",
+      "file": "services/meeting-api/meeting_api/recording_finalizer.py",
+      "detail": "write 相で `meeting_data = dict(meeting.data or {})` と `rec_list` を再読込から作り直しているが、その後の `if finalized_any:` ブロック(差分に現れない既存行)が read 相で作った古い `data` を `meeting.data = data` のように書き戻していると、master 組み立て中(数分かかり得る)に他プロセスが更新した `status_transition` / `final_transcription` 等の非 recordings キーが古い値で上書きされる(ロスト更新)。既存テストは recordings しか見ないため検出できない。再現: `_refresh` mock で `obj.data = {\"foo\": \"bar\", \"recordings\": [...]}` を設定し、finalize 後に `meeting.data[\"foo\"] == \"bar\"` を assert する。commit ブロックが `meeting_data` 由来であることをテストで固定することを推奨。"
+    },
+    {
+      "title": "recover_recordings_jsonb_from_storage の途中 rollback により呼び出し側の ORM 属性アクセスが expired 再読込になり得る",
+      "file": "services/meeting-api/meeting_api/sweeps.py",
+      "detail": "`recover_recordings_jsonb_from_storage(meeting, db)` は sessions 読込後に `db.rollback()` するため、戻った時点で `meeting` の全属性が expire されている。呼び出し側(例: `finalize_recording_master_job` が `meeting.id` を後続の `finalize_recording_master(meeting.id, db)` に渡す形なら)が rollback 後に ORM 属性へ触ると async では `MissingGreenlet` で失敗する。AsyncMock/SimpleNamespace ベースのテストでは expire が再現されないため検出されない。また rollback は呼び出し側の未 commit 変更も破棄する。再現条件: 実 AsyncSession で meeting を select → recover を呼ぶ → 戻り後に `meeting.id` を参照。呼び出し側が int の id スナップショットのみを使うことを確認し、可能なら早期 return 経路も含めて tx 状態を関数内で一貫させることを推奨。"
+    },
+    {
+      "title": "AT-008 のテスト手法が契約記載(testing-library renderHook)と異なる",
+      "file": "services/dashboard/tests/test_meeting_list_query_hook.test.tsx",
+      "detail": "契約 Method は `testing-library renderHook` だが、実装は `react-dom/client` の `createRoot` + `forwardRef/useImperativeHandle` の自作ハーネスで代替している。Evidence(呼び出し回数と引数)は同等に検証できているため違反とは扱わないが、依存追加を避けた意図をテスト冒頭コメントに残すか、次回以降の契約で手法を「同等の手段」と明記することを推奨。"
+    },
+    {
+      "title": "hook 内の filtersRef が書き込み専用の dead code",
+      "file": "services/dashboard/src/hooks/use-meeting-list-query.ts",
+      "detail": "`filtersRef` は `applyFilters` で更新されるが読み出し箇所がない(silent polling 用のフィルタは store の `_filters` が保持)。page.tsx から機械的に移した残骸と思われる。削除しても AT-008 の挙動に影響しない。"
+    },
+    {
+      "title": "errorRetryable が UI で未使用",
+      "file": "services/dashboard/src/app/meetings/page.tsx",
+      "detail": "store に追加した `errorRetryable` を page.tsx は参照せず、401/404 等の非 retryable でも同じ再試行バナーを出す。AT-012 は満たしているが、`errorRetryable=false` のときは再試行ボタンを隠す/文言を変えるなどの分岐を入れると state 追加の意図が UI に届く。"
+    },
+    {
+      "title": "FP-004 fixture の per-item サイズが契約記載(500KB 相当)より小さい",
+      "file": "services/meeting-api/tests/collector/test_meetings_list.py",
+      "detail": "heavy_data は概算 ~39KB/件(41件で ~1.6MB)で、契約の「500KB 相当」には届かない。`<100KB` / `>1MB` の閾値 assert 自体は満たすが、`MeetingResponse.data` の serializer が `webhook_deliveries` のような未知キーを落とす場合は full が ~0.96MB となり閾値割れする余地がある。notes や status_transition を増やして余裕を持たせると安定する。"
+    },
+    {
+      "title": "slim item を `model_copy(update=)` で作っており FastAPI 経由の非空応答が未検証",
+      "file": "services/meeting-api/meeting_api/collector/endpoints.py",
+      "detail": "`model_copy(update={\"data\": summary})` は検証をバイパスする。`MeetingResponse.data` が dict 互換であれば問題ないが、厳密モデル型なら `response_model` の再検証で 500 になる。HTTP レベルのテスト(`test_limit_above_100_is_rejected_with_422`)は空リストしか通していないため、非空 slim item を ASGI 経由で 1 件流し `data` が summary 形で返ることを assert すると閉じる。"
+    },
+    {
+      "title": "sweep の claim ロック解放により並行 sweeper の重複 I/O が起こり得る",
+      "file": "services/meeting-api/meeting_api/sweeps.py",
+      "detail": "phase 1 の rollback で `FOR UPDATE SKIP LOCKED` の claim が解放されるため、複数 sweeper が同じ meeting の storage listing と finalize を同時に行い得る。write 相の session_uid 冪等マージと finalizer の `storage_path == master_key` 判定で結果は収束するが、storage コストは重複する。プランどおり Redis lock はスコープ外なので現状は許容範囲だが、複数レプリカ運用時は注意。"
+    }
+  ]
+}
