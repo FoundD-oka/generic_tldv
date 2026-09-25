@@ -39,6 +39,7 @@ const MEDIA_PROXY_HEADERS_TIMEOUT_MS =
   Number.isSafeInteger(parsedMediaProxyHeadersTimeoutMs) && parsedMediaProxyHeadersTimeoutMs > 0
     ? parsedMediaProxyHeadersTimeoutMs
     : 30000;
+const MEETINGS_LIST_TIMEOUT_MS = 5000;
 
 export class VoiceprintDirectEnrollmentAdmissionGate {
   private active = 0;
@@ -146,61 +147,104 @@ async function proxyRequest(
   // statuses). There is no /bots/status fallback: it only knows running
   // containers, so falling back turned an upstream failure into a 200 with a
   // truncated (often empty) history — a silent "your meetings disappeared"
-  // failure. Upstream errors are now surfaced with the upstream status so the
-  // client can keep the rows it already has and offer a retry.
+  // failure. Upstream errors are surfaced with the upstream status plus
+  // `upstream_status` / `retryable` hints so the client can keep the rows it
+  // already has and offer a retry. Header and body hangs are both bounded by
+  // MEETINGS_LIST_TIMEOUT_MS, and the success payload shape is validated.
   if (pathString === "meetings" && method === "GET") {
-    const searchParams = request.nextUrl.searchParams;
-    const qs = new URLSearchParams();
-    qs.set("limit", searchParams.get("limit") || "50");
-    qs.set("offset", searchParams.get("offset") || "0");
-    if (searchParams.get("search")) qs.set("search", searchParams.get("search")!);
-    if (searchParams.get("status")) qs.set("status", searchParams.get("status")!);
-    if (searchParams.get("platform")) qs.set("platform", searchParams.get("platform")!);
-
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), MEETINGS_LIST_TIMEOUT_MS);
+    const noStore = { "Cache-Control": "no-store" };
+    const isRetryableStatus = (status: number) => status === 429 || (status >= 500 && status <= 599);
     try {
-      const botsResp = await fetch(`${VEXA_API_URL}/bots?${qs.toString()}`, {
+      const searchParams = request.nextUrl.searchParams;
+      const qs = new URLSearchParams();
+      qs.set("limit", searchParams.get("limit") || "50");
+      qs.set("offset", searchParams.get("offset") || "0");
+      if (searchParams.get("search")) qs.set("search", searchParams.get("search")!);
+      if (searchParams.get("status")) qs.set("status", searchParams.get("status")!);
+      if (searchParams.get("platform")) qs.set("platform", searchParams.get("platform")!);
+
+      const upstream = await fetch(`${VEXA_API_URL}/bots?${qs.toString()}`, {
         headers: { "X-API-Key": meetingsListAPIKey },
-        signal: AbortSignal.timeout(5000),
+        signal: controller.signal,
+        cache: "no-store",
       });
-      if (botsResp.ok) {
-        const data = await botsResp.json();
-        return NextResponse.json({ meetings: data.meetings || [], has_more: data.has_more ?? false });
+
+      if (!upstream.ok) {
+        const headers: Record<string, string> = { ...noStore };
+        if (upstream.status === 429) {
+          const retryAfter = upstream.headers.get("retry-after");
+          if (retryAfter) headers["Retry-After"] = retryAfter;
+        }
+        const hints = { upstream_status: upstream.status, retryable: isRetryableStatus(upstream.status) };
+        console.error(`[proxy] GET /bots failed with ${upstream.status}`);
+        let upstreamBody: unknown;
+        try {
+          upstreamBody = await upstream.json();
+        } catch {
+          if (controller.signal.aborted) throw new Error("Meetings response body timed out");
+          // A non-JSON failure body (gateway HTML, internal addresses) is
+          // never forwarded to the browser.
+          return NextResponse.json(
+            { error: "Meetings request failed", ...hints },
+            { status: upstream.status, headers }
+          );
+        }
+        const bodyObject =
+          typeof upstreamBody === "object" && upstreamBody !== null
+            ? (upstreamBody as Record<string, unknown>)
+            : {};
+        const detail = bodyObject.detail ?? bodyObject.error;
+        const message = typeof detail === "string" && detail ? detail : `Upstream error ${upstream.status}`;
+        return NextResponse.json(
+          { ...bodyObject, error: message, ...hints },
+          { status: upstream.status, headers }
+        );
       }
 
-      const bodyText = await botsResp.text().catch(() => "");
-      let message = bodyText;
+      let data: unknown;
       try {
-        const parsed = JSON.parse(bodyText);
-        if (parsed && typeof parsed === "object") {
-          message = (parsed.detail ?? parsed.error ?? bodyText) as string;
-          if (typeof message !== "string") message = bodyText;
-        }
+        data = await upstream.json();
       } catch {
-        // not JSON — keep the raw text
+        if (controller.signal.aborted) throw new Error("Meetings response body timed out");
+        return NextResponse.json(
+          { error: "Invalid meetings response", retryable: true },
+          { status: 502, headers: noStore }
+        );
       }
-      console.error(`[proxy] GET /bots failed with ${botsResp.status}`);
+      if (
+        typeof data !== "object" ||
+        data === null ||
+        !Array.isArray((data as { meetings?: unknown }).meetings) ||
+        ("has_more" in data && typeof (data as { has_more?: unknown }).has_more !== "boolean")
+      ) {
+        return NextResponse.json(
+          { error: "Invalid meetings response", retryable: true },
+          { status: 502, headers: noStore }
+        );
+      }
+      const validData = data as { meetings: unknown[]; has_more?: boolean };
       return NextResponse.json(
-        {
-          error: message || `Upstream error ${botsResp.status}`,
-          upstream_status: botsResp.status,
-          retryable: botsResp.status >= 500 || botsResp.status === 429,
-        },
-        { status: botsResp.status, headers: { "Cache-Control": "no-store" } }
+        { meetings: validData.meetings, has_more: validData.has_more ?? false },
+        { headers: noStore }
       );
     } catch (e) {
       const err = e as Error;
-      if (err?.name === "AbortError" || err?.name === "TimeoutError") {
+      if (controller.signal.aborted || err?.name === "AbortError" || err?.name === "TimeoutError") {
         console.error("[proxy] GET /bots timed out");
         return NextResponse.json(
           { error: "Request timeout", retryable: true },
-          { status: 504, headers: { "Cache-Control": "no-store" } }
+          { status: 504, headers: noStore }
         );
       }
       console.error("[proxy] GET /bots failed:", e);
       return NextResponse.json(
         { error: `Failed to connect to API: ${err?.message ?? String(e)}`, retryable: true },
-        { status: 502, headers: { "Cache-Control": "no-store" } }
+        { status: 502, headers: noStore }
       );
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
@@ -405,7 +449,18 @@ async function proxyRequest(
       });
     }
 
-    if (contentType.includes("audio") || contentType.includes("video") || contentType.includes("octet-stream")) {
+    const isUnsatisfiedDirectRecordingRange =
+      method === "GET" &&
+      response.status === 416 &&
+      (/^recordings\/\d+\/master\/mp3$/.test(pathString) ||
+        /^recordings\/\d+\/media\/\d+\/(raw|mp3)$/.test(pathString));
+
+    if (
+      contentType.includes("audio") ||
+      contentType.includes("video") ||
+      contentType.includes("octet-stream") ||
+      isUnsatisfiedDirectRecordingRange
+    ) {
       const mediaHeaders = new Headers({ "Cache-Control": "no-store" });
       for (const header of [
         "content-type",

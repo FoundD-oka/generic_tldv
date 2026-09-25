@@ -546,7 +546,7 @@ def run_review(task_id: str) -> int:
         "dontAsk",
         "--no-session-persistence",
         "--max-budget-usd",
-        os.environ.get("HW_FABLE_MAX_BUDGET_USD", "1.00"),
+        os.environ.get("HW_FABLE_MAX_BUDGET_USD", "10.00"),
     ]
     state_dir = root / ".hw" / "state"
     state_dir.mkdir(parents=True, exist_ok=True)

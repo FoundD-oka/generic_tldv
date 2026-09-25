@@ -143,7 +143,14 @@ let hasLoggedChatRouteUnavailable = false;
 let meetingsRequestGeneration = 0;
 let isSilentMeetingRefreshInFlight = false;
 let isForegroundMeetingRefreshInFlight = false;
-let meetingDetailRequestGeneration = 0;
+let detailEpoch = 0;
+let detailRequestGeneration = 0;
+let transcriptRequestGeneration = 0;
+let detailLoadingGeneration = 0;
+let transcriptLoadingGeneration = 0;
+let chatRequestGeneration = 0;
+let recordingReadGeneration = 0;
+let activeDetailId: string | null = null;
 
 export const useMeetingsStore = create<MeetingsState>((set, get) => ({
   // Initial state
@@ -274,79 +281,131 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
   // Use silent: true to avoid showing loading state (for polling/refresh)
   fetchMeeting: async (id: string, options?: { silent?: boolean }) => {
     const { silent = false } = options || {};
-    const requestGeneration = ++meetingDetailRequestGeneration;
+    const ownerId = String(id);
+
+    if (activeDetailId !== ownerId) {
+      detailEpoch += 1;
+      detailRequestGeneration += 1;
+      transcriptRequestGeneration += 1;
+      chatRequestGeneration += 1;
+      recordingReadGeneration += 1;
+      activeDetailId = ownerId;
+      set({
+        currentMeeting: null,
+        transcripts: [],
+        recordings: [],
+        chatMessages: [],
+        _manager: createTranscriptManager(),
+        isLoadingMeeting: false,
+        isLoadingTranscripts: false,
+        isUpdatingMeeting: false,
+      });
+    }
+
+    const epoch = detailEpoch;
+    const requestGeneration = ++detailRequestGeneration;
+    const recordingGeneration = ++recordingReadGeneration;
+    const loadingGeneration = silent ? null : ++detailLoadingGeneration;
+    const stillCurrent = () =>
+      epoch === detailEpoch &&
+      requestGeneration === detailRequestGeneration &&
+      activeDetailId === ownerId;
 
     if (!silent) {
       set({ isLoadingMeeting: true, error: null });
     }
 
     try {
-      let meeting: Meeting;
-      try {
-        meeting = await vexaAPI.getMeeting(id);
-        if (requestGeneration !== meetingDetailRequestGeneration) {
-          if (!silent) set({ isLoadingMeeting: false });
-          return;
-        }
-      } catch (e) {
-        if (e instanceof VexaAPIError && e.status === 404) {
-          set({ error: `Meeting with ID ${id} not found`, isLoadingMeeting: false });
-          return;
-        }
-        throw e;
-      }
+      const meeting = await vexaAPI.getMeeting(id);
+      if (!stillCurrent()) return;
 
-      const { meetings } = get();
-      const updatedMeetings = meetings.map((m) =>
-        m.id.toString() === id ? meeting : m
+      const { meetings, recordings } = get();
+      const ownsRecordings = recordingGeneration === recordingReadGeneration;
+      const nextRecordings = ownsRecordings ? recordingsFromMeeting(meeting) : recordings;
+      const meetingForState = ownsRecordings
+        ? meeting
+        : { ...meeting, data: { ...meeting.data, recordings: nextRecordings } };
+      const updatedMeetings = meetings.map((item) =>
+        String(item.id) === ownerId ? meetingForState : item
       );
       set({
-        currentMeeting: meeting,
+        currentMeeting: meetingForState,
         meetings: updatedMeetings,
-        recordings: recordingsFromMeeting(meeting),
-        isLoadingMeeting: false,
+        ...(ownsRecordings ? { recordings: nextRecordings } : {}),
       });
     } catch (error) {
-      if (error instanceof VexaAPIError && error.status === 402) {
-        set({ subscriptionRequired: true, isLoadingMeeting: false, error: null });
+      if (!stillCurrent()) return;
+      if (error instanceof VexaAPIError && error.status === 404) {
+        set({ error: `Meeting with ID ${id} not found` });
         return;
       }
-      set({
-        error: (error as Error).message,
-        isLoadingMeeting: false
-      });
+      if (error instanceof VexaAPIError && error.status === 402) {
+        set({ subscriptionRequired: true, error: null });
+        return;
+      }
+      set({ error: (error as Error).message });
+    } finally {
+      if (loadingGeneration !== null &&
+          loadingGeneration === detailLoadingGeneration &&
+          epoch === detailEpoch &&
+          activeDetailId === ownerId) {
+        set({ isLoadingMeeting: false });
+      }
     }
   },
 
   // Silently refresh meeting data (for polling without UI flicker)
   refreshMeeting: async (id: string) => {
-    const requestGeneration = ++meetingDetailRequestGeneration;
+    const ownerId = String(id);
+    const currentMeeting = get().currentMeeting;
+    if (activeDetailId === null && currentMeeting && String(currentMeeting.id) === ownerId) {
+      detailEpoch += 1;
+      detailRequestGeneration += 1;
+      transcriptRequestGeneration += 1;
+      chatRequestGeneration += 1;
+      recordingReadGeneration += 1;
+      activeDetailId = ownerId;
+    }
+    if (activeDetailId !== ownerId) return null;
+
+    const epoch = detailEpoch;
+    const requestGeneration = ++detailRequestGeneration;
+    const recordingGeneration = ++recordingReadGeneration;
+    const stillCurrent = () =>
+      epoch === detailEpoch &&
+      requestGeneration === detailRequestGeneration &&
+      activeDetailId === ownerId;
+
     try {
       const meeting = await vexaAPI.getMeeting(id);
-      if (requestGeneration !== meetingDetailRequestGeneration) return null;
-      if (meeting) {
-        const { currentMeeting, meetings } = get();
-        const currentRecordingSignature = recordingsStateSignature(currentMeeting);
-        const nextRecordingSignature = recordingsStateSignature(meeting);
-        const currentRetranscriptionStatus = getRetranscriptionStatus(currentMeeting?.data);
-        const nextRetranscriptionStatus = getRetranscriptionStatus(meeting.data);
-        if (currentMeeting?.status !== meeting.status ||
-            currentMeeting?.updated_at !== meeting.updated_at ||
-            currentRetranscriptionStatus !== nextRetranscriptionStatus ||
-            currentRecordingSignature !== nextRecordingSignature) {
-          // Update in meetings list if present
-          const updatedMeetings = meetings.map((m) =>
-            m.id.toString() === id ? meeting : m
-          );
-          set({
-            meetings: updatedMeetings,
-            currentMeeting: meeting,
-            recordings: recordingsFromMeeting(meeting),
-          });
-        }
+      if (!stillCurrent()) return null;
+
+      const { currentMeeting: latestMeeting, meetings, recordings } = get();
+      const ownsRecordings = recordingGeneration === recordingReadGeneration;
+      const nextRecordings = ownsRecordings ? recordingsFromMeeting(meeting) : recordings;
+      const meetingForState = ownsRecordings
+        ? meeting
+        : { ...meeting, data: { ...meeting.data, recordings: nextRecordings } };
+      const currentRecordingSignature = recordingsStateSignature(latestMeeting);
+      const nextRecordingSignature = recordingsStateSignature(meetingForState);
+      const currentRetranscriptionStatus = getRetranscriptionStatus(latestMeeting?.data);
+      const nextRetranscriptionStatus = getRetranscriptionStatus(meetingForState.data);
+      if (latestMeeting?.status !== meetingForState.status ||
+          latestMeeting?.updated_at !== meetingForState.updated_at ||
+          currentRetranscriptionStatus !== nextRetranscriptionStatus ||
+          currentRecordingSignature !== nextRecordingSignature) {
+        const updatedMeetings = meetings.map((item) =>
+          String(item.id) === ownerId ? meetingForState : item
+        );
+        set({
+          meetings: updatedMeetings,
+          currentMeeting: meetingForState,
+          ...(ownsRecordings ? { recordings: nextRecordings } : {}),
+        });
       }
-      return meeting;
+      return meetingForState;
     } catch (error) {
+      if (!stillCurrent()) return null;
       // Silent refresh - don't show errors for polling failures
       if (!isTransientRefreshError(error)) {
         console.debug("Failed to refresh meeting:", error);
@@ -358,34 +417,64 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
   // Fetch transcripts for a meeting
   fetchTranscripts: async (platform: Platform, nativeId: string, meetingId?: string, options?: { silent?: boolean }) => {
     const { silent = false } = options || {};
+    const currentMeeting = get().currentMeeting;
+    if (!currentMeeting ||
+        currentMeeting.platform !== platform ||
+        currentMeeting.platform_specific_id !== nativeId ||
+        (meetingId !== undefined && String(currentMeeting.id) !== String(meetingId))) {
+      return;
+    }
+
+    const ownerId = String(currentMeeting.id);
+    if (activeDetailId !== ownerId) return;
+    const epoch = detailEpoch;
+    const requestGeneration = ++transcriptRequestGeneration;
+    const recordingGeneration = ++recordingReadGeneration;
+    const loadingGeneration = silent ? null : ++transcriptLoadingGeneration;
+    const stillCurrent = () =>
+      epoch === detailEpoch &&
+      requestGeneration === transcriptRequestGeneration &&
+      activeDetailId === ownerId &&
+      String(get().currentMeeting?.id) === ownerId;
+
     if (!silent) {
       set({ isLoadingTranscripts: true, error: null });
     }
     try {
       const result = await vexaAPI.getMeetingWithTranscripts(platform, nativeId, meetingId);
+      if (!stillCurrent()) return;
       // Reuse the same canonical pipeline as WS/bootstraps:
       // - filter invalid
       // - sort by absolute_start_time
       // - collapse overlap (containment / expansion / tail-repeat)
       get().bootstrapTranscripts(result.segments);
-      // Store the authoritative recording list, including empty responses so
-      // navigating between meetings cannot leave stale playback controls behind.
-      set({ recordings: result.recordings });
-      if (!silent) {
-        set({ isLoadingTranscripts: false });
+      if (stillCurrent() && recordingGeneration === recordingReadGeneration) {
+        const latestMeeting = get().currentMeeting;
+        set({
+          recordings: result.recordings,
+          currentMeeting: latestMeeting
+            ? { ...latestMeeting, data: { ...latestMeeting.data, recordings: result.recordings } }
+            : latestMeeting,
+        });
       }
     } catch (error) {
+      if (!stillCurrent()) return;
       if (error instanceof VexaAPIError && error.status === 402) {
-        set({ subscriptionRequired: true, ...(silent ? {} : { isLoadingTranscripts: false, error: null }) });
+        set({ subscriptionRequired: true, ...(silent ? {} : { error: null }) });
         return;
       }
       if (!silent) {
-        set({
-          error: (error as Error).message,
-          isLoadingTranscripts: false
-        });
+        set({ error: (error as Error).message });
       } else {
         console.error("Failed to silently refresh transcripts:", error);
+      }
+    } finally {
+      if (loadingGeneration !== null &&
+          loadingGeneration === transcriptLoadingGeneration &&
+          epoch === detailEpoch &&
+          activeDetailId === ownerId &&
+          String(get().currentMeeting?.id) === ownerId) {
+        set({ isLoadingTranscripts: false });
       }
     }
   },
@@ -440,13 +529,45 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
   },
 
   setCurrentMeeting: (meeting: Meeting | null) => {
+    const nextId = meeting ? String(meeting.id) : null;
+    if (nextId !== activeDetailId) {
+      detailEpoch += 1;
+      detailRequestGeneration += 1;
+      transcriptRequestGeneration += 1;
+      chatRequestGeneration += 1;
+      recordingReadGeneration += 1;
+      activeDetailId = nextId;
+      set({
+        currentMeeting: meeting,
+        transcripts: [],
+        recordings: recordingsFromMeeting(meeting),
+        chatMessages: [],
+        _manager: createTranscriptManager(),
+        isLoadingMeeting: false,
+        isLoadingTranscripts: false,
+        isUpdatingMeeting: false,
+      });
+      return;
+    }
     set({ currentMeeting: meeting, recordings: recordingsFromMeeting(meeting) });
   },
 
   clearCurrentMeeting: () => {
+    detailEpoch += 1;
+    detailRequestGeneration += 1;
+    transcriptRequestGeneration += 1;
+    chatRequestGeneration += 1;
+    recordingReadGeneration += 1;
+    activeDetailId = null;
     set({
-      currentMeeting: null, transcripts: [], recordings: [], chatMessages: [],
+      currentMeeting: null,
+      transcripts: [],
+      recordings: [],
+      chatMessages: [],
       _manager: createTranscriptManager(),
+      isLoadingMeeting: false,
+      isLoadingTranscripts: false,
+      isUpdatingMeeting: false,
     });
   },
 
@@ -520,14 +641,29 @@ export const useMeetingsStore = create<MeetingsState>((set, get) => ({
 
   // Fetch chat messages via REST API (bootstrap)
   fetchChatMessages: async (platform: Platform, nativeId: string) => {
-    if (isChatRouteUnavailable) {
+    const currentMeeting = get().currentMeeting;
+    if (!currentMeeting ||
+        currentMeeting.platform !== platform ||
+        currentMeeting.platform_specific_id !== nativeId) {
       return;
     }
 
+    const ownerId = String(currentMeeting.id);
+    if (activeDetailId !== ownerId || isChatRouteUnavailable) return;
+    const epoch = detailEpoch;
+    const requestGeneration = ++chatRequestGeneration;
+    const stillCurrent = () =>
+      epoch === detailEpoch &&
+      requestGeneration === chatRequestGeneration &&
+      activeDetailId === ownerId &&
+      String(get().currentMeeting?.id) === ownerId;
+
     try {
       const result = await vexaAPI.getChatMessages(platform, nativeId);
+      if (!stillCurrent()) return;
       set({ chatMessages: result.messages });
     } catch (error) {
+      if (!stillCurrent()) return;
       if (error instanceof VexaAPIError && error.status === 404) {
         // Backward compatibility: older backends do not expose this endpoint.
         const isMissingRoute = error.message === "Not Found";

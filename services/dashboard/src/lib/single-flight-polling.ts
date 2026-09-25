@@ -17,7 +17,9 @@ export function startSingleFlightPolling<T>(
     inFlight = true;
     try {
       const result = await task();
-      if (!shouldContinue(result)) stop();
+      if (!stopped && !shouldContinue(result)) stop();
+    } catch {
+      console.error("Single-flight polling task failed");
     } finally {
       inFlight = false;
     }

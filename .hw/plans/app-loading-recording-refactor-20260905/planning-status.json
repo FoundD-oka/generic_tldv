@@ -1,0 +1,64 @@
+{
+  "base_commit": "67ea03210c2de4c8723780402d302948b138d939",
+  "generated_by": "codex",
+  "authorization": "user_explicitly_authorized_codex",
+  "plan_status": "complete_planning_only",
+  "verified_at": "2026-09-05T10:14:12.491291+00:00",
+  "tracked_files_checked": 2140,
+  "changed_since_start": [],
+  "preexisting_dirty": [
+    "AGENTS.md",
+    "CLAUDE.md"
+  ],
+  "application_tests_run": false,
+  "implementation_started": false,
+  "commits_created": false,
+  "fable_status": "authenticated_but_org_monthly_spend_limit_429",
+  "fable_review_passed": false,
+  "execution_precondition": "Existing gates are unchanged; actual Fable adoption/review required at the steps defined in plan.md.",
+  "document_validation": {
+    "ordered_items": [
+      "R00",
+      "R01",
+      "R02",
+      "R03",
+      "R04",
+      "R05",
+      "R06",
+      "R07",
+      "R08",
+      "R09",
+      "R10",
+      "R11"
+    ],
+    "required_fields_present": true,
+    "target_paths_and_line_bounds_valid": true,
+    "bash_blocks_syntax_checked_only": 10,
+    "embedded_contract_and_metadata_match": true,
+    "sequence_traced": true,
+    "links_valid": true
+  },
+  "html_validation": {
+    "browser": "local headless Chromium",
+    "desktop_viewport": [
+      1440,
+      1000
+    ],
+    "mobile_viewport": [
+      390,
+      844
+    ],
+    "initial_inventory_rows": 50,
+    "recording_search_results": 49,
+    "expanded_rows_checked": 1,
+    "page_errors": [],
+    "horizontal_overflow": false,
+    "screenshots_visually_inspected": true,
+    "major_files": 41
+  },
+  "coverage": {
+    "source_test_config_files": 928,
+    "lines": 190734,
+    "method": "whole-tree inventory and AST/import scan, focused semantic review of main paths and tests; not all-line semantic audit"
+  }
+}

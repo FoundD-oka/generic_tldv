@@ -765,11 +765,9 @@ async def get_recording_master(
     if media_file_id is None:
         raise HTTPException(status_code=404, detail="Master media file id missing")
 
-    # Delegate to the existing per-id endpoint logic, then enrich with
-    # duration_seconds (v0.10.6.1 Task 9). Dashboard reads duration from
-    # the master response directly so it no longer needs to peek into
-    # media_files[] for duration.
-    response = await download_media_file(recording_id, media_file_id, auth, db)
+    # Resolve metadata from the already-authorized recording.  Calling the
+    # download route here would repeat the same owner-scoped database lookup.
+    response = await _build_media_download_metadata(recording_id, master_mf)
     response["media_file_id"] = media_file_id
     response["raw_url"] = f"/recordings/{recording_id}/media/{media_file_id}/raw"
     response["duration_seconds"] = master_mf.get("duration_seconds")
@@ -810,6 +808,50 @@ async def download_recording_master_mp3(
     return await download_media_file_mp3(recording_id, int(media_file_id), request, auth, db)
 
 
+async def _build_media_download_metadata(recording_id: int, mf: Dict[str, Any]) -> Dict[str, Any]:
+    """Build download metadata without passing database state to a worker thread."""
+    media_file_id = mf.get("id")
+    fmt = str(mf.get("format", "bin")).lower()
+    type_label = mf.get("type", "audio")
+    content_type = media_content_type(str(type_label), fmt)
+    storage_path = mf.get("storage_path")
+    storage_backend = mf.get("storage_backend")
+    file_size = mf.get("file_size_bytes")
+
+    if not storage_path:
+        raise HTTPException(status_code=404, detail="Media file storage path not set")
+
+    raw_fallback = f"/recordings/{recording_id}/media/{media_file_id}/raw"
+
+    def resolve_storage_url() -> str:
+        storage = get_storage_client_for(storage_backend)
+        # Master may not exist yet: meeting still in progress, or finalizer
+        # crashed before producing the concatenated master. Surface a 404 so
+        # the dashboard can fall back to /raw.
+        try:
+            master_present = storage.file_exists(storage_path)
+        except Exception as e:  # pragma: no cover - defensive
+            logger.warning(f"file_exists check failed for {storage_path}: {e}")
+            master_present = False
+        if not master_present:
+            raise HTTPException(status_code=404, detail="Media file content not found in storage")
+
+        if storage_backend == "local":
+            return raw_fallback
+        url = storage.get_presigned_url(storage_path, expires=3600)
+        return url or raw_fallback
+
+    url = await asyncio.to_thread(resolve_storage_url)
+    return {
+        "url": url,
+        "download_url": url,  # legacy alias kept for back-compat with v0.10.5 clients
+        "filename": f"{recording_id}_{type_label}.{fmt}",
+        "content_type": content_type,
+        "file_size_bytes": file_size,
+        "expires_in": 3600,
+    }
+
+
 @router.get("/recordings/{recording_id}/media/{media_file_id}/download", summary="Get presigned download URL for a media file")
 async def download_media_file(
     recording_id: int, media_file_id: int,
@@ -845,54 +887,7 @@ async def download_media_file(
     mf = _find_media_file(rec, media_file_id)
     if not mf:
         raise HTTPException(status_code=404, detail="Media file not found")
-    fmt = str(mf.get("format", "bin")).lower()
-    ct = media_content_type(str(mf.get("type", "audio")), fmt)
-    storage_path = mf.get("storage_path")
-    storage_backend = mf.get("storage_backend")
-    type_label = mf.get("type", "audio")
-    file_size = mf.get("file_size_bytes")
-
-    if not storage_path:
-        raise HTTPException(status_code=404, detail="Media file storage path not set")
-
-    storage = get_storage_client_for(storage_backend)
-    # Master may not exist yet: meeting still in progress, or finalizer
-    # crashed before producing the concatenated master. Surface a 404 so
-    # the dashboard can fall back to /raw (Pack P: this is the LAST
-    # allowed fallback in the playback path until master_ready flag exists).
-    try:
-        master_present = storage.file_exists(storage_path)
-    except Exception as e:  # pragma: no cover - defensive
-        logger.warning(f"file_exists check failed for {storage_path}: {e}")
-        master_present = False
-    if not master_present:
-        raise HTTPException(status_code=404, detail="Media file content not found in storage")
-
-    raw_fallback = f"/recordings/{recording_id}/media/{media_file_id}/raw"
-    if storage_backend == "local":
-        # Local backend can't mint presigned URLs (no signed-URL semantics
-        # on filesystem). Fall back to the legacy /raw proxy path. This is
-        # an explicit per-deployment decision (Pack P), not a runtime
-        # fallback — local storage is dev-only.
-        url = raw_fallback
-    else:
-        url = storage.get_presigned_url(storage_path, expires=3600)
-        # Issue #1: signing may be unavailable (e.g. GCS signBlob not granted
-        # to the runtime SA — get_presigned_url returns None and logs a
-        # warning). Fall back to the authenticated /raw proxy here so the
-        # endpoint never hands the client a null url; this keeps playback
-        # working without depending on the consumer to interpret null.
-        if not url:
-            url = raw_fallback
-
-    return {
-        "url": url,
-        "download_url": url,  # legacy alias kept for back-compat with v0.10.5 clients
-        "filename": f"{recording_id}_{type_label}.{fmt}",
-        "content_type": ct,
-        "file_size_bytes": file_size,
-        "expires_in": 3600,
-    }
+    return await _build_media_download_metadata(recording_id, mf)
 
 
 # Legacy: in-process proxy through meeting-api. Kept for back-compat with
