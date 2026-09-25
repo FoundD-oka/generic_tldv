@@ -43,7 +43,7 @@ import logging
 import os
 import struct
 import uuid
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -564,8 +564,8 @@ async def finalize_recording_master(meeting_id: int, db: AsyncSession) -> None:
     the change.
     """
     storage = create_storage_client()
-    finalized_any = False
 
+    # (R) read phase --------------------------------------------------------
     meeting_q = await db.execute(
         select(Meeting)
         .where(Meeting.id == meeting_id)
@@ -612,6 +612,21 @@ async def finalize_recording_master(meeting_id: int, db: AsyncSession) -> None:
             meeting_id, len(rec_list),
         )
 
+    # Work on a private copy and end the transaction: master assembly below
+    # downloads/uploads whole recordings, which routinely outlives Postgres'
+    # idle-in-transaction timeout. Nothing is written until the (W) phase.
+    rec_list = copy.deepcopy(rec_list)
+    await db.rollback()
+
+    # (I/O) master assembly — no transaction held ---------------------------
+    # (recording_id, media_file_id, original_storage_path, master_key)
+    finalized: List[Tuple[Any, Any, str, str]] = []
+    # (recording_id, media_file_id, original_storage_path, delta) — fields the
+    # video mux produced for a video entry. Applied by identity in (W), like
+    # the master keys above, so the mux (ffmpeg + storage I/O) never runs
+    # while the row lock is held.
+    muxed: List[Tuple[Any, Any, str, dict]] = []
+
     for rec_idx, rec_payload in enumerate(rec_list):
         if not isinstance(rec_payload, dict):
             continue
@@ -624,6 +639,10 @@ async def finalize_recording_master(meeting_id: int, db: AsyncSession) -> None:
         if mixed_audio is None and "audio" in (meeting_data.get("capture_modes") or []):
             if any(isinstance(mf, dict) and mf.get("type") == "video" for mf in media_files):
                 raise ValueError("Video recording is waiting for its mixed audio")
+        # The video mux below needs the mixed-audio *master*. A master built
+        # in this run only reaches the DB in (W), so mirror it onto this
+        # private copy of the audio entry first.
+        mixed_audio_effective = dict(mixed_audio) if mixed_audio is not None else None
 
         for mf_idx, mf in enumerate(media_files):
             if not isinstance(mf, dict):
@@ -680,31 +699,92 @@ async def finalize_recording_master(meeting_id: int, db: AsyncSession) -> None:
                 # Idempotent re-run.
                 continue
 
-            mf["storage_path"] = master_key
-            mf["finalized_at"] = mf.get("finalized_at") or _now_iso()
-            mf["finalized_by"] = "recording_finalizer.master"
-            # Pack U.7 — set is_final=True so the chunk_write handler's defensive
-            # check (recordings.py: refuse overwrite when is_final or storage_path
-            # ends at /master.*) keeps a late-arriving chunk POST from stomping
-            # the master path back to the chunk path. Without this, real-meeting
-            # tests on helm reproduce the race: chunk N+1 lands after Pack U.5
-            # commits, chunk_write overwrites mf.storage_path → dashboard sees
-            # chunk-path, post_meeting_reconciler then sets finalized_by back.
-            mf["is_final"] = True
-            media_files[mf_idx] = mf
-            finalized_any = True
+            finalized.append((rec_payload.get("id"), mf_id, mf_path, master_key))
+            if mixed_audio_effective is not None and mf is mixed_audio:
+                mixed_audio_effective.update(
+                    storage_path=master_key,
+                    finalized_by="recording_finalizer.master",
+                    is_final=True,
+                )
             logger.info(
                 "[FINALIZER] [DATA] meeting_id=%s mf_id=%s storage_path → master: %s",
                 meeting_id, mf_id, master_key,
             )
 
-        if mixed_audio is not None:
+        if mixed_audio_effective is not None:
+            # Screen recordings arrive as complete files; mux them with the
+            # mixed-audio master. mux_recording_video validates both streams
+            # and raises on any failure so the sweep retries later instead of
+            # publishing a silent video. It is idempotent once the marker and
+            # the output object exist.
             for mf_idx, mf in enumerate(media_files):
-                if isinstance(mf, dict) and mf.get("type") == "video":
-                    media_files[mf_idx] = await asyncio.to_thread(
-                        mux_recording_video, storage, mf, mixed_audio,
+                if not isinstance(mf, dict) or mf.get("type") != "video":
+                    continue
+                result = await asyncio.to_thread(
+                    mux_recording_video, storage, mf, mixed_audio_effective,
+                )
+                delta = {k: v for k, v in result.items() if k not in mf or mf[k] != v}
+                if delta:
+                    muxed.append((rec_payload.get("id"), mf.get("id"), mf.get("storage_path") or "", delta))
+                    logger.info(
+                        "[FINALIZER] [DATA] meeting_id=%s mf_id=%s video muxed with mixed audio: %s",
+                        meeting_id, mf.get("id"), delta.get("storage_path"),
                     )
-                    finalized_any = True
+
+    # (W) write phase — re-lock, re-read, apply by identity -----------------
+    await db.refresh(meeting, with_for_update=True)
+    meeting_data = dict(meeting.data or {})
+    rec_list = list(meeting_data.get("recordings") or [])
+    # Key on (recording id, media_file id) so a concurrent writer that
+    # reordered media_files cannot make us update the wrong entry. Entries
+    # without an id fall back to the storage_path we read in the I/O phase.
+    updates = {
+        (recording_id, mf_id if mf_id is not None else original_path): master_key
+        for recording_id, mf_id, original_path, master_key in finalized
+    }
+    mux_updates = {
+        (recording_id, mf_id if mf_id is not None else original_path): delta
+        for recording_id, mf_id, original_path, delta in muxed
+    }
+    finalized_any = False
+
+    for rec_idx, rec_payload in enumerate(rec_list):
+        if not isinstance(rec_payload, dict):
+            continue
+        media_files = list(rec_payload.get("media_files") or [])
+        recording_id = rec_payload.get("id")
+
+        for mf_idx, mf in enumerate(media_files):
+            if not isinstance(mf, dict):
+                continue
+            # Copy-on-write: meeting_data is a shallow copy of the ORM payload,
+            # so update a fresh dict rather than the entry still referenced by
+            # meeting.data (a failed commit must not leave it half-updated).
+            mf = dict(mf)
+            mf_key = mf.get("id") if mf.get("id") is not None else mf.get("storage_path")
+
+            master_key = updates.get((recording_id, mf_key))
+            if master_key is not None and mf.get("storage_path") != master_key:
+                # (== master_key means someone else already wrote the master path.)
+                mf["storage_path"] = master_key
+                mf["finalized_at"] = mf.get("finalized_at") or _now_iso()
+                mf["finalized_by"] = "recording_finalizer.master"
+                # Pack U.7 — set is_final=True so the chunk_write handler's defensive
+                # check (recordings.py: refuse overwrite when is_final or storage_path
+                # ends at /master.*) keeps a late-arriving chunk POST from stomping
+                # the master path back to the chunk path. Without this, real-meeting
+                # tests on helm reproduce the race: chunk N+1 lands after Pack U.5
+                # commits, chunk_write overwrites mf.storage_path → dashboard sees
+                # chunk-path, post_meeting_reconciler then sets finalized_by back.
+                mf["is_final"] = True
+                finalized_any = True
+
+            mux_delta = mux_updates.get((recording_id, mf_key))
+            if mux_delta and any(mf.get(k) != v for k, v in mux_delta.items()):
+                mf.update(mux_delta)
+                finalized_any = True
+
+            media_files[mf_idx] = mf
 
         rec_payload["media_files"] = media_files
 
@@ -716,7 +796,6 @@ async def finalize_recording_master(meeting_id: int, db: AsyncSession) -> None:
         # The URL is stable (a route, not a presigned URL); the backend
         # endpoint at /recordings/<id>/master resolves to a fresh
         # presigned URL on each fetch.
-        recording_id = rec_payload.get("id")
         if recording_id is not None:
             has_audio_master = any(
                 mf.get("type") == "audio" and mf.get("finalized_by") == "recording_finalizer.master"
@@ -749,6 +828,9 @@ async def finalize_recording_master(meeting_id: int, db: AsyncSession) -> None:
             "[FINALIZER] meeting_id=%s — committed master storage_path update(s) to meeting.data",
             meeting_id,
         )
+    else:
+        # Nothing to write — release the row lock taken by the refresh above.
+        await db.rollback()
 
 
 async def finalize_recording_master_job(meeting_id: int) -> None:

@@ -1,0 +1,22 @@
+{
+  "size": "M",
+  "axes": {
+    "requirement_ambiguity": {
+      "level": "S",
+      "reason": "4修正とも合意済みで、full data互換はinclude=data、SDKはget_meetings_page追加+get_meetingsはList維持と一意に決めた。"
+    },
+    "technical_unknown": {
+      "level": "M",
+      "reason": "MeetingResponse.dataの型(dict互換か厳密モデルか)、finalizer既存テストのmock形、dashboardのjsdom/testing-library有無を未読。プランは条件分岐で吸収済みだが実装時に確認が要る。"
+    },
+    "impact_opacity": {
+      "level": "M",
+      "reason": "GitNexus単体impactは全LOWだが、公開API既定(全件→50件slim)・SDK・dashboard proxy・sweep/finalizerの複数境界にまたがる。外部SDK利用者の既定挙動が変わる。"
+    },
+    "verifiability": {
+      "level": "M",
+      "reason": "unit/contractで各要求は検証可能。ただしPostgres idle timeoutの実測再現はCIに無く手動証拠、hookテストはjsdom前提。"
+    }
+  },
+  "reason": "1軸もLに達しないが技術的未知・影響範囲・検証可能性がMのためM。Fable契約レビュー対象。"
+}

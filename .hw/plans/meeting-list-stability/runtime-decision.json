@@ -1,0 +1,1 @@
+{"runtime": "inline", "axes": {"duration": false, "state_volume": false, "delegation": false, "recurrence": false}, "reason": "3段階の実装だが対象ファイルは12件程度で1セッション・1コンテキストに収まる。大量ログ分析や並行委譲、反復手順化の必要はない。迷いはあるがinlineへ倒す。"}
