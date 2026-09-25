@@ -45,6 +45,12 @@ async def bot_speak(
         raise HTTPException(status_code=503, detail="Redis unavailable")
 
     meeting = await _find_active_meeting(db, current_user.id, platform.value, native_meeting_id)
+
+    # Fail closed: a meeting created with voice_agent_enabled=false must never
+    # speak. Missing key (pre-existing meetings) keeps the legacy enabled path.
+    if (meeting.data or {}).get("voice_agent_enabled", True) is False:
+        raise HTTPException(status_code=403, detail="voice agent disabled for this meeting")
+
     request_id = req.get("request_id")
     request_id = str(request_id).strip() if request_id is not None else ""
 
