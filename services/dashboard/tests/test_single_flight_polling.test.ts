@@ -34,6 +34,27 @@ describe("startSingleFlightPolling", () => {
     expect(task).toHaveBeenCalledTimes(2);
   });
 
+  it("R06 single flight continues after rejection and stops on false", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const task = vi.fn()
+      .mockRejectedValueOnce(new Error("temporary failure"))
+      .mockResolvedValueOnce(false);
+    const shouldContinue = vi.fn((result: boolean) => result);
+
+    startSingleFlightPolling(task, 2500, shouldContinue);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(task).toHaveBeenCalledTimes(1);
+    expect(shouldContinue).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(2500);
+    expect(task).toHaveBeenCalledTimes(2);
+    expect(shouldContinue).toHaveBeenCalledWith(false);
+
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(task).toHaveBeenCalledTimes(2);
+  });
+
   it("drives the real detail store from queued through running to succeeded and stops", async () => {
     vi.useFakeTimers();
     const meeting = (status: string): Meeting => ({

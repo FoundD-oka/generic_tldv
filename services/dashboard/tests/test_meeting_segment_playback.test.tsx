@@ -16,7 +16,7 @@ let root: Root;
 let container: HTMLDivElement;
 
 const recordings = [1, 2].map(id => ({
-  id, session_uid: `session-${id}`, status: "completed", created_at: `2026-09-08T0${id}:00:00Z`,
+  id, meeting_id: 42, session_uid: `session-${id}`, status: "completed", created_at: `2026-09-08T0${id}:00:00Z`,
   playback_url: { audio: `/recording/${id}` },
 })) as RecordingData[];
 const transcripts = [{
@@ -25,7 +25,7 @@ const transcripts = [{
 }] as TranscriptSegment[];
 
 function Harness({ rows }: { rows: RecordingData[] }) {
-  const result = useMeetingPlayback(rows, transcripts);
+  const result = useMeetingPlayback("42", rows, transcripts);
   useEffect(() => {
     playback = result;
     playback.audioPlayerRef.current = audio;

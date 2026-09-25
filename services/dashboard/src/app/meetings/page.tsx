@@ -118,6 +118,13 @@ export default function MeetingsPage() {
     }
   }
 
+  // Unmount: invalidate any in-flight transcript search so a late response
+  // cannot touch state after navigation (the list debounce is cleared by
+  // useMeetingListQuery).
+  useEffect(() => () => {
+    transcriptSearchGenerationRef.current += 1;
+  }, []);
+
   const filteredMeetings = meetings;
   const hasRetranscriptionInProgress = meetings.some((meeting) =>
     isRetranscriptionInProgress(meeting.data)

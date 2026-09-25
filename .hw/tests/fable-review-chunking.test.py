@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """fable_review.py のチャンク分割レビューの単体テスト(検証契約 AT-001..AT-009 /
-FP-001 / FP-002 / NFT-001..NFT-003)。
+FP-001 / FP-002 / NFT-001..NFT-003、既定予算の回帰検査 REG-BUDGET-001)。
 
 使い方: python3 .hw/tests/fable-review-chunking.test.py [fable_review.py のパス]
 
@@ -176,6 +176,20 @@ index = len(list(out_dir.glob("prompt-*.txt"))) + 1
 (out_dir / ("prompt-%02d.txt" % index)).write_text(prompt, encoding="utf-8")
 
 mode = os.environ.get("HW_TEST_MODE", "all_ready")
+expected_budget = os.environ.get("HW_TEST_EXPECT_MAX_BUDGET")
+if expected_budget:
+    try:
+        actual_budget = sys.argv[sys.argv.index("--max-budget-usd") + 1]
+    except (ValueError, IndexError):
+        print("--max-budget-usd がありません", file=sys.stderr)
+        raise SystemExit(64)
+    if actual_budget != expected_budget:
+        print(
+            "max budget mismatch: expected=%s actual=%s"
+            % (expected_budget, actual_budget),
+            file=sys.stderr,
+        )
+        raise SystemExit(64)
 result = {
     "verdict": "READY",
     "summary": "stub chunk %d" % index,
@@ -274,6 +288,19 @@ def main() -> int:
             ok,
             f"exit={proc.returncode} prompts={len(prompts)} "
             f"chunked={verdict.get('chunked')!r} stderr={proc.stderr.strip()[:200]}",
+        )
+
+        # ---- REG-BUDGET-001: 未指定時の Claude CLI 予算は $10 ----
+        budget_repo = make_repo(tmp, "default-budget", [("src/s1.txt", 1024)])
+        proc, prompts = run_review(
+            budget_repo,
+            extra={"HW_TEST_EXPECT_MAX_BUDGET": "10.00"},
+        )
+        check(
+            "REG-BUDGET-001",
+            proc.returncode == 0 and len(prompts) == 1,
+            f"exit={proc.returncode} prompts={len(prompts)} "
+            f"stderr={proc.stderr.strip()[:200]}",
         )
 
         # ---- AT-002..AT-005 / NFT-001: 246,456 bytes 以上の材料でチャンク実行 ----

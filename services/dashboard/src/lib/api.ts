@@ -564,17 +564,18 @@ export const vexaAPI = {
   // direct access to MinIO/S3 hostnames. A 404 means the master is not ready.
   async getRecordingMasterStreamUrl(
     recordingId: number,
-    type: "audio" | "video"
+    type: "audio" | "video",
+    signal?: AbortSignal
   ): Promise<{ url: string; duration_seconds: number | null } | null> {
-    const response = await fetch(
-      withBasePath(`/api/vexa/recordings/${recordingId}/master?type=${type}`)
-    );
+    const url = withBasePath(`/api/vexa/recordings/${recordingId}/master?type=${type}`);
+    const response = signal ? await fetch(url, { signal }) : await fetch(url);
     if (response.status === 404) {
       return null;
     }
     if (!response.ok) {
-      throw new Error(
-        `getRecordingMasterStreamUrl(${recordingId}, ${type}) failed: HTTP ${response.status}`
+      throw new VexaAPIError(
+        `getRecordingMasterStreamUrl(${recordingId}, ${type}) failed: HTTP ${response.status}`,
+        response.status
       );
     }
     const data = (await response.json()) as {

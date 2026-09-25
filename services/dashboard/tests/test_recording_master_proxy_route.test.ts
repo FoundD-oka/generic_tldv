@@ -191,4 +191,73 @@ describe("recording master proxy route", () => {
     expect(mediaInit.signal.aborted).toBe(false);
     await expect(response.text()).resolves.toBe("audio-chunk");
   });
+
+  it("R03 direct and master proxy preserve unsatisfied range", async () => {
+    const unsatisfied = () =>
+      new Response(JSON.stringify({ detail: "Range Not Satisfiable" }), {
+        status: 416,
+        headers: {
+          "content-type": "application/json",
+          "content-range": "bytes */10",
+          "accept-ranges": "bytes",
+        },
+      });
+
+    const directCases = [
+      { path: ["recordings", "42", "media", "7", "raw"], suffix: "recordings/42/media/7/raw" },
+      { path: ["recordings", "42", "media", "7", "mp3"], suffix: "recordings/42/media/7/mp3" },
+      { path: ["recordings", "42", "master", "mp3"], suffix: "recordings/42/master/mp3" },
+    ];
+
+    for (const testCase of directCases) {
+      const fetchMock = vi.fn().mockResolvedValueOnce(unsatisfied());
+      vi.stubGlobal("fetch", fetchMock);
+      const response = await GET(
+        new NextRequest(`https://dashboard.example/api/vexa/${testCase.suffix}`, {
+          headers: { range: "bytes=99-100" },
+        }),
+        { params: Promise.resolve({ path: testCase.path }) }
+      );
+      expect(response.status).toBe(416);
+      expect(response.headers.get("content-range")).toBe("bytes */10");
+      expect(response.headers.get("accept-ranges")).toBe("bytes");
+      await expect(response.json()).resolves.toEqual({ detail: "Range Not Satisfiable" });
+    }
+
+    const masterFetch = vi
+      .fn()
+      .mockResolvedValueOnce(masterJsonResponse())
+      .mockResolvedValueOnce(unsatisfied());
+    vi.stubGlobal("fetch", masterFetch);
+    const masterResponse = await GET(
+      new NextRequest(
+        "https://dashboard.example/api/vexa/recordings/42/master?type=audio&proxy=1",
+        { headers: { range: "bytes=99-100" } }
+      ),
+      masterParams
+    );
+    expect(masterResponse.status).toBe(416);
+    expect(masterResponse.headers.get("content-range")).toBe("bytes */10");
+    expect(masterResponse.headers.get("accept-ranges")).toBe("bytes");
+    await expect(masterResponse.json()).resolves.toEqual({ detail: "Range Not Satisfiable" });
+
+    const authFetch = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ detail: "Invalid API key" }), {
+        status: 401,
+        headers: { "content-type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", authFetch);
+    const authResponse = await GET(
+      new NextRequest("https://dashboard.example/api/vexa/recordings/42/media/7/raw"),
+      { params: Promise.resolve({ path: ["recordings", "42", "media", "7", "raw"] }) }
+    );
+    expect(authResponse.status).toBe(401);
+    expect(authResponse.headers.get("content-range")).toBeNull();
+    await expect(authResponse.json()).resolves.toEqual({
+      error: "Authentication failed",
+      detail: "Your session may have expired. Please log in again.",
+    });
+  });
+
 });
