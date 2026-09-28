@@ -48,6 +48,18 @@ function loadPhrases(): Set<string> {
 }
 
 /**
+ * Scripts written without spaces between words. For these, whitespace
+ * splitting yields a single "word" for a whole sentence, so word-count based
+ * rules must not be applied.
+ */
+const NON_SPACED_SCRIPT = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}\p{Script=Lao}\p{Script=Myanmar}\p{Script=Khmer}]/u;
+
+/** True if the text contains characters of a script that does not use spaces between words. */
+export function usesNonSpacedScript(text: string): boolean {
+  return NON_SPACED_SCRIPT.test(text);
+}
+
+/**
  * Returns true if the text is a hallucination and should be dropped.
  */
 export function isHallucination(text: string): boolean {
@@ -64,9 +76,11 @@ export function isHallucination(text: string): boolean {
   if (stripped !== lower && db.has(stripped + '...')) return true;
   if (stripped !== lower && db.has(stripped + '.')) return true;
 
-  // Too short (single word < 10 chars)
+  // Too short (single word < 10 chars). Only meaningful for space-delimited
+  // scripts: Japanese/Chinese short answers ("はい", "違います", "五万円です")
+  // are a single whitespace "word", and numbers ("15", "3.5") are real content.
   const words = trimmed.split(/\s+/);
-  if (words.length <= 1 && trimmed.length < 10) return true;
+  if (!usesNonSpacedScript(trimmed) && !/\p{N}/u.test(trimmed) && words.length <= 1 && trimmed.length < 10) return true;
 
   // Repetition loop: same 3-6 word phrase repeated 3+ times
   if (words.length >= 9) {

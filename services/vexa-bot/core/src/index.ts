@@ -35,9 +35,12 @@ import { persistCookies, restoreCookies } from './browser-cookie-store';
 import { TranscriptionClient } from './services/transcription-client';
 import { SegmentPublisher } from './services/segment-publisher';
 import type { TranscriptionSegment } from './services/segment-publisher';
-import { SpeakerStreamManager } from './services/speaker-streams';
+import { SpeakerStreamManager, type SubmissionInfo, type TranscriptionHandleResult } from './services/speaker-streams';
 import { resolveSpeakerName, clearSpeakerNameCache, isTrackLocked, isNameTaken, reportTrackAudio, getLockedMapping } from './services/speaker-identity';
-import { SileroVAD } from './services/vad';
+import { SileroVAD, VadGate } from './services/vad';
+import { SerialAudioIntake } from './services/serial-audio-intake';
+import { closeTranscriptionSession } from './services/transcription-session-close';
+import { LiveTranscriptDelivery, OrderedTranscriptPublisher } from './services/transcript-publish-order';
 import { isHallucination } from './services/hallucination-filter';
 import { SpeakerStreamHandle } from './services/audio';
 import { RawCaptureService } from './services/raw-capture';
@@ -162,13 +165,20 @@ let voicePlaybackQueue: Promise<void> = Promise.resolve();
 // --- Per-speaker transcription pipeline ---
 let transcriptionClient: TranscriptionClient | null = null;
 let segmentPublisher: SegmentPublisher | null = null;
+/** Transcript updates, session_end and close of segmentPublisher, delivered in request order. */
+let transcriptPublisher: OrderedTranscriptPublisher | null = null;
 export function getSegmentPublisher(): SegmentPublisher | null { return segmentPublisher; }
 let speakerManager: SpeakerStreamManager | null = null;
 let wakeSttClient: WakeSttClient | null = null;
 let vadModel: SileroVAD | null = null;
-/** Per-speaker VAD states for streaming mode (GMeet only) */
-import type { VadSpeakerState } from './services/vad';
-const vadSpeakerStates: Map<string, VadSpeakerState> = new Map();
+/** Per-speaker VAD gates for streaming mode (GMeet only): own LSTM state + pre/post roll */
+const vadGates: Map<string, VadGate> = new Map();
+/**
+ * Per-speaker serialization of browser audio callbacks (keeps chunk order and
+ * VAD state consistent). Closed at the start of cleanup so no chunk is
+ * accepted after the final flush began; queued chunks are drained first.
+ */
+const audioIntake = new SerialAudioIntake((key, err: any) => log(`[PerSpeaker] Audio handling error for ${key}: ${err?.message ?? err}`));
 /** Whitelist of allowed language codes — if set, segments in other languages are discarded */
 let allowedLanguages: string[] | null = null;
 /** Per-speaker last detected language — used in onSegmentConfirmed where Whisper result isn't available */
@@ -1405,6 +1415,7 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
       sessionUid: botConfig.connectionId || `bot-${Date.now()}`,
       platform: botConfig.platform,
     });
+    transcriptPublisher = new OrderedTranscriptPublisher(segmentPublisher, { log });
     log('[PerSpeaker] SegmentPublisher created');
 
     const wakeSttUrl = process.env.WAKE_STT_URL?.trim();
@@ -1449,7 +1460,9 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
       sampleRate: 16000,
       minAudioDuration: parseOptionalNumberEnv('WAKE_STREAM_MIN_AUDIO_DURATION_SEC', 1),
       submitInterval: parseOptionalNumberEnv('WAKE_STREAM_SUBMIT_INTERVAL_SEC', 1),
-      confirmThreshold: parseOptionalIntEnv('WAKE_STREAM_CONFIRM_THRESHOLD', 1),
+      // Default 2 = LocalAgreement-2 (two successive hypotheses with more audio must agree).
+      // Accuracy over latency; an explicit WAKE_STREAM_CONFIRM_THRESHOLD still wins.
+      confirmThreshold: parseOptionalIntEnv('WAKE_STREAM_CONFIRM_THRESHOLD', 2),
       maxBufferDuration: parseOptionalNumberEnv('WAKE_STREAM_MAX_BUFFER_DURATION_SEC', 15),
       idleTimeoutSec: parseOptionalNumberEnv('WAKE_STREAM_IDLE_TIMEOUT_SEC', 5),
     };
@@ -1487,8 +1500,54 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
       telemetry.whisperSegmentCounts = [];
     }, 30000);
 
-    speakerManager.onSegmentReady = async (speakerId: string, speakerName: string, audioBuffer: Float32Array) => {
-      if (!transcriptionClient) return;
+    /**
+     * Live transcript delivery (see transcript-publish-order.ts): after each
+     * recognition result, after a discarded result, and for segments confirmed
+     * outside a result (idle / speaker-change flush, hard cap, removal).
+     * Snapshots and publish requests are synchronous and go through the
+     * ordered publisher, so updates are delivered in the order they settled.
+     */
+    const sessionPublisher = segmentPublisher;
+    const managerForDelivery = speakerManager;
+    const liveDelivery = new LiveTranscriptDelivery({
+      publisher: transcriptPublisher,
+      sessionStartMs: sessionPublisher.sessionStartMs,
+      peekConfirmedCount: id => confirmedBatches.get(id)?.length ?? 0,
+      takeConfirmed: id => {
+        const batch = confirmedBatches.get(id) || [];
+        confirmedBatches.set(id, []);
+        return batch;
+      },
+      identity: buildSegmentIdentityMetadata,
+      pendingDraft: id => managerForDelivery.getPendingDraft(id),
+      language: id => (currentLanguage && currentLanguage !== 'auto' ? currentLanguage : null) || lastDetectedLanguage.get(id) || 'en',
+      onDraft: (name, draftLang, pending) => {
+        telemetry.draftsEmitted++;
+        log(`[📝 DRAFT] ${name} | ${draftLang} | ${pending[0].start.toFixed(1)}s-${pending[pending.length - 1].end.toFixed(1)}s | "${pending.map(p => p.text).join(' ').substring(0, 50)}"`);
+      },
+      log,
+    });
+    /** Must be called right after handleTranscriptionResult, without an await in between. */
+    const publishAfterResult = (
+      speakerId: string,
+      speakerName: string,
+      handled: TranscriptionHandleResult,
+      lang: string,
+      force: boolean,
+    ): Promise<void> => {
+      if (segmentPublisher !== sessionPublisher) return Promise.resolve();
+      return liveDelivery.afterResult(speakerId, speakerName, handled, lang, force);
+    };
+
+    speakerManager.onSegmentReady = async (speakerId: string, speakerName: string, audioBuffer: Float32Array, info: SubmissionInfo) => {
+      const mgr = speakerManager;
+      if (!mgr) return;
+      const requestOpts = { requestId: info?.requestId };
+      const isFinal = info?.mode !== undefined && info.mode !== 'partial';
+      if (!transcriptionClient) {
+        mgr.handleTranscriptionError(speakerId, new Error('transcription client not available'), requestOpts);
+        return;
+      }
 
       // Language strategy:
       // - If user explicitly set a language → always use it (respect the choice)
@@ -1499,137 +1558,112 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
       const lang = explicitLang || singleAllowed || null;
 
       const whisperStartMs = Date.now();
+      let result: Awaited<ReturnType<TranscriptionClient['transcribe']>>;
       try {
-        const contextPrompt = speakerManager!.getLastConfirmedText(speakerId);
-        const result = await transcriptionClient.transcribe(audioBuffer, lang || undefined, contextPrompt || undefined);
-        telemetry.whisperCalls++;
-        telemetry.totalWhisperMs += Date.now() - whisperStartMs;
-        if (result && result.text) {
-          telemetry.whisperSegmentCounts.push(result.segments?.length || 0);
-          const prob = result.language_probability ?? 0;
-          log(`[🌐 LANGUAGE] ${speakerName} → ${result.language} (prob=${prob.toFixed(2)}${lang ? ', explicit' : ''})`);
-
-          // ── Quality gate: discard low-confidence segments ──────────
-          // Short noisy audio → wrong language → hallucinated garbage.
-          // Check multiple signals from Whisper before accepting.
-
-          // 1. Language confidence (auto-detect only)
-          if (!lang && prob > 0 && prob < 0.3) {
-            telemetry.segmentsDiscarded++;
-            log(`[🚫 LOW CONFIDENCE] ${speakerName} | lang_prob=${prob.toFixed(2)} | "${result.text}" — discarded`);
-            speakerManager!.handleTranscriptionResult(speakerId, '');
-            return;
-          }
-
-          // 2. Per-segment quality signals (avg_logprob, no_speech_prob, compression_ratio)
-          if (result.segments && result.segments.length > 0) {
-            const seg = result.segments[0]; // primary segment
-            const noSpeech = seg.no_speech_prob ?? 0;
-            const logProb = seg.avg_logprob ?? 0;
-            const compression = seg.compression_ratio ?? 1;
-            const duration = (seg.end || 0) - (seg.start || 0);
-
-            // High no_speech_prob + low logprob = noise, not speech
-            if (noSpeech > 0.5 && logProb < -0.7) {
-              telemetry.segmentsDiscarded++;
-              log(`[🚫 NO SPEECH] ${speakerName} | no_speech=${noSpeech.toFixed(2)} logprob=${logProb.toFixed(2)} | "${result.text}" — discarded`);
-              speakerManager!.handleTranscriptionResult(speakerId, '');
-              return;
-            }
-
-            // Very low logprob on short audio = garbage
-            if (logProb < -0.8 && duration < 2.0) {
-              telemetry.segmentsDiscarded++;
-              log(`[🚫 LOW QUALITY] ${speakerName} | logprob=${logProb.toFixed(2)} dur=${duration.toFixed(1)}s | "${result.text}" — discarded`);
-              speakerManager!.handleTranscriptionResult(speakerId, '');
-              return;
-            }
-
-            // High compression ratio = repetitive output (hallucination pattern)
-            if (compression > 2.4) {
-              telemetry.segmentsDiscarded++;
-              log(`[🚫 REPETITIVE] ${speakerName} | compression=${compression.toFixed(1)} | "${result.text}" — discarded`);
-              speakerManager!.handleTranscriptionResult(speakerId, '');
-              return;
-            }
-          }
-
-          // 3. Phrase-based hallucination filter
-          if (isHallucination(result.text)) {
-            log(`[🚫 HALLUCINATION] ${speakerName} | "${result.text}"`);
-            speakerManager!.handleTranscriptionResult(speakerId, '');
-            return;
-          }
-
-          // Track detected language per speaker (used by onSegmentConfirmed)
-          if (result.language) {
-            lastDetectedLanguage.set(speakerId, result.language);
-          }
-
-          // Store word timestamps for speaker-mapper (Teams: post-transcription attribution)
-          const words = result.segments?.flatMap(s => s.words || []) || [];
-          if (words.length > 0) {
-            latestWhisperWords = words;
-          }
-
-          // Process through SpeakerStreamManager — may trigger onSegmentConfirmed
-          const lastSeg = result.segments?.[result.segments.length - 1];
-          const segEndSec = lastSeg?.end;
-          const whisperSegs = result.segments?.map(s => ({
-            text: s.text, start: s.start, end: s.end
-          }));
-          speakerManager!.handleTranscriptionResult(speakerId, result.text, segEndSec, whisperSegs);
-
-          // Publish batch: confirmed (collected by onSegmentConfirmed) + pending (current draft)
-          if (segmentPublisher && result.text) {
-            const lang = explicitLang || result.language || 'en';
-            const bufStart = speakerManager!.getBufferStartMs(speakerId);
-            const nowMs = Date.now();
-            const startSec = (bufStart - segmentPublisher.sessionStartMs) / 1000;
-            const endSec = (nowMs - segmentPublisher.sessionStartMs) / 1000;
-
-            // Pending: one entry per Whisper segment (preserves sentence boundaries)
-            const whisperSegments = result.segments || [{ text: result.text, start: 0, end: 0 }];
-            const segmentIdentity = buildSegmentIdentityMetadata(speakerId, speakerName);
-            const pendingSegs: TranscriptionSegment[] = whisperSegments
-              .map(ws => ({
-                speaker: speakerName,
-                text: (ws.text || '').trim(),
-                start: startSec + (ws.start || 0),
-                end: startSec + (ws.end || 0),
-                language: lang, completed: false,
-                ...segmentIdentity,
-                absolute_start_time: new Date(bufStart + (ws.start || 0) * 1000).toISOString(),
-                absolute_end_time: new Date(bufStart + (ws.end || 0) * 1000).toISOString(),
-              }))
-              .filter(s => s.text);
-
-            telemetry.draftsEmitted++;
-            log(`[📝 DRAFT] ${speakerName} | ${lang} | ${startSec.toFixed(1)}s-${endSec.toFixed(1)}s | "${result.text.substring(0, 50)}"`);
-
-            // Drain only this speaker's confirmed batch
-            const speakerConfirmed = confirmedBatches.get(speakerId) || [];
-            confirmedBatches.set(speakerId, []);
-
-            // Filter out pending segments that overlap with just-confirmed text
-            const confirmedTextList = speakerConfirmed.map(c => c.text.trim());
-            const pending = pendingSegs.filter(p => {
-              const pt = p.text.trim();
-              return !confirmedTextList.some(ct => pt === ct || pt.startsWith(ct) || ct.startsWith(pt));
-            });
-            log(`[📡 PUBLISH] ${speakerName} | ${speakerConfirmed.length}C ${pending.length}P`);
-            await segmentPublisher.publishTranscript(speakerName, speakerConfirmed, pending);
-          }
-        } else {
-          speakerManager!.handleTranscriptionResult(speakerId, '');
-        }
+        const contextPrompt = mgr.getLastConfirmedText(speakerId);
+        result = await transcriptionClient.transcribe(audioBuffer, lang || undefined, contextPrompt || undefined);
       } catch (err: any) {
+        // HTTP/network failure — NOT an empty recognition. Audio stays pending for retry.
         telemetry.whisperCalls++;
         telemetry.whisperFailures++;
         telemetry.totalWhisperMs += Date.now() - whisperStartMs;
         log(`[❌ FAILED] ${speakerName}: ${err.message}`);
-        speakerManager!.handleTranscriptionResult(speakerId, '');
+        mgr.handleTranscriptionError(speakerId, err, requestOpts);
+        return;
       }
+      telemetry.whisperCalls++;
+      telemetry.totalWhisperMs += Date.now() - whisperStartMs;
+
+      /** Successful request whose output is discarded (no speech / low quality / hallucination). */
+      const discard = async (): Promise<void> => {
+        const handled = mgr.handleTranscriptionResult(speakerId, '', undefined, undefined, requestOpts);
+        if (segmentPublisher !== sessionPublisher) return;
+        // Also clears a draft that is still shown when the manager's draft became empty.
+        await liveDelivery.afterDiscard(speakerId, speakerName, handled, explicitLang || result?.language || lastDetectedLanguage.get(speakerId) || 'en', isFinal);
+      };
+
+      if (!result || !result.text) {
+        await discard();
+        return;
+      }
+
+      telemetry.whisperSegmentCounts.push(result.segments?.length || 0);
+      const prob = result.language_probability ?? 0;
+      log(`[🌐 LANGUAGE] ${speakerName} → ${result.language} (prob=${prob.toFixed(2)}${lang ? ', explicit' : ''})`);
+
+      // ── Quality gate: discard low-confidence segments ──────────
+      // Short noisy audio → wrong language → hallucinated garbage.
+      // Check multiple signals from Whisper before accepting.
+
+      // 1. Language confidence (auto-detect only)
+      if (!lang && prob > 0 && prob < 0.3) {
+        telemetry.segmentsDiscarded++;
+        log(`[🚫 LOW CONFIDENCE] ${speakerName} | lang_prob=${prob.toFixed(2)} | "${result.text}" — discarded`);
+        await discard();
+        return;
+      }
+
+      // 2. Per-segment quality signals (avg_logprob, no_speech_prob, compression_ratio)
+      if (result.segments && result.segments.length > 0) {
+        const seg = result.segments[0]; // primary segment
+        const noSpeech = seg.no_speech_prob ?? 0;
+        const logProb = seg.avg_logprob ?? 0;
+        const compression = seg.compression_ratio ?? 1;
+        const duration = (seg.end || 0) - (seg.start || 0);
+
+        // High no_speech_prob + low logprob = noise, not speech
+        if (noSpeech > 0.5 && logProb < -0.7) {
+          telemetry.segmentsDiscarded++;
+          log(`[🚫 NO SPEECH] ${speakerName} | no_speech=${noSpeech.toFixed(2)} logprob=${logProb.toFixed(2)} | "${result.text}" — discarded`);
+          await discard();
+          return;
+        }
+
+        // Very low logprob on short audio = garbage
+        if (logProb < -0.8 && duration < 2.0) {
+          telemetry.segmentsDiscarded++;
+          log(`[🚫 LOW QUALITY] ${speakerName} | logprob=${logProb.toFixed(2)} dur=${duration.toFixed(1)}s | "${result.text}" — discarded`);
+          await discard();
+          return;
+        }
+
+        // High compression ratio = repetitive output (hallucination pattern)
+        if (compression > 2.4) {
+          telemetry.segmentsDiscarded++;
+          log(`[🚫 REPETITIVE] ${speakerName} | compression=${compression.toFixed(1)} | "${result.text}" — discarded`);
+          await discard();
+          return;
+        }
+      }
+
+      // 3. Phrase-based hallucination filter
+      if (isHallucination(result.text)) {
+        log(`[🚫 HALLUCINATION] ${speakerName} | "${result.text}"`);
+        await discard();
+        return;
+      }
+
+      // Track detected language per speaker (used by onSegmentConfirmed)
+      if (result.language) {
+        lastDetectedLanguage.set(speakerId, result.language);
+      }
+
+      // Store word timestamps for speaker-mapper (Teams: post-transcription attribution)
+      const words = result.segments?.flatMap(s => s.words || []) || [];
+      if (words.length > 0) {
+        latestWhisperWords = words;
+      }
+
+      // Process through SpeakerStreamManager — may trigger onSegmentConfirmed.
+      // Word timestamps are passed so Japanese can be confirmed without spaces.
+      const lastSeg = result.segments?.[result.segments.length - 1];
+      const whisperSegs = result.segments?.map(s => ({
+        text: s.text, start: s.start, end: s.end, words: s.words,
+      }));
+      const handled = mgr.handleTranscriptionResult(speakerId, result.text, lastSeg?.end, whisperSegs, requestOpts);
+
+      // Publish batch: confirmed (collected by onSegmentConfirmed) + pending (unconfirmed tail)
+      await publishAfterResult(speakerId, speakerName, handled, explicitLang || result.language || 'en', true);
     };
 
     // Reset confirmed batches for this session
@@ -1665,9 +1699,13 @@ async function initPerSpeakerPipeline(botConfig: BotConfig): Promise<boolean> {
         absolute_start_time: new Date(bufferStartMs).toISOString(),
         absolute_end_time: new Date(bufferEndMs).toISOString(),
       });
+      // Deliver promptly also when no recognition result is being handled
+      // (no-op when publishAfterResult already takes this batch).
+      if (segmentPublisher === sessionPublisher) liveDelivery.confirmedOutsideResult(speakerId, speakerName);
     };
 
     log('[PerSpeaker] SpeakerStreamManager created and wired');
+    audioIntake.open();
     return true;
   } catch (err: any) {
     log(`[PerSpeaker] Pipeline initialization failed: ${err.message}`);
@@ -1700,7 +1738,18 @@ function isDuplicateSpeakerName(name: string, excludeSpeakerId: string): boolean
   return false;
 }
 
-async function handlePerSpeakerAudioData(speakerIndex: number, audioDataArray: number[], trackId?: string, streamId?: string): Promise<void> {
+/**
+ * Browser callback (exposed via page.exposeFunction). Calls for the same track
+ * are serialized: the handler awaits name resolution and VAD, and concurrent
+ * calls would otherwise feed chunks out of order and race the VAD state.
+ */
+function handlePerSpeakerAudioData(speakerIndex: number, audioDataArray: number[], trackId?: string, streamId?: string): Promise<void> {
+  const captureEndMs = Date.now();
+  const speakerId = `speaker-${speakerIndex}`;
+  return audioIntake.enqueue(speakerId, () => processPerSpeakerAudioData(speakerIndex, audioDataArray, trackId, streamId, captureEndMs));
+}
+
+async function processPerSpeakerAudioData(speakerIndex: number, audioDataArray: number[], trackId: string | undefined, streamId: string | undefined, captureEndMs: number): Promise<void> {
   if (!speakerManager || !segmentPublisher || !page || page.isClosed()) return;
 
   // Report audio activity for Zoom active-speaker disambiguation
@@ -1844,23 +1893,32 @@ async function handlePerSpeakerAudioData(speakerIndex: number, audioDataArray: n
 
   // Per-speaker streaming VAD gate (GMeet only).
   // Filters ambient noise BEFORE feedAudio() so lastAudioTimestamp only updates
-  // on real speech. This lets the 15s idle timeout fire correctly when a speaker
+  // on real speech. This lets the idle timeout fire correctly when a speaker
   // stops talking but their mic still emits low-level room noise.
+  // The gate keeps any chunk that contains speech (not only chunks that END in
+  // speech) and adds pre/post-roll so word onsets and endings reach Whisper.
+  let gated: { data: Float32Array; captureEndMs: number }[] = [{ data: audioData, captureEndMs }];
   const isGMeet = currentPlatform === 'google_meet';
   if (isGMeet && vadModel) {
-    // Get or create per-speaker VAD state
-    if (!vadSpeakerStates.has(speakerId)) {
-      vadSpeakerStates.set(speakerId, vadModel.createSpeakerState());
+    let gate = vadGates.get(speakerId);
+    if (!gate) {
+      gate = new VadGate(vadModel, {
+        preRollMs: parseOptionalIntEnv('VAD_PRE_ROLL_MS', 500),
+        postRollMs: parseOptionalIntEnv('VAD_POST_ROLL_MS', 500),
+        sampleRate: 16000,
+      });
+      vadGates.set(speakerId, gate);
     }
-    const vadState = vadSpeakerStates.get(speakerId)!;
-    const isSpeech = await vadModel.isSpeechStreaming(audioData, vadState);
+    const gateResult = await gate.process(audioData, captureEndMs);
     if (pipelineTelemetry) pipelineTelemetry.vadChunksProcessed++;
 
-    if (!isSpeech) {
+    if (gateResult.chunks.length === 0) {
       if (pipelineTelemetry) pipelineTelemetry.vadChunksRejected++;
       return; // Skip feedAudio — ambient noise, don't update lastAudioTimestamp
     }
+    gated = gateResult.chunks;
   }
+  if (!speakerManager) return;
 
   // Track audio arrival for silence monitoring (only reached for real speech)
   const prevMs = speakerLastAudioMs.get(speakerId);
@@ -1871,20 +1929,25 @@ async function handlePerSpeakerAudioData(speakerIndex: number, audioDataArray: n
   }
   speakerLastAudioMs.set(speakerId, nowMs);
 
-  // Raw capture: dump audio for offline replay
-  if (rawCaptureService) {
-    const resolvedName = speakerManager.getSpeakerName(speakerId) || '';
-    rawCaptureService.feedAudio(speakerIndex, audioData, resolvedName);
-  }
+  for (const chunk of gated) {
+    // Raw capture: dump audio for offline replay
+    if (rawCaptureService) {
+      const resolvedName = speakerManager.getSpeakerName(speakerId) || '';
+      rawCaptureService.feedAudio(speakerIndex, chunk.data, resolvedName);
+    }
 
-  mirrorWakeSttAudio(speakerId, speakerManager.getSpeakerName(speakerId) || speakerId, audioData);
-  speakerManager.feedAudio(speakerId, audioData);
+    mirrorWakeSttAudio(speakerId, speakerManager.getSpeakerName(speakerId) || speakerId, chunk.data);
+    speakerManager.feedAudio(speakerId, chunk.data, chunk.captureEndMs);
+  }
 }
 
 /**
  * Tear down the per-speaker transcription pipeline and release resources.
  */
 async function cleanupPerSpeakerPipeline(): Promise<void> {
+  // Stop accepting browser audio first; chunks already queued are drained below.
+  audioIntake.close();
+
   // Clear telemetry interval
   if (pipelineTelemetryInterval) {
     clearInterval(pipelineTelemetryInterval);
@@ -1926,31 +1989,36 @@ async function cleanupPerSpeakerPipeline(): Promise<void> {
     log('[WakeSTT] Audio mirror closed');
   }
 
-  // Flush remaining speaker buffers
-  if (speakerManager) {
-    speakerManager.removeAll();
-    speakerManager = null;
+  // Let queued browser audio callbacks finish feeding (bounded wait). Intake
+  // was closed at the top of cleanup, so nothing new is queued meanwhile.
+  if (audioIntake.size > 0) {
+    const drained = await audioIntake.drain(2000);
+    if (!drained) log(`[PerSpeaker] WARNING: ${audioIntake.size} speaker audio queue(s) still busy after 2000ms — continuing shutdown`);
   }
 
-  // Flush remaining confirmed batches before session_end
-  if (segmentPublisher && confirmedBatches.size > 0) {
-    for (const [speakerId, batch] of confirmedBatches) {
-      if (batch.length > 0) {
-        const speakerName = batch[0].speaker;
-        log(`[PerSpeaker] Flushing ${batch.length} confirmed segment(s) for ${speakerName}`);
-        await segmentPublisher.publishTranscript(speakerName, batch, []);
-      }
-    }
-    confirmedBatches = new Map();
-  }
+  // Finalize remaining speaker audio (in-flight requests, remaining audio and
+  // the callbacks still publishing their results), then publish what is left
+  // and only then session_end + close.
+  const managerToClose = speakerManager;
+  const publisherToClose = segmentPublisher;
+  const orderedPublisherToClose = transcriptPublisher;
+  await closeTranscriptionSession({
+    manager: managerToClose,
+    // Ordered wrapper: final flush, session_end and close follow any update still being delivered.
+    publisher: orderedPublisherToClose ?? publisherToClose,
+    finalFlushTimeoutMs: parseOptionalIntEnv('TRANSCRIPTION_FINAL_FLUSH_TIMEOUT_MS', 20000),
+    takeConfirmedBatches: () => {
+      const batches = confirmedBatches;
+      confirmedBatches = new Map();
+      return batches;
+    },
+    log,
+  });
+  if (speakerManager === managerToClose) speakerManager = null;
+  vadGates.clear();
   speakerTrackIds.clear();
-
-  // Publish session_end and close Redis connections
-  if (segmentPublisher) {
-    await segmentPublisher.publishSessionEnd();
-    await segmentPublisher.close();
-    segmentPublisher = null;
-  }
+  if (segmentPublisher === publisherToClose) segmentPublisher = null;
+  if (transcriptPublisher === orderedPublisherToClose) transcriptPublisher = null;
 
   transcriptionClient = null;
   log('[PerSpeaker] Pipeline cleaned up');
@@ -1963,10 +2031,17 @@ async function cleanupPerSpeakerPipeline(): Promise<void> {
  *   - DOM blue squares (fallback): voice-level-stream-outline + vdi-frame-occlusion
  * Speaker name is known from DOM/caption events — no voting/locking needed.
  */
-async function handleTeamsAudioData(speakerName: string, audioDataArray: number[]): Promise<void> {
+function handleTeamsAudioData(speakerName: string, audioDataArray: number[]): Promise<void> {
+  // Same-speaker chunks are serialized: the first chunk awaits the "joined"
+  // event before feeding, and a later chunk must not overtake it.
+  const captureEndMs = Date.now();
+  const speakerId = `teams-${speakerName.replace(/\s+/g, '_')}`;
+  return audioIntake.enqueue(speakerId, () => processTeamsAudioData(speakerId, speakerName, audioDataArray, captureEndMs));
+}
+
+async function processTeamsAudioData(speakerId: string, speakerName: string, audioDataArray: number[], captureEndMs: number): Promise<void> {
   if (!speakerManager || !segmentPublisher || !page || page.isClosed()) return;
 
-  const speakerId = `teams-${speakerName.replace(/\s+/g, '_')}`;
   const audioData = new Float32Array(audioDataArray);
 
   // Add speaker if new — name is already known from DOM/caption
@@ -1983,7 +2058,8 @@ async function handleTeamsAudioData(speakerName: string, audioDataArray: number[
   // No VAD for Teams — caption-driven routing already gates audio.
   // Small ring buffer chunks are too short for Silero VAD to reliably detect speech.
   mirrorWakeSttAudio(speakerId, speakerName, audioData);
-  speakerManager.feedAudio(speakerId, audioData);
+  if (!speakerManager) return;
+  speakerManager.feedAudio(speakerId, audioData, captureEndMs);
 }
 
 /**
@@ -2008,11 +2084,16 @@ async function handleTeamsCaptionData(speakerName: string, captionText: string, 
   // When caption speaker changes, flush the PREVIOUS speaker's buffer immediately.
   // This prevents cross-speaker contamination — the old speaker's buffer gets emitted
   // before any of the new speaker's audio leaks into it.
-  if (lastCaptionSpeakerId && lastCaptionSpeakerId !== speakerId && speakerManager) {
-    log(`[PerSpeaker] Caption speaker change: flushing "${speakerManager.getSpeakerName(lastCaptionSpeakerId) || lastCaptionSpeakerId}" buffer`);
-    await speakerManager.flushSpeaker(lastCaptionSpeakerId);
-  }
+  const previousCaptionSpeakerId = lastCaptionSpeakerId;
   lastCaptionSpeakerId = speakerId;
+  if (previousCaptionSpeakerId && previousCaptionSpeakerId !== speakerId && speakerManager) {
+    log(`[PerSpeaker] Caption speaker change: flushing "${speakerManager.getSpeakerName(previousCaptionSpeakerId) || previousCaptionSpeakerId}" buffer`);
+    // Flush now waits for transcription of the remaining audio; don't block
+    // caption handling on it. Audio fed meanwhile stays pending.
+    speakerManager.flushSpeaker(previousCaptionSpeakerId).catch((err: any) => {
+      log(`[PerSpeaker] Flush error for ${previousCaptionSpeakerId}: ${err?.message}`);
+    });
+  }
 
   // Accumulate for speaker-mapper boundaries.
   // Store timestamp as session-relative seconds to match Whisper word timestamps
