@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "purpose": "Whisper HTTP API 経路を維持し、日本語会議の発言欠落・誤変換・重複を減らす。表示速度より内容の正確さを優先する。",
+  "acceptance": [
+    "日本語の短い肯定・否定・数字・日時を文字数だけで幻覚として削除しない。既存の既知幻覚・無音対策を維持する",
+    "認識中のflush、発話再開、終了、失敗応答、バッファ上限で未処理音声を黙って捨てない。古い応答を別音声へ適用せず、重複確定を防ぐ",
+    "日本語で安定した先頭部分を確定でき、未確定末尾と音声時刻を保つ。空白による分かち書きを前提にしない",
+    "VAD が発話を含むチャンクと語頭・語尾の余白を保持し、話者間の状態混入を防ぐ",
+    "既存HTTP契約・字幕配信契約を維持する。Whisperの遅延generatorの実行でAPIイベントループを停止させず、並列制限と例外時の解放を維持する。実行による再現試験と既存検証を行う",
+    "tiny と改善候補の認識結果および処理時間を隔離環境で比較し、音声の種類・実行環境・限界を記録する。実会議未観測を改善済みと報告しない"
+  ],
+  "constraints": [
+    "テスト削除・skip・期待値緩和は禁止。既存テストに誤りがある場合は変更せず理由を報告する",
+    "Sonioxへ移行しない。実装時は本番変更なし。追加の本番反映依頼はrelease-request.mdに従い、対象Bot/文字起こしworkerへ限定する。外部有料認識APIを使わない",
+    "実装修復は指定のhw-builder。並行処理の変更について独立した反証型レビューを実施する",
+    "変更前にGitNexus impact、commit前にdetect_changes。UNKNOWNを安全と扱わない",
+    "開発中verifyとcommit済みclean treeの最終gateを区別する"
+  ],
+  "sources": [
+    ".hw/investigations/realtime-transcription-20260928/intent.md",
+    ".hw/investigations/realtime-transcription-20260928/research.md",
+    ".hw/investigations/realtime-transcription-20260928/release-request.md"
+  ],
+  "review_required": true,
+  "review_paths": [
+    "services/vexa-bot/core/*",
+    "services/transcription-service/*",
+    ".hw/tasks/realtime-transcription-quality.json"
+  ]
+}

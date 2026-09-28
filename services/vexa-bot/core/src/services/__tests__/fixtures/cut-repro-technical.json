@@ -1,0 +1,490 @@
+{
+ "source": ".hw/evidence/realtime-transcription-quality/benchmark/cut-repro-before.json (faster-whisper small, real HTTP, technical.wav, 2026-09-28)",
+ "sampleRate": 16000,
+ "responses": [
+  {
+   "info": {
+    "requestId": 1,
+    "mode": "partial",
+    "reason": "interval",
+    "startSample": 0,
+    "endSample": 16384
+   },
+   "text": "リアルタイム",
+   "segments": [
+    {
+     "text": "リアルタイム",
+     "start": 0,
+     "end": 1,
+     "words": [
+      {
+       "word": "リ",
+       "start": 0,
+       "end": 0.42,
+       "probability": 0.7750999927520752
+      },
+      {
+       "word": "ア",
+       "start": 0.42,
+       "end": 0.56,
+       "probability": 0.991262674331665
+      },
+      {
+       "word": "ル",
+       "start": 0.56,
+       "end": 0.7,
+       "probability": 0.9993245601654053
+      },
+      {
+       "word": "タ",
+       "start": 0.7,
+       "end": 0.88,
+       "probability": 0.9022771716117859
+      },
+      {
+       "word": "イ",
+       "start": 0.88,
+       "end": 1,
+       "probability": 0.9977627992630005
+      },
+      {
+       "word": "ム",
+       "start": 1,
+       "end": 1,
+       "probability": 0.9767593741416931
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "info": {
+    "requestId": 2,
+    "mode": "partial",
+    "reason": "interval",
+    "startSample": 0,
+    "endSample": 49152
+   },
+   "text": "リアルタイム文字起こしの制度を改善し",
+   "segments": [
+    {
+     "text": "リアルタイム文字起こしの制度を改善し",
+     "start": 0,
+     "end": 3.04,
+     "words": [
+      {
+       "word": "リ",
+       "start": 0,
+       "end": 0.42,
+       "probability": 0.7421985268592834
+      },
+      {
+       "word": "ア",
+       "start": 0.42,
+       "end": 0.56,
+       "probability": 0.9730949401855469
+      },
+      {
+       "word": "ル",
+       "start": 0.56,
+       "end": 0.7,
+       "probability": 0.9994064569473267
+      },
+      {
+       "word": "タ",
+       "start": 0.7,
+       "end": 0.88,
+       "probability": 0.9540798664093018
+      },
+      {
+       "word": "イ",
+       "start": 0.88,
+       "end": 0.96,
+       "probability": 0.99978107213974
+      },
+      {
+       "word": "ム",
+       "start": 0.96,
+       "end": 1.08,
+       "probability": 0.998927891254425
+      },
+      {
+       "word": "文",
+       "start": 1.08,
+       "end": 1.26,
+       "probability": 0.9794496297836304
+      },
+      {
+       "word": "字",
+       "start": 1.26,
+       "end": 1.38,
+       "probability": 0.9934309124946594
+      },
+      {
+       "word": "起",
+       "start": 1.38,
+       "end": 1.52,
+       "probability": 0.6242437958717346
+      },
+      {
+       "word": "こ",
+       "start": 1.52,
+       "end": 1.66,
+       "probability": 0.9787296652793884
+      },
+      {
+       "word": "し",
+       "start": 1.66,
+       "end": 1.8,
+       "probability": 0.9963510036468506
+      },
+      {
+       "word": "の",
+       "start": 1.8,
+       "end": 1.94,
+       "probability": 0.9819480180740356
+      },
+      {
+       "word": "制",
+       "start": 1.94,
+       "end": 2.16,
+       "probability": 0.620217502117157
+      },
+      {
+       "word": "度",
+       "start": 2.16,
+       "end": 2.38,
+       "probability": 0.9762864112854004
+      },
+      {
+       "word": "を",
+       "start": 2.38,
+       "end": 2.48,
+       "probability": 0.9734573364257812
+      },
+      {
+       "word": "改",
+       "start": 2.48,
+       "end": 2.68,
+       "probability": 0.9655247926712036
+      },
+      {
+       "word": "善",
+       "start": 2.68,
+       "end": 2.9,
+       "probability": 0.9970142543315887
+      },
+      {
+       "word": "し",
+       "start": 2.9,
+       "end": 3.04,
+       "probability": 0.311377614736557
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "info": {
+    "requestId": 3,
+    "mode": "partial",
+    "reason": "interval",
+    "startSample": 0,
+    "endSample": 98304
+   },
+   "text": "リアルタイム文字起こしの制度を改善します 本性の欠落と重複を確保",
+   "segments": [
+    {
+     "text": "リアルタイム文字起こしの制度を改善します 本性の欠落と重複を確保",
+     "start": 0,
+     "end": 6.12,
+     "words": [
+      {
+       "word": "リ",
+       "start": 0,
+       "end": 0.4,
+       "probability": 0.7205535173416138
+      },
+      {
+       "word": "ア",
+       "start": 0.4,
+       "end": 0.56,
+       "probability": 0.9659671187400818
+      },
+      {
+       "word": "ル",
+       "start": 0.56,
+       "end": 0.72,
+       "probability": 0.9993945360183716
+      },
+      {
+       "word": "タ",
+       "start": 0.72,
+       "end": 0.88,
+       "probability": 0.9743631482124329
+      },
+      {
+       "word": "イ",
+       "start": 0.88,
+       "end": 0.96,
+       "probability": 0.9998003840446472
+      },
+      {
+       "word": "ム",
+       "start": 0.96,
+       "end": 1.08,
+       "probability": 0.9992365837097168
+      },
+      {
+       "word": "文",
+       "start": 1.08,
+       "end": 1.24,
+       "probability": 0.9751649498939514
+      },
+      {
+       "word": "字",
+       "start": 1.24,
+       "end": 1.38,
+       "probability": 0.9942194223403931
+      },
+      {
+       "word": "起",
+       "start": 1.38,
+       "end": 1.5,
+       "probability": 0.6235789060592651
+      },
+      {
+       "word": "こ",
+       "start": 1.5,
+       "end": 1.66,
+       "probability": 0.9776847958564758
+      },
+      {
+       "word": "し",
+       "start": 1.66,
+       "end": 1.82,
+       "probability": 0.9960111379623413
+      },
+      {
+       "word": "の",
+       "start": 1.82,
+       "end": 1.94,
+       "probability": 0.9763231873512268
+      },
+      {
+       "word": "制",
+       "start": 1.94,
+       "end": 2.16,
+       "probability": 0.7207797169685364
+      },
+      {
+       "word": "度",
+       "start": 2.16,
+       "end": 2.38,
+       "probability": 0.9802102446556091
+      },
+      {
+       "word": "を",
+       "start": 2.38,
+       "end": 2.48,
+       "probability": 0.9099711179733276
+      },
+      {
+       "word": "改",
+       "start": 2.48,
+       "end": 2.68,
+       "probability": 0.9473336338996887
+      },
+      {
+       "word": "善",
+       "start": 2.68,
+       "end": 2.94,
+       "probability": 0.9953688085079193
+      },
+      {
+       "word": "します",
+       "start": 2.94,
+       "end": 3.34,
+       "probability": 0.8207272291183472
+      },
+      {
+       "word": " 本",
+       "start": 3.66,
+       "end": 3.86,
+       "probability": 0.8773875832557678
+      },
+      {
+       "word": "性",
+       "start": 3.86,
+       "end": 4.12,
+       "probability": 0.6909480690956116
+      },
+      {
+       "word": "の",
+       "start": 4.12,
+       "end": 4.32,
+       "probability": 0.99339759349823
+      },
+      {
+       "word": "欠",
+       "start": 4.32,
+       "end": 4.56,
+       "probability": 0.6487938016653061
+      },
+      {
+       "word": "落",
+       "start": 4.56,
+       "end": 4.8,
+       "probability": 0.9334243535995483
+      },
+      {
+       "word": "と",
+       "start": 4.8,
+       "end": 5.1,
+       "probability": 0.9957196116447449
+      },
+      {
+       "word": "重",
+       "start": 5.1,
+       "end": 5.42,
+       "probability": 0.6950781941413879
+      },
+      {
+       "word": "複",
+       "start": 5.42,
+       "end": 5.74,
+       "probability": 0.979029635588328
+      },
+      {
+       "word": "を",
+       "start": 5.74,
+       "end": 5.92,
+       "probability": 0.9936356544494629
+      },
+      {
+       "word": "確",
+       "start": 5.92,
+       "end": 6.04,
+       "probability": 0.5473118424415588
+      },
+      {
+       "word": "保",
+       "start": 6.04,
+       "end": 6.12,
+       "probability": 0.21893484890460968
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "info": {
+    "requestId": 4,
+    "mode": "final",
+    "reason": "flush",
+    "startSample": 47040,
+    "endSample": 126835
+   },
+   "text": "本性の欠落と重複を確認してください",
+   "segments": [
+    {
+     "text": "本性の欠落と重複を確認してください",
+     "start": 0,
+     "end": 4.06,
+     "words": [
+      {
+       "word": "本",
+       "start": 0,
+       "end": 0.84,
+       "probability": 0.09475761651992798
+      },
+      {
+       "word": "性",
+       "start": 0.84,
+       "end": 1.18,
+       "probability": 0.5746387839317322
+      },
+      {
+       "word": "の",
+       "start": 1.18,
+       "end": 1.36,
+       "probability": 0.9425747394561768
+      },
+      {
+       "word": "欠",
+       "start": 1.36,
+       "end": 1.62,
+       "probability": 0.7674757540225983
+      },
+      {
+       "word": "落",
+       "start": 1.62,
+       "end": 1.86,
+       "probability": 0.867821455001831
+      },
+      {
+       "word": "と",
+       "start": 1.86,
+       "end": 2.16,
+       "probability": 0.9967798590660095
+      },
+      {
+       "word": "重",
+       "start": 2.16,
+       "end": 2.48,
+       "probability": 0.7177593111991882
+      },
+      {
+       "word": "複",
+       "start": 2.48,
+       "end": 2.82,
+       "probability": 0.9626410802205404
+      },
+      {
+       "word": "を",
+       "start": 2.82,
+       "end": 2.98,
+       "probability": 0.894249439239502
+      },
+      {
+       "word": "確",
+       "start": 2.98,
+       "end": 3.14,
+       "probability": 0.9947527647018433
+      },
+      {
+       "word": "認",
+       "start": 3.14,
+       "end": 3.46,
+       "probability": 0.999144434928894
+      },
+      {
+       "word": "して",
+       "start": 3.46,
+       "end": 3.74,
+       "probability": 0.9270949363708496
+      },
+      {
+       "word": "ください",
+       "start": 3.74,
+       "end": 4.06,
+       "probability": 0.9282273650169373
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "emittedBefore": [
+  {
+   "text": "リアルタイム文字起こしの制度を改善",
+   "start": 100000,
+   "end": 102940
+  },
+  {
+   "text": "本性の欠落と重複を確認してください",
+   "start": 102940,
+   "end": 107000
+  }
+ ]
+}

@@ -46,17 +46,35 @@ export interface VadSpeakerState {
   tempEnd: number;
   /** Total samples processed (for timing) */
   currentSample: number;
+  /** Trailing samples (< WINDOW_SIZE) not yet evaluated — carried into the next call */
+  remainder?: Float32Array;
+  /** Serializes calls on this state so LSTM state/context are updated in order */
+  queue?: Promise<unknown>;
 }
 
-export class SileroVAD {
+/** Result of evaluating one streaming chunk. */
+export interface StreamingVadResult {
+  /** True if any part of the chunk was inside a speech region */
+  speech: boolean;
+  /** Hysteresis state after the chunk (speech still ongoing) */
+  triggered: boolean;
+  /** Highest speech probability seen in the chunk */
+  maxProb: number;
+}
+
+/** Minimal streaming VAD interface (lets VadGate be tested without ONNX). */
+export interface StreamingVad {
+  createSpeakerState(): VadSpeakerState;
+  processStreamingChunk(audio: Float32Array, state: VadSpeakerState): Promise<StreamingVadResult>;
+}
+
+export class SileroVAD implements StreamingVad {
   private session: any;
   private threshold: number;
   private negThreshold: number;
   /** Minimum silence duration (samples) before speech_end fires */
   private minSilenceSamples: number;
-  /** Reusable input buffer (CONTEXT_SIZE + WINDOW_SIZE) */
-  private inputBuffer: Float32Array;
-  /** Reusable sr tensor */
+  /** Reusable sr tensor (immutable) */
   private srTensor: any;
 
   private constructor(session: any, threshold: number, minSilenceDurationMs: number) {
@@ -64,7 +82,6 @@ export class SileroVAD {
     this.threshold = threshold;
     this.negThreshold = Math.max(threshold - 0.15, 0.01);
     this.minSilenceSamples = (SAMPLE_RATE * minSilenceDurationMs) / 1000;
-    this.inputBuffer = new Float32Array(CONTEXT_SIZE + WINDOW_SIZE);
     this.srTensor = null; // initialized lazily with ort
   }
 
@@ -113,11 +130,14 @@ export class SileroVAD {
   private async processWindow(window: Float32Array, state: VadSpeakerState): Promise<number> {
     const ort = await getOrt();
 
-    // Build input: context (64) + window (512) = 576 samples
-    this.inputBuffer.set(state.context, 0);
-    this.inputBuffer.set(window, CONTEXT_SIZE);
+    // Build input: context (64) + window (512) = 576 samples.
+    // Allocated per call: a shared buffer would be overwritten by another
+    // speaker's window while session.run() is awaited.
+    const input = new Float32Array(CONTEXT_SIZE + WINDOW_SIZE);
+    input.set(state.context, 0);
+    input.set(window, CONTEXT_SIZE);
 
-    const inputTensor = new ort.Tensor('float32', this.inputBuffer, [1, CONTEXT_SIZE + WINDOW_SIZE]);
+    const inputTensor = new ort.Tensor('float32', input, [1, CONTEXT_SIZE + WINDOW_SIZE]);
     const stateTensor = new ort.Tensor('float32', state.lstmState, [2, 1, 128]);
     if (!this.srTensor) {
       this.srTensor = new ort.Tensor('int64', new BigInt64Array([BigInt(SAMPLE_RATE)]), [1]);
@@ -134,53 +154,82 @@ export class SileroVAD {
     // Update speaker state
     state.lstmState = new Float32Array(results.stateN.data as Float32Array);
     // Carry last CONTEXT_SIZE samples as context for next call
-    state.context.set(this.inputBuffer.subarray(this.inputBuffer.length - CONTEXT_SIZE));
+    state.context.set(input.subarray(input.length - CONTEXT_SIZE));
 
     return prob;
   }
 
   /**
    * Process an audio chunk (typically 4096 samples = 256ms from browser ScriptProcessor)
-   * through a speaker's VAD state. Returns whether the speaker is currently in speech.
+   * through a speaker's VAD state.
    *
-   * Uses hysteresis: speech starts at `threshold` (0.5), ends when probability
-   * stays below `negThreshold` (0.35) for `minSilenceDurationMs` (100ms).
+   * Uses hysteresis: speech starts at `threshold`, ends when probability
+   * stays below `negThreshold` for `minSilenceDurationMs`.
    *
-   * @param audio - Raw audio chunk (any size, will be processed in 512-sample windows)
-   * @param state - Per-speaker VAD state (mutated in place)
-   * @returns true if speaker is in speech (should feed to buffer), false if silence
+   * `speech` is true if ANY window of the chunk was inside a speech region —
+   * including a window where speech ended — so a chunk whose speech ends
+   * mid-chunk is not dropped. Samples that do not fill a whole window are
+   * carried into the next call instead of being skipped.
    */
-  async isSpeechStreaming(audio: Float32Array, state: VadSpeakerState): Promise<boolean> {
-    for (let i = 0; i + WINDOW_SIZE <= audio.length; i += WINDOW_SIZE) {
-      const window = audio.subarray(i, i + WINDOW_SIZE);
-      const prob = await this.processWindow(window, state);
-      state.currentSample += WINDOW_SIZE;
-
-      // Hysteresis logic (matches Silero VADIterator / @jjhbw getSpeechTimestamps)
-      if (prob >= this.threshold && state.tempEnd) {
-        // Was in tentative silence, but speech resumed — cancel silence detection
-        state.tempEnd = 0;
+  processStreamingChunk(audio: Float32Array, state: VadSpeakerState): Promise<StreamingVadResult> {
+    const run = async (): Promise<StreamingVadResult> => {
+      let input = audio;
+      if (state.remainder && state.remainder.length > 0) {
+        input = new Float32Array(state.remainder.length + audio.length);
+        input.set(state.remainder, 0);
+        input.set(audio, state.remainder.length);
       }
+      let speech = false;
+      let maxProb = 0;
+      let i = 0;
+      for (; i + WINDOW_SIZE <= input.length; i += WINDOW_SIZE) {
+        const window = input.subarray(i, i + WINDOW_SIZE);
+        const wasTriggered = state.triggered;
+        const prob = await this.processWindow(window, state);
+        if (prob > maxProb) maxProb = prob;
+        state.currentSample += WINDOW_SIZE;
 
-      if (prob >= this.threshold && !state.triggered) {
-        // Speech start
-        state.triggered = true;
-      }
-
-      if (prob < this.negThreshold && state.triggered) {
-        // Possible speech end — start counting silence duration
-        if (!state.tempEnd) {
-          state.tempEnd = state.currentSample;
-        }
-        if (state.currentSample - state.tempEnd >= this.minSilenceSamples) {
-          // Confirmed speech end — silence lasted long enough
-          state.triggered = false;
+        // Hysteresis logic (matches Silero VADIterator / @jjhbw getSpeechTimestamps)
+        if (prob >= this.threshold && state.tempEnd) {
+          // Was in tentative silence, but speech resumed — cancel silence detection
           state.tempEnd = 0;
         }
-      }
-    }
 
-    return state.triggered;
+        if (prob >= this.threshold && !state.triggered) {
+          // Speech start
+          state.triggered = true;
+        }
+
+        if (prob < this.negThreshold && state.triggered) {
+          // Possible speech end — start counting silence duration
+          if (!state.tempEnd) {
+            state.tempEnd = state.currentSample;
+          }
+          if (state.currentSample - state.tempEnd >= this.minSilenceSamples) {
+            // Confirmed speech end — silence lasted long enough
+            state.triggered = false;
+            state.tempEnd = 0;
+          }
+        }
+
+        if (wasTriggered || state.triggered) speech = true;
+      }
+      state.remainder = i < input.length ? input.slice(i) : undefined;
+      return { speech, triggered: state.triggered, maxProb };
+    };
+    const prev = state.queue ?? Promise.resolve();
+    const next = prev.then(run, run);
+    state.queue = next.catch(() => undefined);
+    return next;
+  }
+
+  /**
+   * Returns true if the chunk contains speech (see processStreamingChunk).
+   * Before this fix it returned only the state at the END of the chunk, which
+   * dropped chunks whose speech ended mid-chunk.
+   */
+  async isSpeechStreaming(audio: Float32Array, state: VadSpeakerState): Promise<boolean> {
+    return (await this.processStreamingChunk(audio, state)).speech;
   }
 
   /**
@@ -204,5 +253,72 @@ export class SileroVAD {
 
   resetState(): void {
     // Legacy — only relevant if using shared state (deprecated)
+  }
+}
+
+export interface VadGateOptions {
+  /** Audio kept before speech onset (ms). Default 500 */
+  preRollMs?: number;
+  /** Audio kept after speech end (ms). Default 500 */
+  postRollMs?: number;
+  sampleRate?: number;
+}
+
+export interface GatedChunk {
+  data: Float32Array;
+  /** Wall-clock time the chunk finished capturing */
+  captureEndMs: number;
+}
+
+/**
+ * Per-speaker VAD gate that keeps word onsets and endings: when speech starts,
+ * the preceding non-speech audio (pre-roll) is released first; after speech
+ * ends, audio keeps flowing for the post-roll. Chunks are released in order.
+ */
+export class VadGate {
+  private state: VadSpeakerState;
+  private preRoll: GatedChunk[] = [];
+  private preRollSamples: number;
+  private postRollSamples: number;
+  private postRollRemaining = 0;
+
+  constructor(private vad: StreamingVad, options?: VadGateOptions) {
+    const sr = options?.sampleRate ?? SAMPLE_RATE;
+    this.preRollSamples = Math.max(0, Math.round(((options?.preRollMs ?? 500) / 1000) * sr));
+    this.postRollSamples = Math.max(0, Math.round(((options?.postRollMs ?? 500) / 1000) * sr));
+    this.state = vad.createSpeakerState();
+  }
+
+  /** Returns the chunks to forward (possibly pre-roll + current), empty for silence. */
+  async process(audio: Float32Array, captureEndMs: number): Promise<{ speech: boolean; chunks: GatedChunk[] }> {
+    const result = await this.vad.processStreamingChunk(audio, this.state);
+    const current: GatedChunk = { data: audio, captureEndMs };
+    if (result.speech) {
+      const chunks = [...this.preRoll, current];
+      this.preRoll = [];
+      this.postRollRemaining = this.postRollSamples;
+      return { speech: true, chunks };
+    }
+    if (this.postRollRemaining > 0) {
+      this.postRollRemaining -= audio.length;
+      return { speech: false, chunks: [current] };
+    }
+    if (this.preRollSamples > 0) {
+      this.preRoll.push(current);
+      let total = this.preRoll.reduce((a, c) => a + c.data.length, 0);
+      while (this.preRoll.length > 0 && total > this.preRollSamples) {
+        const first = this.preRoll[0];
+        const excess = total - this.preRollSamples;
+        if (excess >= first.data.length) {
+          this.preRoll.shift();
+          total -= first.data.length;
+        } else {
+          // Keep only the newest part of the oldest chunk (its end time is unchanged)
+          this.preRoll[0] = { data: first.data.subarray(excess), captureEndMs: first.captureEndMs };
+          total -= excess;
+        }
+      }
+    }
+    return { speech: false, chunks: [] };
   }
 }
