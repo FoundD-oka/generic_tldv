@@ -22,9 +22,11 @@ jobs:
       run:
         working-directory: services/vexa-bot/core
     env:
-      # core のテストはブラウザを起動しない純ロジックなので、install 時の
-      # ブラウザバイナリ DL(数百MB)を止める。ブラウザ必須のテストを足す場合は
-      # ここを外す判断が必要になる。
+      # npm install 時の自動ブラウザ DL は止める。core の npm test には
+      # Playwright の chromium を実際に起動するテスト
+      # (authenticated-join / googlemeet-roster-dom)があるため、必要な
+      # ブラウザは下の "Install Playwright Chromium" で明示的に入れる。
+      # puppeteer はテストで使わないので DL しない。
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
       PUPPETEER_SKIP_DOWNLOAD: "1"
       PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "1"
@@ -43,5 +45,11 @@ jobs:
       # --prefix . で core 単体をルートとして扱わせ、core の lockfile を使う。
       - name: Install dependencies
         run: npm ci --prefix . --no-audit --no-fund
+      # lockfile で固定した core の playwright(1.56.0)に対応する chromium と
+      # headless shell、及び OS 依存ライブラリを入れる。npx だと workspaces の
+      # 解決で別版を取得しうるため、core の node_modules の bin を直接使う。
+      # 明示的な install コマンドは PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD の影響を受けない。
+      - name: Install Playwright Chromium
+        run: ./node_modules/.bin/playwright install --with-deps chromium
       - name: Run tests
         run: npm test
