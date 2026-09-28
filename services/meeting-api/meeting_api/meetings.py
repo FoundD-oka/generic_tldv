@@ -1066,7 +1066,7 @@ async def request_bot(
 
     # Mint meeting token
     try:
-        meeting_token = mint_meeting_token(meeting_id, current_user.id, req.platform.value, native_meeting_id, ttl_seconds=7200)
+        meeting_token = mint_meeting_token(meeting_id, current_user.id, req.platform.value, native_meeting_id, ttl_seconds=10800)
     except Exception as e:
         logger.error(f"Failed to mint MeetingToken for meeting {meeting_id}: {e}")
         new_meeting.status = MeetingStatus.FAILED.value
@@ -1090,7 +1090,7 @@ async def request_bot(
 
     # System defaults for timeouts (ms)
     SYSTEM_DEFAULTS = {
-        "max_bot_time": 7200000,          # 2h
+        "max_bot_time": 10800000,         # 3h
         "max_wait_for_admission": 900000, # 15 min
         "max_time_left_alone": 900000,    # 15 min
         "no_one_joined_timeout": 120000,  # 2 min

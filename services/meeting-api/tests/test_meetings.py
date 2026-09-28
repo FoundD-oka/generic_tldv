@@ -6,6 +6,7 @@ verifies Runtime API delegation via httpx mocks.
 
 import asyncio
 import json
+import time
 from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -165,6 +166,53 @@ class TestCreateMeeting:
             assert config["userdataS3Path"] == f"users/{TEST_USER_ID}/browser-userdata"
         else:
             assert "userdataS3Path" not in config
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("request_override,user_override,expected_ms", [
+        (None, None, 10800000),
+        (None, 5400000, 5400000),
+        (1800000, 5400000, 1800000),
+    ])
+    async def test_max_bot_time_reaches_scheduler_with_three_hour_token(
+        self, client, mock_db, request_override, user_override, expected_ms,
+    ):
+        _setup_create_meeting_db(mock_db)
+        normal_execute = mock_db.execute.side_effect
+
+        async def execute(statement, *args, **kwargs):
+            if "SELECT data FROM users" in str(statement):
+                bot_config = {} if user_override is None else {"max_bot_time": user_override}
+                return MockResult(scalar_value={"bot_config": bot_config})
+            return await normal_execute(statement, *args, **kwargs)
+
+        mock_db.execute.side_effect = execute
+        scheduler_resp = MagicMock(status_code=201)
+        scheduler_resp.json.return_value = {"job_id": "job-1"}
+        http_client = MagicMock()
+        http_client.post = AsyncMock(return_value=scheduler_resp)
+        payload = {"platform": "google_meet", "native_meeting_id": "abc-defg-hij"}
+        if request_override is not None:
+            payload["automatic_leave"] = {"max_bot_time": request_override}
+        with patch("meeting_api.meetings._spawn_via_runtime_api", new_callable=AsyncMock,
+                   return_value={"container_id": TEST_CONTAINER_ID, "name": TEST_CONTAINER_NAME}), \
+             patch("meeting_api.meetings.mint_meeting_token", return_value="fake.jwt.token") as mint, \
+             patch("meeting_api.meetings._get_httpx_client", return_value=http_client), \
+             patch("meeting_api.meetings.async_session_local") as factory:
+            inner = AsyncMock()
+            inner.add = MagicMock()
+            factory.return_value.__aenter__ = AsyncMock(return_value=inner)
+            factory.return_value.__aexit__ = AsyncMock(return_value=False)
+            before = time.time()
+            response = await client.post("/bots", json=payload)
+            after = time.time()
+        assert response.status_code == 201
+        assert mint.call_args.kwargs["ttl_seconds"] == 10800
+        assert response.json()["data"]["resolved_timeouts"]["max_bot_time"] == expected_ms
+        scheduler_calls = [c for c in http_client.post.call_args_list
+                           if c.args and c.args[0].endswith("/scheduler/jobs")]
+        assert len(scheduler_calls) == 1
+        execute_at = scheduler_calls[0].kwargs["json"]["execute_at"]
+        assert before + expected_ms / 1000 <= execute_at <= after + expected_ms / 1000
 
     @pytest.mark.asyncio
     async def test_create_meeting_success(self, client, mock_db, mock_redis):
