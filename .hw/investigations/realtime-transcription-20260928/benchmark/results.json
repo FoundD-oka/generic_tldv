@@ -1,0 +1,474 @@
+[
+  {
+    "backend": "cpu",
+    "model": "tiny",
+    "platform": "macOS-26.5.1-arm64-arm-64bit",
+    "packages": {
+      "faster-whisper": "1.2.1",
+      "mlx-whisper": "0.4.3",
+      "ctranslate2": "4.8.2",
+      "mlx": "0.32.2"
+    },
+    "warmup_and_load_seconds": 16.313523624558,
+    "settings": {
+      "language": "ja",
+      "word_timestamps": true,
+      "vad_filter": false,
+      "temperature": 0,
+      "condition_on_previous_text": false,
+      "cpu_beam_size": 5,
+      "cpu_threads": 4,
+      "note": "CPU repetition penalty=1.1/no-repeat-ngram=3; MLX defaults otherwise; backend/decoding are not identical"
+    },
+    "cases": [
+      {
+        "id": "short_yes",
+        "text": "はい。",
+        "voice": "Kyoko",
+        "duration": 1.15575,
+        "hypothesis": "はい",
+        "seconds": 0.173246624879539,
+        "rtf": 0.14989974032406575,
+        "edits": 0,
+        "reference_chars": 2
+      },
+      {
+        "id": "short_no",
+        "text": "違います。",
+        "voice": "Kyoko",
+        "duration": 1.6343125,
+        "hypothesis": "次回います",
+        "seconds": 0.18560904217883945,
+        "rtf": 0.11357010497003446,
+        "edits": 2,
+        "reference_chars": 4
+      },
+      {
+        "id": "date",
+        "text": "来週の月曜です。",
+        "voice": "Kyoko",
+        "duration": 2.493625,
+        "hypothesis": "来週の月要です",
+        "seconds": 0.18541349982842803,
+        "rtf": 0.07435500519461748,
+        "edits": 1,
+        "reference_chars": 7
+      },
+      {
+        "id": "amount",
+        "text": "予算は5万円です。",
+        "voice": "Kyoko",
+        "duration": 2.57875,
+        "hypothesis": "予算はご万言です。",
+        "seconds": 0.19583425018936396,
+        "rtf": 0.07594154151793077,
+        "edits": 2,
+        "reference_chars": 8
+      },
+      {
+        "id": "negation",
+        "text": "承認していません。まだ送信しないでください。",
+        "voice": "Kyoko",
+        "duration": 4.524375,
+        "hypothesis": "商品していません、まだ操心しないでください。",
+        "seconds": 0.23790333420038223,
+        "rtf": 0.05258258526324238,
+        "edits": 4,
+        "reference_chars": 20
+      },
+      {
+        "id": "meeting",
+        "text": "田中さん、見積もりの金額を確認してください。納期は来月の15日です。",
+        "voice": "Kyoko",
+        "duration": 7.4610625,
+        "hypothesis": "田中さん、三つ森の金額を確認してください。了記は来月15日です。",
+        "seconds": 0.3117550420574844,
+        "rtf": 0.041784268937230376,
+        "edits": 7,
+        "reference_chars": 31
+      },
+      {
+        "id": "technical",
+        "text": "リアルタイム文字起こしの精度を改善します。音声の欠落と重複を確認してください。",
+        "voice": "Kyoko",
+        "duration": 7.9271875,
+        "hypothesis": "リアルタイム文字を欲しいの制度を改善します 本製への結楽と重複を確認してください",
+        "seconds": 0.37722337478771806,
+        "rtf": 0.04758602906613702,
+        "edits": 9,
+        "reference_chars": 37
+      },
+      {
+        "id": "repeat",
+        "text": "違います。違います。承認はまだです。",
+        "voice": "Kyoko",
+        "duration": 4.1536875,
+        "hypothesis": "次がいます 正認はまだです",
+        "seconds": 0.19903049990534782,
+        "rtf": 0.04791658012437089,
+        "edits": 6,
+        "reference_chars": 15
+      }
+    ],
+    "summary": {
+      "cer": 0.25,
+      "audio_seconds": 31.92875,
+      "processing_seconds": 1.866015668027103,
+      "rtf": 0.058443116878271244
+    }
+  },
+  {
+    "backend": "cpu",
+    "model": "small",
+    "platform": "macOS-26.5.1-arm64-arm-64bit",
+    "packages": {
+      "faster-whisper": "1.2.1",
+      "mlx-whisper": "0.4.3",
+      "ctranslate2": "4.8.2",
+      "mlx": "0.32.2"
+    },
+    "warmup_and_load_seconds": 9.796907792333513,
+    "settings": {
+      "language": "ja",
+      "word_timestamps": true,
+      "vad_filter": false,
+      "temperature": 0,
+      "condition_on_previous_text": false,
+      "cpu_beam_size": 5,
+      "cpu_threads": 4,
+      "note": "CPU repetition penalty=1.1/no-repeat-ngram=3; MLX defaults otherwise; backend/decoding are not identical"
+    },
+    "cases": [
+      {
+        "id": "short_yes",
+        "text": "はい。",
+        "voice": "Kyoko",
+        "duration": 1.15575,
+        "hypothesis": "はい",
+        "seconds": 1.2620811252854764,
+        "rtf": 1.0920018388799277,
+        "edits": 0,
+        "reference_chars": 2
+      },
+      {
+        "id": "short_no",
+        "text": "違います。",
+        "voice": "Kyoko",
+        "duration": 1.6343125,
+        "hypothesis": "違います",
+        "seconds": 1.3008308340795338,
+        "rtf": 0.795949877443594,
+        "edits": 0,
+        "reference_chars": 4
+      },
+      {
+        "id": "date",
+        "text": "来週の月曜です。",
+        "voice": "Kyoko",
+        "duration": 2.493625,
+        "hypothesis": "来週の月曜です。",
+        "seconds": 1.4337888341397047,
+        "rtf": 0.5749817370854498,
+        "edits": 0,
+        "reference_chars": 7
+      },
+      {
+        "id": "amount",
+        "text": "予算は5万円です。",
+        "voice": "Kyoko",
+        "duration": 2.57875,
+        "hypothesis": "予算は5万円です",
+        "seconds": 1.422580124810338,
+        "rtf": 0.5516549199458413,
+        "edits": 0,
+        "reference_chars": 8
+      },
+      {
+        "id": "negation",
+        "text": "承認していません。まだ送信しないでください。",
+        "voice": "Kyoko",
+        "duration": 4.524375,
+        "hypothesis": "承認していません。まだ送信しないでください。",
+        "seconds": 1.5389349171891809,
+        "rtf": 0.3401430953864746,
+        "edits": 0,
+        "reference_chars": 20
+      },
+      {
+        "id": "meeting",
+        "text": "田中さん、見積もりの金額を確認してください。納期は来月の15日です。",
+        "voice": "Kyoko",
+        "duration": 7.4610625,
+        "hypothesis": "田中さん、三森の金額を確認してください。 納期は来月の15日です。",
+        "seconds": 1.8645220422185957,
+        "rtf": 0.2499003382183966,
+        "edits": 4,
+        "reference_chars": 31
+      },
+      {
+        "id": "technical",
+        "text": "リアルタイム文字起こしの精度を改善します。音声の欠落と重複を確認してください。",
+        "voice": "Kyoko",
+        "duration": 7.9271875,
+        "hypothesis": "リアルタイム文字起こしの精度を改善します。 本性の欠落と重複を確認してください。",
+        "seconds": 1.9457787917926908,
+        "rtf": 0.2454563856087283,
+        "edits": 2,
+        "reference_chars": 37
+      },
+      {
+        "id": "repeat",
+        "text": "違います。違います。承認はまだです。",
+        "voice": "Kyoko",
+        "duration": 4.1536875,
+        "hypothesis": "違います、違います。承認はまだです。",
+        "seconds": 1.4718816671520472,
+        "rtf": 0.3543554172411976,
+        "edits": 0,
+        "reference_chars": 15
+      }
+    ],
+    "summary": {
+      "cer": 0.04838709677419355,
+      "audio_seconds": 31.92875,
+      "processing_seconds": 12.240398336667567,
+      "rtf": 0.3833660364614201
+    }
+  },
+  {
+    "backend": "cpu",
+    "model": "large-v3-turbo",
+    "platform": "macOS-26.5.1-arm64-arm-64bit",
+    "packages": {
+      "faster-whisper": "1.2.1",
+      "mlx-whisper": "0.4.3",
+      "ctranslate2": "4.8.2",
+      "mlx": "0.32.2"
+    },
+    "warmup_and_load_seconds": 10.230812957976013,
+    "settings": {
+      "language": "ja",
+      "word_timestamps": true,
+      "vad_filter": false,
+      "temperature": 0,
+      "condition_on_previous_text": false,
+      "cpu_beam_size": 5,
+      "cpu_threads": 4,
+      "note": "CPU repetition penalty=1.1/no-repeat-ngram=3; MLX defaults otherwise; backend/decoding are not identical"
+    },
+    "cases": [
+      {
+        "id": "short_yes",
+        "text": "はい。",
+        "voice": "Kyoko",
+        "duration": 1.15575,
+        "hypothesis": "はい。",
+        "seconds": 6.322833625134081,
+        "rtf": 5.470762383849518,
+        "edits": 0,
+        "reference_chars": 2
+      },
+      {
+        "id": "short_no",
+        "text": "違います。",
+        "voice": "Kyoko",
+        "duration": 1.6343125,
+        "hypothesis": "違います。",
+        "seconds": 6.405790709424764,
+        "rtf": 3.919562941251911,
+        "edits": 0,
+        "reference_chars": 4
+      },
+      {
+        "id": "date",
+        "text": "来週の月曜です。",
+        "voice": "Kyoko",
+        "duration": 2.493625,
+        "hypothesis": "来週の月曜です。",
+        "seconds": 6.655448166653514,
+        "rtf": 2.6689851788675174,
+        "edits": 0,
+        "reference_chars": 7
+      },
+      {
+        "id": "amount",
+        "text": "予算は5万円です。",
+        "voice": "Kyoko",
+        "duration": 2.57875,
+        "hypothesis": "予算は5万円です。",
+        "seconds": 6.132762874942273,
+        "rtf": 2.378192098862733,
+        "edits": 0,
+        "reference_chars": 8
+      },
+      {
+        "id": "negation",
+        "text": "承認していません。まだ送信しないでください。",
+        "voice": "Kyoko",
+        "duration": 4.524375,
+        "hypothesis": "承認していません。まだ送信しないでください。",
+        "seconds": 6.777627040632069,
+        "rtf": 1.4980250400623443,
+        "edits": 0,
+        "reference_chars": 20
+      },
+      {
+        "id": "meeting",
+        "text": "田中さん、見積もりの金額を確認してください。納期は来月の15日です。",
+        "voice": "Kyoko",
+        "duration": 7.4610625,
+        "hypothesis": "田中さん、見積もりの金額を確認してください。納期は来月の15日です。",
+        "seconds": 6.660843417048454,
+        "rtf": 0.8927473020160942,
+        "edits": 0,
+        "reference_chars": 31
+      },
+      {
+        "id": "technical",
+        "text": "リアルタイム文字起こしの精度を改善します。音声の欠落と重複を確認してください。",
+        "voice": "Kyoko",
+        "duration": 7.9271875,
+        "hypothesis": "リアルタイム文字起こしの精度を改善します。音声の欠落と重複を確認してください。",
+        "seconds": 6.117050832603127,
+        "rtf": 0.7716546167985968,
+        "edits": 0,
+        "reference_chars": 37
+      },
+      {
+        "id": "repeat",
+        "text": "違います。違います。承認はまだです。",
+        "voice": "Kyoko",
+        "duration": 4.1536875,
+        "hypothesis": "違います、違います。承認はまだです。",
+        "seconds": 5.373920583166182,
+        "rtf": 1.2937710367393267,
+        "edits": 0,
+        "reference_chars": 15
+      }
+    ],
+    "summary": {
+      "cer": 0.0,
+      "audio_seconds": 31.92875,
+      "processing_seconds": 50.446277249604464,
+      "rtf": 1.5799640527613659
+    }
+  },
+  {
+    "backend": "mlx",
+    "model": "mlx-community/whisper-large-v3-turbo",
+    "platform": "macOS-26.5.1-arm64-arm-64bit",
+    "packages": {
+      "faster-whisper": "1.2.1",
+      "mlx-whisper": "0.4.3",
+      "ctranslate2": "4.8.2",
+      "mlx": "0.32.2"
+    },
+    "warmup_and_load_seconds": 47.77321979170665,
+    "settings": {
+      "language": "ja",
+      "word_timestamps": true,
+      "vad_filter": false,
+      "temperature": 0,
+      "condition_on_previous_text": false,
+      "cpu_beam_size": 5,
+      "cpu_threads": 4,
+      "note": "CPU repetition penalty=1.1/no-repeat-ngram=3; MLX defaults otherwise; backend/decoding are not identical"
+    },
+    "cases": [
+      {
+        "id": "short_yes",
+        "text": "はい。",
+        "voice": "Kyoko",
+        "duration": 1.15575,
+        "hypothesis": "はい。",
+        "seconds": 1.4277794170193374,
+        "rtf": 1.235370466813184,
+        "edits": 0,
+        "reference_chars": 2
+      },
+      {
+        "id": "short_no",
+        "text": "違います。",
+        "voice": "Kyoko",
+        "duration": 1.6343125,
+        "hypothesis": "違います。",
+        "seconds": 1.4114027908071876,
+        "rtf": 0.8636064343919462,
+        "edits": 0,
+        "reference_chars": 4
+      },
+      {
+        "id": "date",
+        "text": "来週の月曜です。",
+        "voice": "Kyoko",
+        "duration": 2.493625,
+        "hypothesis": "来週の月曜です。",
+        "seconds": 1.4254204169847071,
+        "rtf": 0.5716258126160537,
+        "edits": 0,
+        "reference_chars": 7
+      },
+      {
+        "id": "amount",
+        "text": "予算は5万円です。",
+        "voice": "Kyoko",
+        "duration": 2.57875,
+        "hypothesis": "予算は5万円です。",
+        "seconds": 1.4315819591283798,
+        "rtf": 0.5551456942814852,
+        "edits": 0,
+        "reference_chars": 8
+      },
+      {
+        "id": "negation",
+        "text": "承認していません。まだ送信しないでください。",
+        "voice": "Kyoko",
+        "duration": 4.524375,
+        "hypothesis": "承認していません。まだ送信しないでください。",
+        "seconds": 1.4745097919367254,
+        "rtf": 0.3259035318550574,
+        "edits": 0,
+        "reference_chars": 20
+      },
+      {
+        "id": "meeting",
+        "text": "田中さん、見積もりの金額を確認してください。納期は来月の15日です。",
+        "voice": "Kyoko",
+        "duration": 7.4610625,
+        "hypothesis": "田中さん、見積もりの金額を確認してください。納期は来月の15日です。",
+        "seconds": 1.5671210000291467,
+        "rtf": 0.21003992394235363,
+        "edits": 0,
+        "reference_chars": 31
+      },
+      {
+        "id": "technical",
+        "text": "リアルタイム文字起こしの精度を改善します。音声の欠落と重複を確認してください。",
+        "voice": "Kyoko",
+        "duration": 7.9271875,
+        "hypothesis": "リアルタイム文字起こしの精度を改善します。音声の欠落と重複を確認してください。",
+        "seconds": 1.5983623331412673,
+        "rtf": 0.20163044372815295,
+        "edits": 0,
+        "reference_chars": 37
+      },
+      {
+        "id": "repeat",
+        "text": "違います。違います。承認はまだです。",
+        "voice": "Kyoko",
+        "duration": 4.1536875,
+        "hypothesis": "違います。違います。承認はまだです。",
+        "seconds": 1.4557486660778522,
+        "rtf": 0.35047139826427776,
+        "edits": 0,
+        "reference_chars": 15
+      }
+    ],
+    "summary": {
+      "cer": 0.0,
+      "audio_seconds": 31.92875,
+      "processing_seconds": 11.791926375124604,
+      "rtf": 0.3693200133147901
+    }
+  }
+]

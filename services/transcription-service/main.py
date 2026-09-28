@@ -120,6 +120,38 @@ def _looks_like_hallucination(segments: List[Dict[str, Any]]) -> bool:
             return True
     return False
 
+def _segments_to_dicts(
+    segments_iter: Any, temperature: float, want_word_timestamps: bool
+) -> List[Dict[str, Any]]:
+    """Consume a faster-whisper segments iterable into verbose_json segment dicts.
+
+    Iterating the iterable is what runs the decoder, so this is blocking and
+    must be called from the transcription executor, never on the event loop.
+    """
+    segments: List[Dict[str, Any]] = []
+    for idx, segment in enumerate(segments_iter):
+        seg_dict: Dict[str, Any] = {
+            "id": idx,
+            "seek": 0,
+            "start": segment.start,
+            "end": segment.end,
+            "text": segment.text,
+            "tokens": [],
+            "temperature": temperature,
+            "avg_logprob": segment.avg_logprob,
+            "compression_ratio": segment.compression_ratio,
+            "no_speech_prob": segment.no_speech_prob,
+            "audio_start": segment.start,
+            "audio_end": segment.end,
+        }
+        if want_word_timestamps and hasattr(segment, 'words') and segment.words:
+            seg_dict["words"] = [
+                {"word": w.word, "start": w.start, "end": w.end, "probability": w.probability}
+                for w in segment.words
+            ]
+        segments.append(seg_dict)
+    return segments
+
 # API Token Authentication
 API_TOKEN = os.getenv("API_TOKEN", "").strip()
 API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
@@ -471,9 +503,13 @@ async def transcribe_audio(
         last_segments: List[Dict[str, Any]] = []
 
         for t in temps:
-            # Run blocking transcription in thread pool to avoid blocking event loop
-            def _transcribe_sync():
-                return model.transcribe(
+            # Run blocking transcription in thread pool to avoid blocking event loop.
+            # faster-whisper returns a lazy segments generator and performs decoding
+            # while it is iterated, so the generator must be consumed inside the
+            # executor as well — iterating it on the event loop would stall /health
+            # and every other request for the full decoding time.
+            def _transcribe_sync(t=t):
+                segments_iter, info = model.transcribe(
                     audio_array,
                     language=language,
                     task=task,
@@ -496,35 +532,12 @@ async def transcribe_audio(
                     },
                     word_timestamps=want_word_timestamps,
                 )
-            
-            segments_list, info = await asyncio.get_event_loop().run_in_executor(
+                return _segments_to_dicts(segments_iter, t, want_word_timestamps), info
+
+            segments, info = await asyncio.get_running_loop().run_in_executor(
                 transcription_executor, _transcribe_sync
             )
             last_info = info
-
-            # Convert segments to list (faster-whisper returns generator)
-            segments: List[Dict[str, Any]] = []
-            for idx, segment in enumerate(segments_list):
-                seg_dict: Dict[str, Any] = {
-                    "id": idx,
-                    "seek": 0,
-                    "start": segment.start,
-                    "end": segment.end,
-                    "text": segment.text,
-                    "tokens": [],
-                    "temperature": t,
-                    "avg_logprob": segment.avg_logprob,
-                    "compression_ratio": segment.compression_ratio,
-                    "no_speech_prob": segment.no_speech_prob,
-                    "audio_start": segment.start,
-                    "audio_end": segment.end,
-                }
-                if want_word_timestamps and hasattr(segment, 'words') and segment.words:
-                    seg_dict["words"] = [
-                        {"word": w.word, "start": w.start, "end": w.end, "probability": w.probability}
-                        for w in segment.words
-                    ]
-                segments.append(seg_dict)
             last_segments = segments
 
             if _looks_like_silence(segments):
