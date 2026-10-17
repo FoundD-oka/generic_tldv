@@ -8,6 +8,7 @@ import {
   googleCameraButtonSelectors
 } from "./selectors";
 import { HumanizedInteractor, MOCAP_LIBRARY } from "./humanized";
+import { GoogleAuthenticationRequired, detectGoogleAuthFailure, resetGoogleMeetForGuest, watchGoogleSignIn } from './auth-fallback';
 
 // Match the actual action, not any jsname/span button (e.g. settings).
 // An authenticated user can still need host approval: Ask to join is valid.
@@ -147,7 +148,7 @@ export async function joinGoogleMeeting(
     await page.fill(selector, text);
   };
 
-  if (botConfig.authenticated) {
+  if (botConfig.authenticated && !botConfig.googleAuthFallback) {
     // Authenticated flow: browser is logged into Google, skip name input
     log("Authenticated mode: skipping name input (using Google account identity)");
 
@@ -175,22 +176,23 @@ export async function joinGoogleMeeting(
     }
 
     try {
-      const { handle } = await waitForAnySelector(
+      const { handle } = await watchGoogleSignIn(page, () => waitForAnySelector(
         page, authenticatedJoinSelectors, 60000, "authenticated join button"
-      );
-      // Only an actual visible name field indicates an anonymous lobby.
-      // Do not infer login failure merely from a request-for-admission button.
-      for (const selector of googleNameInputSelectors) {
-        const nameField = await page.$(selector);
-        if (nameField && await nameField.isVisible()) {
-          await fillField(nameField, selector, botName, "name");
-          log("WARNING: Anonymous name field shown despite authenticated configuration.");
-          break;
-        }
-      }
+      ));
+      // An Ask to join button alone is valid for signed-in accounts. Only an
+      // actual sign-in redirect / anonymous name field triggers guest fallback.
+      await detectGoogleAuthFailure(page);
       await clickHandle(handle, "authenticated_join");
       log("Google Meet join action sent; admission will be checked separately.");
     } catch (e) {
+      if (e instanceof GoogleAuthenticationRequired) {
+        log(`Google authentication failed (${e.reason}); retrying once as a guest.`);
+        await resetGoogleMeetForGuest(page, botConfig, e.reason);
+        const guestUrl = new URL(meetingUrl);
+        guestUrl.search = '';
+        guestUrl.hash = '';
+        return joinGoogleMeeting(page, guestUrl.toString(), botName, botConfig);
+      }
       // No button found — take diagnostic screenshot and fail
       await page.screenshot({ path: '/app/storage/screenshots/bot-checkpoint-auth-failed.png', fullPage: true });
       log("📸 Screenshot: Authenticated join action failed");

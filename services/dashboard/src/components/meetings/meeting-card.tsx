@@ -348,6 +348,16 @@ export function MeetingCard({ meeting }: MeetingCardProps) {
           </Tooltip>
         </div>
 
+        {meeting.platform === "google_meet" && meeting.data?.google_auth_fallback && (
+          <Badge
+            variant="outline"
+            className="relative mt-2 w-fit whitespace-normal border-amber-500/40 bg-amber-500/10 text-[11px] text-amber-800 dark:text-amber-300"
+            title="Googleへのログインに失敗したため、ゲスト参加に切り替えました。会議への入室結果はステータスをご確認ください。"
+          >
+            Googleへのログイン失敗
+          </Badge>
+        )}
+
         <div className="relative mt-2 min-w-0 flex-1">
           {isEditingTitle ? (
             <div onClick={(event) => event.stopPropagation()}>

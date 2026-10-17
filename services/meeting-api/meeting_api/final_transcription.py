@@ -16,7 +16,7 @@ import hashlib
 import uuid
 import wave
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Literal, Optional
 
 import httpx
@@ -40,6 +40,15 @@ FINAL_TRANSCRIPTION_STATUSES = {"queued", "running", "succeeded", "failed", "unk
 FINAL_TRANSCRIPTION_MAX_ATTEMPTS = int(os.getenv("FINAL_TRANSCRIPTION_MAX_ATTEMPTS", "24"))
 FINAL_TRANSCRIPTION_SWEEP_LIMIT = int(os.getenv("FINAL_TRANSCRIPTION_SWEEP_LIMIT", "10"))
 FINAL_TRANSCRIPTION_DEFAULT_LANGUAGE = os.getenv("FINAL_TRANSCRIPTION_DEFAULT_LANGUAGE", "ja")
+# A meeting that ended without any recording never produces an audio master,
+# so the sweep must stop waiting instead of polling it forever.
+FINAL_TRANSCRIPTION_NO_RECORDING_GRACE_SECONDS = int(
+    os.getenv("FINAL_TRANSCRIPTION_NO_RECORDING_GRACE_SECONDS", "900")
+)
+# Upper bound on waiting for the recording finalizer when recordings exist.
+FINAL_TRANSCRIPTION_MASTER_WAIT_SECONDS = int(
+    os.getenv("FINAL_TRANSCRIPTION_MASTER_WAIT_SECONDS", "86400")
+)
 
 # Issue #25 — per-participant lane STT (cost caps from the approved plan).
 LANE_STT_CONCURRENCY = max(1, int(os.getenv("LANE_STT_CONCURRENCY", "2")))
@@ -210,6 +219,30 @@ def queue_final_transcription(meeting: Meeting, *, triggered_by: str = "post_mee
         triggered_by=triggered_by,
     )
     return True
+
+
+def _seconds_since_meeting_end(meeting: Meeting) -> Optional[float]:
+    """Seconds since the meeting ended (falling back to the queue time)."""
+    ended = getattr(meeting, "end_time", None)
+    if not isinstance(ended, datetime):
+        queued_at = (_meeting_data(meeting).get("final_transcription") or {}).get("queued_at")
+        try:
+            ended = datetime.fromisoformat(str(queued_at).replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            return None
+    if ended.tzinfo is not None:
+        ended = ended.astimezone(timezone.utc).replace(tzinfo=None)
+    return (datetime.utcnow() - ended).total_seconds()
+
+
+async def _has_any_recording(meeting: Meeting, db: AsyncSession) -> bool:
+    """True when any recording (finished or not) exists for the meeting."""
+    if _meeting_data(meeting).get("recordings"):
+        return True
+    count = (await db.execute(
+        select(func.count(Recording.id)).where(Recording.meeting_id == meeting.id)
+    )).scalar() or 0
+    return count > 0
 
 
 def _is_master_audio_media_file(mf: Dict[str, Any], *, require_finalizer_mark: bool = True) -> bool:
@@ -1274,6 +1307,39 @@ async def run_deferred_transcription(
 
     source = await find_final_transcription_source(meeting, db)
     if source is None:
+        waited = _seconds_since_meeting_end(meeting)
+        if (
+            waited is not None
+            and waited >= FINAL_TRANSCRIPTION_NO_RECORDING_GRACE_SECONDS
+            and not await _has_any_recording(meeting, db)
+        ):
+            now = _utcnow_iso()
+            _set_final_transcription_state(
+                meeting,
+                status="skipped",
+                skipped_at=now,
+                skipped_reason="no_recording",
+                updated_at=now,
+                last_error=None,
+                retryable=False,
+                triggered_by=triggered_by,
+            )
+            await db.commit()
+            raise HTTPException(status_code=404, detail="No recording exists for this meeting")
+        if waited is not None and waited >= FINAL_TRANSCRIPTION_MASTER_WAIT_SECONDS:
+            now = _utcnow_iso()
+            _set_final_transcription_state(
+                meeting,
+                status="failed",
+                failed_at=now,
+                updated_at=now,
+                error_code="recording_master_timeout",
+                last_error="recording_master_not_ready",
+                retryable=False,
+                triggered_by=triggered_by,
+            )
+            await db.commit()
+            raise HTTPException(status_code=404, detail="Audio master was not finalized in time")
         _set_final_transcription_state(
             meeting,
             status="queued",

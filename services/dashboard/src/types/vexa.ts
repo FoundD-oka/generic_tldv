@@ -55,6 +55,10 @@ export interface MeetingData {
   error_code?: string;
   status_message?: string;
   failure_reason?: string;
+  google_auth_fallback?: {
+    reason: "google_sign_in_required" | "anonymous_lobby";
+    occurred_at: string;
+  };
   // Completion details
   completion_reason?: string;
   final_transcription?: {

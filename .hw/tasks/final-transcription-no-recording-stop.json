@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "purpose": "録音が存在しない会議の最終文字起こしジョブが無期限に再試行され続け、状態が永遠に「待機中」のまま残るのを止める",
+  "sources": [
+    "2026-10-17 ユーザー発言: 最終文字起こしの再試行が「録音データがない」で今も繰り返し動いてる件これも対応がいるね",
+    "2026-10-17 本番DB読み取り: final_transcription.status=queued, last_error=recording_master_not_ready が10件（最古2026-07-04）、attemptsは全て0"
+  ],
+  "acceptance": [
+    "録音が1件も存在しない会議は、終了から一定時間（既定900秒）後の最終文字起こしで status=skipped, skipped_reason=no_recording, retryable=false になり、sweepの対象から外れる",
+    "録音が存在するが音声マスターが未完成の会議は、終了から既定86400秒までは従来どおり queued のまま待つ",
+    "上記の待機上限を超えたら status=failed, error_code=recording_master_timeout, retryable=false にして再試行を止める",
+    "終了直後（猶予時間内）の会議は従来どおり queued のまま待ち、録音の有無の判定で余計に打ち切らない",
+    "既存の最終文字起こしの成功・失敗・再試行の挙動を変えない"
+  ],
+  "constraints": [
+    "本番DBを直接書き換えない（既存の詰まったジョブは修正後のsweepで解消する）",
+    "テストを削除・緩和しない",
+    ".envを変更しない"
+  ],
+  "review_required": true,
+  "review_paths": [
+    "services/meeting-api/meeting_api/final_transcription.py",
+    "services/meeting-api/tests/test_final_transcription.py",
+    ".hw/*"
+  ],
+  "verification": "meeting-api全テスト、新規3テスト、本番反映後に詰まっていた10件がskippedへ遷移することをDB読み取りで確認"
+}

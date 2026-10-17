@@ -1,4 +1,5 @@
 import { log } from "../utils";
+import type { GoogleAuthFallback } from '../types';
 
 export type MeetingStatus =
   | "joining"
@@ -63,6 +64,7 @@ export function advanceLifecycleStage(next: FailureStage): void {
 }
 
 export interface UnifiedCallbackPayload {
+  google_auth_fallback?: GoogleAuthFallback;
   connection_id: string;
   container_id?: string;
   status: MeetingStatus;
@@ -162,6 +164,7 @@ export async function callStatusChangeCallback(
         participant_roster: participantRoster,
         bot_logs: botLogs,
         bot_resources: botResources,
+        google_auth_fallback: botConfig.googleAuthFallback,
       };
 
       log(`Sending unified status change callback to ${baseUrl} (attempt ${attempt + 1}/${maxRetries})`);

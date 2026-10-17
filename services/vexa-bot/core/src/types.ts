@@ -1,3 +1,8 @@
+export type GoogleAuthFallback = {
+  reason: "google_sign_in_required" | "anonymous_lobby";
+  occurred_at: string;
+};
+
 export type BotConfig = {
   platform: "google_meet" | "zoom" | "teams",
   meetingUrl: string | null,
@@ -48,6 +53,8 @@ export type BotConfig = {
 
   // Authenticated meeting mode (uses persistent browser context with stored userdata)
   authenticated?: boolean;
+  // Runtime-only history; never supplied by an incoming bot request.
+  googleAuthFallback?: GoogleAuthFallback;
   userdataS3Path?: string;   // e.g. "users/123/browser-userdata"
   s3Endpoint?: string;
   s3Bucket?: string;

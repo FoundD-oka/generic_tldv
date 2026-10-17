@@ -761,3 +761,148 @@ async def test_replace_zero_segments_guard_applies_even_with_force():
     db.add.assert_not_called()
     assert meeting.data["final_transcription"]["status"] == "failed"
     assert meeting.data["final_transcription"]["error_code"] == "empty_transcription_result"
+
+
+def _meeting_without_master(*, ended_ago, recordings):
+    from datetime import datetime, timedelta
+
+    return make_meeting(
+        id=TEST_MEETING_ID,
+        status=MeetingStatus.FAILED.value,
+        end_time=datetime.utcnow() - ended_ago,
+        data={
+            "transcribe_enabled": True,
+            "recording_enabled": True,
+            "recordings": recordings,
+            "final_transcription": {"status": "queued", "attempts": 0},
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_missing_master_without_any_recording_is_skipped_after_grace():
+    from datetime import timedelta
+
+    meeting = _meeting_without_master(ended_ago=timedelta(hours=1), recordings=[])
+    db = AsyncMock()
+    db.execute = AsyncMock(side_effect=[
+        MockResult([meeting]),
+        MockResult(scalar_value=0),
+        MockResult([]),
+        MockResult(scalar_value=0),
+    ])
+    db.commit = AsyncMock()
+
+    with patch("meeting_api.final_transcription.attributes.flag_modified", new=MagicMock()):
+        with pytest.raises(HTTPException) as exc:
+            await run_deferred_transcription(TEST_MEETING_ID, db, mode="replace")
+
+    assert exc.value.status_code == 404
+    state = meeting.data["final_transcription"]
+    assert state["status"] == "skipped"
+    assert state["skipped_reason"] == "no_recording"
+    assert state["retryable"] is False
+    assert meeting.data["final_transcription_status"] == "skipped"
+    db.commit.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_missing_master_without_recording_waits_during_grace():
+    from datetime import timedelta
+
+    meeting = _meeting_without_master(ended_ago=timedelta(minutes=2), recordings=[])
+    db = AsyncMock()
+    db.execute = AsyncMock(side_effect=[
+        MockResult([meeting]),
+        MockResult(scalar_value=0),
+        MockResult([]),
+    ])
+    db.commit = AsyncMock()
+
+    with patch("meeting_api.final_transcription.attributes.flag_modified", new=MagicMock()):
+        with pytest.raises(HTTPException):
+            await run_deferred_transcription(TEST_MEETING_ID, db, mode="replace")
+
+    assert meeting.data["final_transcription"]["status"] == "queued"
+    assert meeting.data["final_transcription"]["retryable"] is True
+    assert meeting.data["final_transcription"]["last_error"] == "recording_master_not_ready"
+
+
+@pytest.mark.asyncio
+async def test_missing_master_with_recording_fails_after_wait_limit():
+    from datetime import timedelta
+
+    meeting = _meeting_without_master(
+        ended_ago=timedelta(hours=25),
+        recordings=[{
+            "status": "completed",
+            "media_files": [{
+                "type": "audio",
+                "format": "webm",
+                "storage_path": "recordings/5/1001/sess-1/audio/000001.webm",
+            }],
+        }],
+    )
+    db = AsyncMock()
+    db.execute = AsyncMock(side_effect=[
+        MockResult([meeting]),
+        MockResult(scalar_value=0),
+        MockResult([]),
+    ])
+    db.commit = AsyncMock()
+
+    with patch("meeting_api.final_transcription.attributes.flag_modified", new=MagicMock()):
+        with pytest.raises(HTTPException) as exc:
+            await run_deferred_transcription(TEST_MEETING_ID, db, mode="replace")
+
+    assert exc.value.status_code == 404
+    state = meeting.data["final_transcription"]
+    assert state["status"] == "failed"
+    assert state["error_code"] == "recording_master_timeout"
+    assert state["retryable"] is False
+
+
+@pytest.mark.asyncio
+async def test_missing_master_with_recording_waits_within_wait_limit():
+    from datetime import timedelta
+
+    meeting = _meeting_without_master(
+        ended_ago=timedelta(hours=2),
+        recordings=[{"status": "in_progress", "media_files": []}],
+    )
+    db = AsyncMock()
+    db.execute = AsyncMock(side_effect=[
+        MockResult([meeting]),
+        MockResult(scalar_value=0),
+        MockResult([]),
+    ])
+    db.commit = AsyncMock()
+
+    with patch("meeting_api.final_transcription.attributes.flag_modified", new=MagicMock()):
+        with pytest.raises(HTTPException):
+            await run_deferred_transcription(TEST_MEETING_ID, db, mode="replace")
+
+    assert meeting.data["final_transcription"]["status"] == "queued"
+    assert meeting.data["final_transcription"]["retryable"] is True
+
+
+@pytest.mark.asyncio
+async def test_missing_master_with_recording_row_only_is_not_skipped():
+    from datetime import timedelta
+
+    meeting = _meeting_without_master(ended_ago=timedelta(hours=1), recordings=[])
+    db = AsyncMock()
+    db.execute = AsyncMock(side_effect=[
+        MockResult([meeting]),
+        MockResult(scalar_value=0),
+        MockResult([]),
+        MockResult(scalar_value=1),
+    ])
+    db.commit = AsyncMock()
+
+    with patch("meeting_api.final_transcription.attributes.flag_modified", new=MagicMock()):
+        with pytest.raises(HTTPException):
+            await run_deferred_transcription(TEST_MEETING_ID, db, mode="replace")
+
+    assert meeting.data["final_transcription"]["status"] == "queued"
+    assert meeting.data["final_transcription"]["last_error"] == "recording_master_not_ready"

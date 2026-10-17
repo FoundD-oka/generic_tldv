@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "purpose": "Googleのログインが切れたMeet Botをゲスト参加へ切り替え、会議カードへGoogleへのログイン失敗の履歴を残す",
+  "sources": [
+    ".hw/investigations/calendar-auth-20260929/report.md"
+  ],
+  "user_request": "ログイン切れてて入れなかったらフォールバックでゲスト参加するようにしようか。履歴としてカードにGoogleへのログイン失敗ってバッジはつけるようにして。",
+  "acceptance": [
+    "認証済みGoogle Meetの再ログイン画面または未認証の名前入力画面を検知した場合に限り、一度だけゲスト参加を試みる",
+    "主催者の拒否、通信失敗、通常の参加ボタン探索失敗だけではゲスト再試行しない",
+    "ゲスト参加の成否にかかわらずGoogleへのログイン失敗の履歴が会議データとカードに残る",
+    "ゲスト化したブラウザを保存済みGoogle認証プロファイルへ書き戻さない",
+    "既存の認証済み参加、ゲスト参加、入室承認と拒否の処理を維持する"
+  ],
+  "constraints": [
+    "本番設定、.env、進行中の会議は変更しない",
+    "テストを削除・緩和しない"
+  ],
+  "verification": "隔離したChromiumで認証失効からゲスト入室要求まで再現し、APIで履歴保持、Reactカードで成功後もバッジが残ることを検証する。hw verifyと対象サービスの検証を実行し、未commit検証を最終gateとして報告しない。",
+  "review_required": true,
+  "review_paths": [
+    "services/vexa-bot/*",
+    "services/dashboard/*",
+    "services/meeting-api/meeting_api/callbacks.py",
+    "services/meeting-api/tests/test_google_auth_fallback.py",
+    ".hw/*"
+  ]
+}

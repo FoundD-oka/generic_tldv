@@ -29,6 +29,7 @@ import { execSync } from 'child_process';
 import * as net from 'net';
 import { ensureBrowserDataDir, syncBrowserDataFromS3, syncBrowserDataToS3, cleanStaleLocks, BROWSER_DATA_DIR } from './s3-sync';
 import { persistCookies, restoreCookies } from './browser-cookie-store';
+import { shouldSaveGoogleBrowserProfile, withGoogleAuthFallback } from './platforms/googlemeet/auth-fallback';
 // HTTP imports removed - using unified callback service instead
 
 // Per-speaker transcription pipeline
@@ -912,7 +913,7 @@ async function performGracefulLeave(
   }
 
   // Sync browser data back to S3 for authenticated bots (preserves cookies/sessions)
-  if (currentBotConfig?.authenticated && currentBotConfig?.userdataS3Path) {
+  if (currentBotConfig && shouldSaveGoogleBrowserProfile(currentBotConfig)) {
     try {
       log("[Graceful Leave] Syncing browser data to S3 (authenticated bot)...");
       if (page && !page.isClosed()) {
@@ -972,12 +973,12 @@ async function performGracefulLeave(
     // Use unified callback for exit status
     const statusMapping = mapExitReasonToStatus(finalCallbackReason, finalCallbackExitCode);
 
-    const botConfig = {
+    const botConfig = withGoogleAuthFallback({
       meetingApiCallbackUrl,
       internalSecret: currentBotConfig?.internalSecret,
       connectionId: currentConnectionId,
       container_name: process.env.HOSTNAME || 'unknown'
-    };
+    }, currentBotConfig);
 
     try {
       await callStatusChangeCallback(
