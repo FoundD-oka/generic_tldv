@@ -8,7 +8,7 @@ import json
 import logging
 import secrets
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -272,6 +272,11 @@ class BotStartupCallbackPayload(BaseModel):
     container_id: str = Field(...)
 
 
+class GoogleAuthFallbackPayload(BaseModel):
+    reason: Literal["google_sign_in_required", "anonymous_lobby"]
+    occurred_at: datetime
+
+
 class BotStatusChangePayload(BaseModel):
     connection_id: str = Field(...)
     container_id: Optional[str] = Field(None)
@@ -285,6 +290,7 @@ class BotStatusChangePayload(BaseModel):
     timestamp: Optional[str] = Field(None)
     speaker_events: Optional[List[Dict]] = Field(None)
     participant_roster: Optional[List[Dict[str, Any]]] = Field(None)
+    google_auth_fallback: Optional[GoogleAuthFallbackPayload] = Field(None)
     # v0.10.5.3 Pack O — last N structured-JSON log lines from bot stdout.
     # Sent only on terminal status (failed/completed). Persisted into
     # meetings.data.bot_logs JSONB after a 50 KB cap (apply at write-time
@@ -701,6 +707,23 @@ async def bot_awaiting_admission_callback(
     return {"status": "awaiting_admission processed", "meeting_id": meeting.id, "meeting_status": meeting.status}
 
 
+async def _persist_google_auth_fallback(meeting: Meeting, payload: GoogleAuthFallbackPayload, db: AsyncSession):
+    """Keep the first auth failure even if admission fails or the user stops the bot."""
+    result = await db.execute(
+        select(Meeting).where(Meeting.id == meeting.id).with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    locked = result.scalar_one()
+    data = dict(locked.data or {})
+    if "google_auth_fallback" not in data:
+        data["google_auth_fallback"] = payload.model_dump(mode="json")
+        locked.data = data
+        attributes.flag_modified(locked, "data")
+    # Commit before status handling, which may return early or refresh the row.
+    await db.commit()
+    await db.refresh(meeting)
+
+
 @router.post("/bots/internal/callback/status_change", status_code=200, include_in_schema=False)
 async def bot_status_change_callback(
     payload: BotStatusChangePayload,
@@ -717,6 +740,9 @@ async def bot_status_change_callback(
         raise HTTPException(status_code=404, detail="Meeting session not found")
 
     await db.refresh(meeting)
+
+    if payload.google_auth_fallback is not None and meeting.platform == "google_meet":
+        await _persist_google_auth_fallback(meeting, payload.google_auth_fallback, db)
 
     # Persist terminal-only bot artifacts before status-specific branches.
     # - bot_logs: last ~200 structured-JSON log lines from bot stdout (ring
@@ -777,6 +803,16 @@ async def bot_status_change_callback(
             transition_source="bot_callback_post_stop",
         )
         return {"status": "ignored", "detail": "stop requested"}
+
+    # The guest retry remains in JOINING. Its second callback records metadata,
+    # without inventing a failure/transition or duplicating status webhooks.
+    if (payload.google_auth_fallback is not None and meeting.platform == "google_meet"
+            and new_status == MeetingStatus.JOINING and meeting.status == new_status.value):
+        await publish_meeting_status_change(
+            meeting.id, meeting.status, redis_client, meeting.platform,
+            meeting.platform_specific_id, meeting.user_id,
+        )
+        return {"status": "processed", "meeting_id": meeting.id, "meeting_status": meeting.status}
 
     old_status = meeting.status
     success = None
