@@ -1,5 +1,28 @@
 {
   "hooks": {
-    "PreToolUse": []
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(gh *)",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/pr-create-gate.sh\""
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "hw-builder",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/builder-stop-verify.sh\"",
+            "timeout": 1000
+          }
+        ]
+      }
+    ]
   }
 }

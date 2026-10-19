@@ -52,6 +52,10 @@ def load_policy(root, raw=None):
     review = p.get('review')
     if not isinstance(review, dict) or not isinstance(review.get('paths'), list) or not all(isinstance(x, str) and x for x in review['paths']):
         raise ValueError('review.paths is required')
+    # Who decides that the required review happened. Omitted means the strict setting, so an
+    # existing project never loosens by upgrading the runtime.
+    if review.get('authority', 'external_check') not in {'external_check', 'human_merge'}:
+        raise ValueError('review.authority must be external_check or human_merge')
     if type(p.get('timeout_seconds')) is not int or not 1 <= p['timeout_seconds'] <= 7200:
         raise ValueError('timeout_seconds must be 1..7200')
     if 'intent_review' in p:
@@ -319,7 +323,9 @@ def change(root, base_ref, head_ref, policy, task=None):
     binding = {'base': base, 'merge_base': common, 'head': head, 'diff_sha256': sha(patch),
                'policy_sha256': sha(json_bytes(policy))}
     # Unknown project domains are added in project.json; control-plane changes always require review.
-    patterns = ['.hw/*', '.github/*', '.claude/*', '.codex/*', 'AGENTS.md', 'CLAUDE.md'] + policy['review']['paths']
+    # REVIEW.md sets what the reviewer reports, so changing it is a control-plane change too.
+    patterns = ['.hw/*', '.github/*', '.claude/*', '.codex/*', 'AGENTS.md', 'CLAUDE.md',
+                'REVIEW.md', '*/REVIEW.md'] + policy['review']['paths']
     # All files in tasks/ are active requirements. CLI task selection cannot disable a requirement in CI.
     active = []
     tracked_tasks = git(root, 'ls-tree', '-r', '--name-only', head, '--', '.hw/tasks/').decode().splitlines()
@@ -334,6 +340,23 @@ def change(root, base_ref, head_ref, policy, task=None):
     required = any(fnmatch.fnmatchcase(p, pattern) for p in paths for pattern in patterns)
     required = required or any(t['review_required'] and any(fnmatch.fnmatchcase(p, pattern) for p in paths for pattern in t['review_paths']) for t in active)
     return {**binding, 'binding': sha(json_bytes(binding)), 'paths': paths, 'review_required': required}, patch
+
+
+ORIGINS = {'introduced', 'pre_existing'}
+RESPONSES = {'fixed', 'incorrect', 'intended', 'not_needed'}
+ROUND_CAP = 3
+
+
+def check_finding_labels(finding):
+    # Optional since v2.5.0, so older receipts stay valid. An unlabelled finding keeps the
+    # blocking value the reviewer declared; the labels never turn a blocking finding into a pass.
+    if 'origin' in finding and finding['origin'] not in ORIGINS:
+        raise ValueError('finding origin must be introduced or pre_existing')
+    if finding.get('origin') == 'pre_existing' and finding['blocking']:
+        raise ValueError('a pre_existing finding cannot block this change; '
+                         'mark it introduced if this change makes it worse or newly reachable')
+    if 'class' in finding and (not isinstance(finding['class'], str) or not finding['class'].strip()):
+        raise ValueError('finding class must be nonempty text')
 
 
 def check_receipt(receipt, binding):
@@ -353,6 +376,10 @@ def check_receipt(receipt, binding):
     findings = receipt.get('findings')
     if not isinstance(findings, list) or not all(isinstance(f, dict) and type(f.get('blocking')) is bool and f.get('scenario') for f in findings):
         raise ValueError('review findings must include blocking and scenario')
+    for f in findings:
+        check_finding_labels(f)
+    if 'round' in receipt and (type(receipt['round']) is not int or receipt['round'] < 1):
+        raise ValueError('review round must be a positive integer')
     if any(f['blocking'] for f in findings):
         raise ValueError('blocking finding; contract membership does not waive it')
     if not isinstance(receipt.get('checks'), list) or not receipt['checks'] or not all(isinstance(c, dict) and isinstance(c.get('method'), str) and c['method'].strip() and isinstance(c.get('result'), str) and c['result'].strip() for c in receipt['checks']):
@@ -422,13 +449,22 @@ def gate(root, args):
     info, _ = change(root, base, head, policy, task)
     if revision(root, 'HEAD') != info['head']:
         raise ValueError('run from the target checkout; do not copy .hw between worktrees')
+    authority = policy['review'].get('authority', 'external_check')
+    follow_up = []
     if info['review_required']:
         if args.ci:
-            external_review(info['head'], info['binding'], policy['review'])
+            # human_merge: CI does not read an external Check Run. The reviewed diff and the
+            # local review record are presented to a person, who decides the merge. This is a
+            # deliberate reduction of machine enforcement, reported in the result, not hidden.
+            if authority == 'external_check':
+                external_review(info['head'], info['binding'], policy['review'])
         else:
             if not args.review:
                 raise ValueError('independent review required; generate context and obtain a fresh review')
-            check_receipt(json.loads(args.review.read_text()), info['binding'])
+            receipt = json.loads(args.review.read_text())
+            check_receipt(receipt, info['binding'])
+            # Old defects do not hold this change back, but they must not disappear either.
+            follow_up = [f for f in receipt['findings'] if f.get('origin') == 'pre_existing']
     required_intent = intent_tasks(root, info, policy)
     receipts = []
     if not args.ci:
@@ -436,7 +472,8 @@ def gate(root, args):
     for name, intent_task in required_intent.items():
         expected, _ = intent_packet(root, name, intent_task, 'delivery', info)
         if args.ci:
-            external_review(info['head'], expected['binding'], intent_ci_config(policy, name))
+            if authority == 'external_check':
+                external_review(info['head'], expected['binding'], intent_ci_config(policy, name))
         else:
             candidates = [r for r in receipts if r.get('task') == name]
             if len(candidates) != 1:
@@ -445,14 +482,90 @@ def gate(root, args):
     measured = run_checks(root, policy, base=base)
     if measured['status'] != 'passed' or snapshot(root)['dirty'] or revision(root, 'HEAD') != info['head']:
         raise ValueError('verification failed or changed the checkout; inspect .hw/evidence/')
+    if not args.ci:
+        # Per-worktree record for the local PR-creation hook. Kept in the git dir so it never
+        # dirties the checkout. It is a convenience check, not an authorization.
+        gate_record_path(root).write_bytes(json_bytes({'schema': 1, 'head': info['head'], 'base': base,
+                                                       'status': 'checks_passed'}))
     return {'status': 'checks_passed', **info, 'verification': measured,
             'intent_review': {'status': 'passed' if required_intent else 'not_required', 'tasks': sorted(required_intent)},
-            'authorization': 'not_granted', 'review_authority': 'external_check' if args.ci and (info['review_required'] or required_intent) else 'local_advisory'}
+            'authorization': 'not_granted',
+            **({'review_follow_up': follow_up} if follow_up else {}),
+            'review_authority': (authority if args.ci else 'local_advisory') if (info['review_required'] or required_intent) else 'not_required',
+            **({'merge_decision': 'human_required'} if args.ci and authority == 'human_merge' and (info['review_required'] or required_intent) else {})}
+
+
+def gate_record_path(root):
+    return Path(git(root, 'rev-parse', '--path-format=absolute', '--git-path', 'hw-last-gate.json').decode().strip())
+
+
+def pr_check(root):
+    """Local pre-PR check used by the PreToolUse hook: the last local gate passed on this exact commit."""
+    path = gate_record_path(root)
+    if not path.is_file():
+        raise ValueError('no passing hw gate for this checkout; run the gate before creating a PR')
+    record = json.loads(path.read_bytes())
+    head = revision(root, 'HEAD')
+    if record.get('status') != 'checks_passed' or record.get('head') != head:
+        raise ValueError('the last passing hw gate was for a different commit; rerun the gate on HEAD')
+    if snapshot(root)['dirty']:
+        raise ValueError('uncommitted changes are not covered by the gate; commit and rerun the gate')
+    return {'status': 'ready', 'head': head, 'base': record.get('base'), 'authorization': 'not_granted'}
+
+
+def review_guidance(root, base, paths):
+    """REVIEW.md at the root and in each changed file's directories, read from the base revision.
+
+    The change under review cannot rewrite the rules it is judged by (same rule as Code Review).
+    """
+    scope = {Path('.')}
+    for path in paths:
+        scope.update(Path(path).parents)
+    found = []
+    for entry in git(root, 'ls-tree', '-r', '-z', base).split(b'\0'):
+        if not entry:
+            continue
+        meta, name = entry.split(b'\t', 1)
+        name = os.fsdecode(name)
+        if Path(name).name == 'REVIEW.md' and Path(name).parent in scope and meta.split(b' ')[0] in {b'100644', b'100755'}:
+            found.append(name)
+    return {name: git(root, 'show', base + ':' + name) for name in sorted(found)}
+
+
+def previous_round(path, reset):
+    """The last round's findings, each answered, and the round number this review becomes."""
+    previous = json.loads(path.read_bytes())
+    if not isinstance(previous, dict) or not isinstance(previous.get('findings'), list):
+        raise ValueError('previous review must be a review JSON object with findings')
+    last = previous.get('round', 1)
+    if type(last) is not int or last < 1:
+        raise ValueError('previous review round must be a positive integer')
+    for f in previous['findings']:
+        if not isinstance(f, dict) or not isinstance(f.get('scenario'), str) or not f['scenario'].strip():
+            raise ValueError('previous findings require a scenario string')
+        response = f.get('response')
+        # Every finding is answered before the next round: fixed, or declined with a reason.
+        if not isinstance(response, dict) or response.get('action') not in RESPONSES:
+            raise ValueError('answer every previous finding with response.action: ' + ', '.join(sorted(RESPONSES)))
+        if response['action'] != 'fixed' and (not isinstance(response.get('reason'), str) or not response['reason'].strip()):
+            raise ValueError('a declined finding needs response.reason')
+    current = 1 if reset else last + 1
+    if current > ROUND_CAP:
+        raise ValueError('review round cap (' + str(ROUND_CAP) + ') reached: stop fixing one finding at a time, '
+                         'reconsider the approach with the user, then pass --approach-reset "<what changed>"')
+    # Only the findings and the answers travel; the earlier verdict and checks do not.
+    return current, {'round': last, 'findings': previous['findings']}
 
 
 def context(root, args):
     if snapshot(root)['dirty']:
         raise ValueError('commit the requested inputs before preparing final review context')
+    previous_review = getattr(args, 'previous_review', None)
+    approach_reset = getattr(args, 'approach_reset', None)
+    if (previous_review or approach_reset) and args.role != 'verifier':
+        raise ValueError('review rounds apply to the verifier role only')
+    if approach_reset is not None and (not previous_review or not approach_reset.strip()):
+        raise ValueError('--approach-reset needs --previous-review and a description of what changed')
     task = task_data(root, args.task)
     base, head, policy = local_inputs(root, args)
     info, patch = change(root, base, head, policy, task)
@@ -470,15 +583,33 @@ def context(root, args):
             target.write_bytes(raw)
         (output / 'manifest.json').write_bytes(json_bytes(manifest))
         return manifest
+    extra, review = {}, {}
+    if args.role == 'verifier':
+        guidance = review_guidance(root, base, info['paths'])
+        extra.update({'review-guidance/' + name: raw for name, raw in guidance.items()})
+        # A REVIEW.md edited by this change takes effect only after it merges into the base.
+        review['review_guidance'] = {'from': base, 'files': sorted(guidance),
+                                     'changed_in_diff': sorted(p for p in info['paths'] if Path(p).name == 'REVIEW.md')}
+        review['round'] = 1
+        if previous_review:
+            review['round'], earlier = previous_round(previous_review, approach_reset)
+            extra['previous-findings.json'] = json_bytes(earlier)
+            if approach_reset:
+                review['approach_reset'] = approach_reset.strip()
+        review['round_cap'] = ROUND_CAP
     output.mkdir(parents=True, exist_ok=False)
     (output / 'request.json').write_bytes(json_bytes(task))
     (output / 'changes.patch').write_bytes(patch)
     (output / 'role.md').write_bytes(local_path(root, '.hw/roles/' + args.role + '.md').read_bytes())
-    manifest = {'schema': 1, 'role': args.role, **info, 'source_root': str(root),
+    for name, raw in extra.items():
+        target = output / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(raw)
+    manifest = {'schema': 1, 'role': args.role, **info, **review, 'source_root': str(root),
                 'not_imported_as_inputs': ['parent_conversation', 'extra_task_fields', 'other_reviewer_verdicts'],
                 'caveat': 'The complete repository diff may itself contain narratives. This manifest does not enforce isolation.',
                 'isolation_enforced': False,
-                'files': {p.name: sha(p.read_bytes()) for p in sorted(output.iterdir())}}
+                'files': {p.relative_to(output).as_posix(): sha(p.read_bytes()) for p in sorted(output.rglob('*')) if p.is_file()}}
     (output / 'manifest.json').write_bytes(json_bytes(manifest))
     return manifest
 
@@ -493,6 +624,10 @@ def doctor(root):
     modified = [rel for rel, checksum in manifest['files'].items()
                 if not local_path(root, rel).is_file() or sha(local_path(root, rel).read_bytes()) != checksum]
     tracked = set(git(root, 'ls-files', '-z').decode().split('\0'))
+    if subprocess.run(['git', 'config', '--bool', 'core.ignorecase'], cwd=root, capture_output=True).stdout.strip() == b'true':
+        # On case-insensitive checkouts, CLAUDE.md may be tracked as claude.md; both name the same file.
+        folded = {t.casefold() for t in tracked}
+        tracked |= {rel for rel in manifest['files'] if rel.casefold() in folded}
     required_files = set(manifest['files']) | {'.hw/project.json', '.hw/install.json'}
     if policy['verify'] == [['bash', '.hw/verify.sh']]:
         required_files.add('.hw/verify.sh')
@@ -500,20 +635,40 @@ def doctor(root):
     if untracked:
         problems.append('installation files are not tracked; CI and new checkouts cannot receive them')
     review = policy['review']
-    if not review.get('check_name') or not review.get('app_id'):
+    authority = review.get('authority', 'external_check')
+    notices = []
+    if authority == 'external_check' and (not review.get('check_name') or not review.get('app_id')):
         problems.append('independent GitHub check is not configured (required changes will block in CI)')
+    if authority == 'human_merge':
+        # Not a problem to fix, but never silent: an empty problems list must not read as
+        # "the review is enforced". Say what a person now has to do instead.
+        notices.append('review is not machine-enforced: CI does not read an external check. '
+                       'A person must inspect the diff and the review record, and decide the merge.')
+        if review.get('check_name') or review.get('app_id'):
+            notices.append('review.check_name and review.app_id are ignored while authority is human_merge')
     intent = policy.get('intent_review', {})
-    enabled = bool(intent.get('paths')) or any(task_data(root, p.stem).get('intent_review', {}).get('required')
-                                             for p in local_path(root, '.hw/tasks').glob('*.json'))
+    tasks = []
+    for p in local_path(root, '.hw/tasks').glob('*.json'):
+        try:
+            tasks.append(task_data(root, p.stem))
+        except (ValueError, KeyError, TypeError) as e:
+            problems.append('invalid task file .hw/tasks/' + p.name + ': ' + str(e)
+                            + ' (keep evidence and other files outside .hw/tasks)')
+    enabled = bool(intent.get('paths')) or any(t.get('intent_review', {}).get('required') for t in tasks)
     intent_status = 'optional_disabled'
     if enabled:
-        try:
-            intent_ci_config(policy, 'task')
-            intent_status = 'configured_not_verified'
-        except ValueError:
-            intent_status = 'unconfigured'
-            problems.append('independent intent GitHub check is not configured (enabled intent changes will block in CI)')
+        if authority == 'human_merge':
+            intent_status = 'not_machine_enforced'
+        else:
+            try:
+                intent_ci_config(policy, 'task')
+                intent_status = 'configured_not_verified'
+            except ValueError:
+                intent_status = 'unconfigured'
+                problems.append('independent intent GitHub check is not configured (enabled intent changes will block in CI)')
     return {'status': 'needs_setup' if problems else 'locally_configured', 'problems': problems,
+            # human_merge is not a verified state: it says a person decides, not that anyone reviewed.
+            'review_authority': authority, 'notices': notices,
             'intent_review': {'status': intent_status, 'model': intent.get('model', 'fable')},
             'modified_managed_files': modified, 'untracked_install_files': untracked, 'external_protection': 'not_verified',
             'production_permissions': 'not_provisioned', 'agent_context_isolation': 'runtime_configuration_required'}
@@ -525,6 +680,7 @@ def main():
     sub = parser.add_subparsers(dest='command', required=True)
     sub.add_parser('verify')
     sub.add_parser('doctor')
+    sub.add_parser('pr-check')
     g = sub.add_parser('gate')
     g.add_argument('--base')
     g.add_argument('--head', default='HEAD')
@@ -539,6 +695,8 @@ def main():
     c.add_argument('--role', choices=['researcher', 'builder', 'verifier', 'intent-reviewer'], required=True)
     c.add_argument('--output', type=Path, required=True)
     c.add_argument('--phase', choices=['baseline', 'design', 'delivery'], default='delivery')
+    c.add_argument('--previous-review', type=Path)
+    c.add_argument('--approach-reset')
     i = sub.add_parser('intent-gate')
     i.add_argument('--base')
     i.add_argument('--head', default='HEAD')
@@ -558,6 +716,8 @@ def main():
             result = intent_gate(root, args)
         elif args.command == 'context':
             result = context(root, args)
+        elif args.command == 'pr-check':
+            result = pr_check(root)
         else:
             result = doctor(root)
         print(json.dumps(result, ensure_ascii=False, indent=2))
