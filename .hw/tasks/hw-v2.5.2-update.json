@@ -11,7 +11,8 @@
   ],
   "acceptance": [
     "上流 v2.5.2 の管理ファイルが install.json の記録どおりに反映され、doctor が改変・未追跡の管理ファイルを報告しない",
-    ".hw/project.json・.hw/verify.sh・.hw/verify-baseline・既存の .hw/tasks・.hw/legacy/v1 と過去の記録を変更しない(この task の追加は可)",
+    ".hw/project.json・.hw/verify-baseline・既存の .hw/tasks・.hw/legacy/v1 と過去の記録を変更しない(この task の追加は可)。.hw/verify.sh は、更新処理に退役させられる旧テストを別名へ移した参照先の変更だけを許す",
+    "verify が .hw/legacy/v1 の写しに対する回帰テスト3本(PRフック・fable_review・prime_run)を、変更前と同じく実際に実行する。テストファイルがないときは黙って飛ばさず失敗する",
     "hw-ci.yml は配布版の新しい手順(gate結果の要約表示)を取り込み、PyYAML の準備と失敗時の証跡表示という独自手順を保持する",
     "退役させる .hw 直下の旧入口6件(check_review_verdict.py・fable_review.py・prime_run.py・hooks/hd-gate.sh・hooks/pr-create-intercept.sh・hooks/pr-ready-gate.sh)が現行の設定・CI・verify・Codex設定から参照されていない",
     ".claude/settings.json に hw の PR 作成前フックと Builder 完了前 verify フックが1件ずつ入り、ほかの設定を保持する",

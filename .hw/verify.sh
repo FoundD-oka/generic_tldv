@@ -20,9 +20,9 @@ printf '%s\n' "$output"
 
 # 以下3件は保存した旧実装への回帰検査。通常の入口・CIはv2 runtimeを使う。
 # 旧 PreToolUse フックの worktree 判定を、実行先を記録する fixture で検証する。
-if [ -f .hw/tests/pr-create-intercept.test.sh ]; then
-  bash .hw/tests/pr-create-intercept.test.sh .hw/legacy/v1/hooks/pr-create-intercept.sh || exit 1
-fi
+# 旧名 .hw/tests/pr-create-intercept.test.sh は hw の更新処理が v1 の退役対象として削除するため別名で置く。
+# 黙って飛ばさないよう、ファイルの有無で分岐しない。
+bash .hw/tests/legacy-v1-pr-create-intercept.test.sh .hw/legacy/v1/hooks/pr-create-intercept.sh || exit 1
 
 # 旧 fable_review.py の差分分割・対象hashの照合を、モデルを呼ばない fixture で検証する。
 if [ -f .hw/tests/fable-review-chunking.test.py ]; then
