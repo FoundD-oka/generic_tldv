@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # pr-create-intercept.sh の単体テスト(検証契約 AT-001〜AT-011)。
 #
-# 使い方: bash .hw/tests/pr-create-intercept.test.sh <hook-path>
+# 使い方: bash .hw/tests/legacy-v1-pr-create-intercept.test.sh <hook-path>
 #
 # このフックは全 Bash コマンドの PreToolUse で走るため、退行は全エージェントを
 # 止める。だから .hw/verify.sh(= pr-ready-gate と CI)から毎回実行する。

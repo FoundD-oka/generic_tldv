@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "purpose": "hw開発ハーネスを v2.1.3 から上流の v2.5.2 に更新し、PR作成前ゲートとBuilder完了前verifyのフック、レビューの3周収束を、プロジェクト固有の検証と指示を保ったまま使えるようにする",
+  "request": "ローカルのプロジェクトでhw-initを使っているものは全てバージョンアップしたい",
+  "sources": [
+    ".hw/usage.md",
+    ".hw/instructions.md",
+    ".hw/install.json",
+    ".hw/legacy/v1/README.md",
+    "CLAUDE.md"
+  ],
+  "acceptance": [
+    "上流 v2.5.2 の管理ファイルが install.json の記録どおりに反映され、doctor が改変・未追跡の管理ファイルを報告しない",
+    ".hw/project.json・.hw/verify-baseline・既存の .hw/tasks・.hw/legacy/v1 と過去の記録を変更しない(この task の追加は可)。.hw/verify.sh は、更新処理に退役させられる旧テストを別名へ移した参照先の変更だけを許す",
+    "verify が .hw/legacy/v1 の写しに対する回帰テスト3本(PRフック・fable_review・prime_run)を、変更前と同じく実際に実行する。テストファイルがないときは黙って飛ばさず失敗する",
+    "hw-ci.yml は配布版の新しい手順(gate結果の要約表示)を取り込み、PyYAML の準備と失敗時の証跡表示という独自手順を保持する",
+    "退役させる .hw 直下の旧入口6件(check_review_verdict.py・fable_review.py・prime_run.py・hooks/hd-gate.sh・hooks/pr-create-intercept.sh・hooks/pr-ready-gate.sh)が現行の設定・CI・verify・Codex設定から参照されていない",
+    ".claude/settings.json に hw の PR 作成前フックと Builder 完了前 verify フックが1件ずつ入り、ほかの設定を保持する",
+    "PR 作成前フックが macOS 標準の /bin/bash 3.2 で構文エラーにならず、PR 作成以外の gh コマンドを止めない",
+    "既存の verify が通る"
+  ],
+  "constraints": [
+    "verify の回帰テストは .hw/legacy/v1 の写しを対象にし続ける"
+  ],
+  "review_required": true
+}

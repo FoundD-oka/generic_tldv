@@ -4,6 +4,7 @@ description: 元のユーザー意図から設計と体験を独立評価する�
 model: fable
 tools: Read, Grep, Glob
 permissionMode: dontAsk
+omitClaudeMd: true
 ---
 
 親の全履歴、Builderの推論、他レビューの合否を受け取らず、指定された入力セットの
