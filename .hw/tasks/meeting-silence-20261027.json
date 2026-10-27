@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "id": "meeting-silence-20261027",
+  "request": "他のAI botが残っていても、会話がなければ10分で終了する（20分から変更）",
+  "confirmed": [
+    "10/27のB&Co定例は音声録音のみ。カボス以外のbotが残り、最大3時間で終了していた",
+    "Google Meetの現行自動退出は参加人数による判定。音声はSilero VADを利用できる"
+  ],
+  "acceptance": [
+    "Google Meetの音声録音で、最後の発話から10分経つと参加人数に関係なく正常終了する",
+    "発話再開で10分を数え直し、無音・非発話ノイズは延長理由にしない",
+    "会議参加後に音声処理が準備できてから監視を開始する",
+    "文字起こし無効・遅延文字起こしでも録音の発話検知は機能する",
+    "終了時に既存の録音の最終チャンク保存・文字起こし処理を通す",
+    "発話検知が壊れた場合に無言と誤認して退出しない"
+  ],
+  "constraints": [
+    "既存の未コミット変更を保持する",
+    "既存の一人退出・最大会議時間を保持する",
+    "他のbotが実際に発話する場合は発話として扱う。人間とAIの声の区別は今回の対象外",
+    "dirty treeでのverifyとcommit済みclean treeの最終gateを区別する"
+  ],
+  "original_request": "他のAI botが残っていても、会話がなかったら20分くらいで終了するようにする",
+  "purpose": "他のAI botが会議に残っていても、10分間発話がなければカボスが録音を保存して退出し、不要な長時間録音を防ぐ",
+  "sources": [
+    "2026-10-27のユーザー依頼: 他のaibotも会議に入ってきて無駄に2時間とかいた。会話がなかったら20分くらいで終了するようにして",
+    "2026-10-27のユーザー訂正: 20分じゃなくて10分にしよっか",
+    "2026-10-27のユーザー指示: コミットプッシュして実装して"
+  ],
+  "review_required": true,
+  "review_decision": "最新mainの最終ゲートは作業記録とbotの変更に独立レビューを要求するため、対象コミット全体を新しいコンテキストで検証する。",
+  "review_paths": [
+    "services/vexa-bot/core/src/platforms/googlemeet/recording.ts",
+    "services/vexa-bot/core/src/services/meeting-silence*",
+    "services/vexa-bot/core/package.json",
+    ".hw/tasks/meeting-silence-20261027.json"
+  ]
+}

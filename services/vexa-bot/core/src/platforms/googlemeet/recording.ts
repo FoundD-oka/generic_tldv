@@ -6,6 +6,8 @@ import { getSegmentPublisher } from "../../index";
 import { ensureBrowserUtils } from "../../utils/injection";
 import { MediaRecorderCapture, UnifiedRecordingPipeline } from "../../services/audio-pipeline";
 import { observeParticipantRoster, resetParticipantRoster } from "../../services/participant-roster";
+import { MeetingSilenceMonitor } from "../../services/meeting-silence";
+import { SileroVAD } from "../../services/vad";
 import {
   googleParticipantSelectors,
   googleSpeakingClassNames,
@@ -22,6 +24,8 @@ import {
 // reaching back through window globals like the old __vexaFlushRecordingBlob.
 let pipeline: UnifiedRecordingPipeline | null = null;
 let recordingService: RecordingService | null = null;
+let silenceMonitor: MeetingSilenceMonitor | null = null;
+let silenceCheckInterval: ReturnType<typeof setInterval> | null = null;
 
 export async function startGoogleRecording(page: Page, botConfig: BotConfig): Promise<void> {
   log("Starting Google Meet recording");
@@ -44,6 +48,11 @@ export async function startGoogleRecording(page: Page, botConfig: BotConfig): Pr
     !!botConfig.recordingEnabled &&
     (!Array.isArray(botConfig.captureModes) || botConfig.captureModes.includes("audio"));
   const sessionUid = botConfig.connectionId || `gm-${Date.now()}`;
+  let resolveSilenceTimeout!: () => void;
+  const silenceTimeout = new Promise<void>((resolve) => {
+    // The binding is armed below only after the audio processor is ready.
+    resolveSilenceTimeout = resolve;
+  });
 
   // Pack U.2 (v0.10.6): unified audio pipeline. The bot encodes WebM/Opus
   // chunks via a browser-side MediaRecorder (BrowserMediaRecorderPipeline)
@@ -55,6 +64,33 @@ export async function startGoogleRecording(page: Page, botConfig: BotConfig): Pr
     if (!botConfig.recordingUploadUrl || !botConfig.token) {
       log("[Google Recording] recordingUploadUrl or token missing — skipping audio capture");
     } else {
+      // A separate mixed-audio VAD also works when live transcription is off.
+      // Silence resolves startRecording normally so runMeetingFlow uses the
+      // existing graceful leave path, including the final recording upload.
+      try {
+        silenceMonitor = new MeetingSilenceMonitor(
+          await SileroVAD.create(),
+          () => {
+            log('[Meeting Silence] No speech for 10 minutes; ending the meeting and saving the recording.');
+            resolveSilenceTimeout();
+          },
+          (error) => log(`[Meeting Silence] Detector failed; silence auto-leave disabled: ${error}`),
+        );
+        await page.exposeFunction('__vexaMeetingSpeechAudio', async (samples: number[]) => {
+          await silenceMonitor?.observeAudio(new Float32Array(samples));
+        });
+        await page.exposeFunction('__vexaStartMeetingSilence', () => {
+          silenceMonitor?.start();
+          if (!silenceCheckInterval) {
+            silenceCheckInterval = setInterval(() => silenceMonitor?.check(), 1000);
+          }
+          log('[Meeting Silence] Monitoring speech; auto-leave after 10 silent minutes.');
+        });
+      } catch (error) {
+        silenceMonitor?.stop();
+        silenceMonitor = null;
+        log(`[Meeting Silence] Detector unavailable; silence auto-leave disabled: ${error}`);
+      }
       recordingService = new RecordingService(botConfig.meeting_id, sessionUid);
 
       // Issue #25 — per-participant lane recording. Opt-in (cost scales with
@@ -195,10 +231,13 @@ export async function startGoogleRecording(page: Page, botConfig: BotConfig): Pr
             // needs RMS energy to detect speech activity.
             const processor = await audioService.initializeAudioProcessor(combinedStream);
             if (processor) {
+              await (window as any).__vexaStartMeetingSilence?.();
               (window as any).__vexaLastAudioActivityTs = 0;
               const AUDIO_ACTIVITY_THRESHOLD = 0.005; // RMS above silence baseline
               audioService.setupAudioDataProcessor((audioData: Float32Array) => {
                 if (!audioData || audioData.length === 0) return;
+                // Keep silence/noise frames: VAD must observe speech ending.
+                (window as any).__vexaMeetingSpeechAudio?.(Array.from(audioData))?.catch(() => {});
                 try {
                   let maxAbs = 0;
                   // Cheap scan: 1-of-32 sample stride is plenty to detect non-silence
@@ -260,7 +299,7 @@ export async function startGoogleRecording(page: Page, botConfig: BotConfig): Pr
   // logic that stays. It's structurally independent of audio capture (the
   // pipeline handles audio; this evaluator handles DOM observation +
   // alone-time monitoring).
-  await page.evaluate(
+  await Promise.race([page.evaluate(
     async (pageArgs: {
       botConfigData: BotConfig;
       selectors: {
@@ -1121,7 +1160,7 @@ export async function startGoogleRecording(page: Page, botConfig: BotConfig): Pr
         peoplePanelRootSelectors: googlePeoplePanelRootSelectors
       } as any
     }
-  );
+  ), silenceTimeout]);
 }
 
 /**
@@ -1132,6 +1171,10 @@ export async function startGoogleRecording(page: Page, botConfig: BotConfig): Pr
  * exits.
  */
 export async function stopGoogleRecording(): Promise<void> {
+  silenceMonitor?.stop();
+  silenceMonitor = null;
+  if (silenceCheckInterval) clearInterval(silenceCheckInterval);
+  silenceCheckInterval = null;
   if (!pipeline) {
     log("[Google Recording] stopGoogleRecording: no active pipeline");
     return;

@@ -27,6 +27,12 @@ Browser MediaStream
 | `chat.ts` | MutationObserver for chat messages, Redis storage. Can inject chat into transcription stream. |
 | `hallucination-filter.ts` | Phrase files from `hallucinations/*.txt` + repetition detection. Multi-path resolution (dist/src/Docker). |
 
+## Google Meetの無言時の自動終了
+
+音声録音中は `meeting-silence.ts` が混合音声をSilero VADで判定し、最後の発話から10分で正常終了する。別のAI botや参加者が残っていても適用し、発話が再開すると10分を数え直す。文字起こしの有効・無効に依存せず、退出時は既存の録音パイプラインで最終チャンクを保存する。
+
+待機室では計時せず、入室後に音声プロセッサーが準備できてから開始する。VADの初期化・推論に失敗した場合は無言と判定せず、この条件だけを停止してログに残す。従来の一人退出・最大会議時間は有効。他のbotの実際の発話も会話として扱い、人間とAIの声は区別しない。
+
 ## Known Issues
 
 - **Recording upload has no retry**: if the HTTP upload fails, the recording is silently lost. No retry mechanism.
