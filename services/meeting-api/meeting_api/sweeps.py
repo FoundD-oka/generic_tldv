@@ -435,20 +435,28 @@ async def recover_recordings_jsonb_from_storage(
     # in time. Only snapshots may be used until the write phase re-reads.
     await db.rollback()
 
+    # The listing covers every recording of the user (recording_id precedes
+    # session_uid in the key), so it can take minutes on a large bucket.
+    # Run it off the event loop and only once per meeting, as the sweep does.
     recovered: list = []
+    keys = None
+    listed = False
+    prefix = f"recordings/{user_id}/"
     for session_uid, session_start_time in session_snapshots:
         if session_uid in existing_sessions:
             continue
-        prefix = f"recordings/{user_id}/"
-        try:
-            if storage is None:
-                storage = _get_default_storage_client()
-            keys = storage.list_objects_bounded(prefix)
-        except Exception as e:
-            logger.warning(
-                "[finalizer-recovery] storage list failed meeting_id=%s prefix=%s error=%s",
-                meeting_id, prefix, str(e)[:200],
-            )
+        if not listed:
+            listed = True
+            try:
+                if storage is None:
+                    storage = await asyncio.to_thread(_get_default_storage_client)
+                keys = await asyncio.to_thread(storage.list_objects_bounded, prefix)
+            except Exception as e:
+                logger.warning(
+                    "[finalizer-recovery] storage list failed meeting_id=%s prefix=%s error=%s",
+                    meeting_id, prefix, str(e)[:200],
+                )
+        if keys is None:
             continue
 
         grouped: dict = {}

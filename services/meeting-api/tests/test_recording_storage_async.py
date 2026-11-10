@@ -31,7 +31,9 @@ def sweep_db(meetings_and_sessions):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("operation", ["sweep_init", "sweep_list", "upload_init", "upload_write"])
+@pytest.mark.parametrize("operation", [
+    "sweep_init", "sweep_list", "recovery_init", "recovery_list", "upload_init", "upload_write",
+])
 async def test_health_responds_while_storage_is_blocked(operation):
     from meeting_api import main
 
@@ -57,6 +59,17 @@ async def test_health_responds_while_storage_is_blocked(operation):
         target = sweeps
         getter = "_get_default_storage_client"
         if operation == "sweep_list":
+            storage.list_objects_bounded.side_effect = stalled_io
+    elif operation.startswith("recovery"):
+        # 2026-11-10: the finalizer's inline recovery (bot exit with no
+        # recordings in JSONB) listed recordings/<user>/ on the event loop and
+        # froze meeting-api for 88-168 s per exited bot.
+        db = AsyncMock()
+        db.execute.return_value = MockResult([session])
+        work = sweeps.recover_recordings_jsonb_from_storage(meeting, db)
+        target = sweeps
+        getter = "_get_default_storage_client"
+        if operation == "recovery_list":
             storage.list_objects_bounded.side_effect = stalled_io
     else:
         db = _StatefulMockDB(session, meeting)
@@ -112,6 +125,47 @@ async def test_sweep_lists_once_per_user_and_matches_each_session():
     assert third.data["recordings"][0]["id"] == 200
     assert db.commit.await_count == 3
     assert finalize.await_args_list == [call(1, db), call(2, db), call(3, db)]
+
+
+@pytest.mark.asyncio
+async def test_recovery_lists_once_per_meeting_and_matches_each_session():
+    meeting = make_meeting(id=7, user_id=10, data={})
+    db = AsyncMock()
+    db.execute.return_value = MockResult([make_session(session_uid="a"), make_session(session_uid="b")])
+
+    async def _refresh(obj, **kwargs):
+        return None
+
+    db.refresh.side_effect = _refresh
+    storage = MagicMock()
+    storage.list_objects_bounded.return_value = [
+        "recordings/10/101/a/audio/000000.webm",
+        "recordings/10/102/b/audio/000000.webm",
+        "recordings/10/103/other/audio/000000.webm",
+    ]
+    with patch.object(sweeps, "_get_default_storage_client", return_value=storage) as get_storage, \
+         patch.object(sweeps.attributes, "flag_modified"):
+        assert await sweeps.recover_recordings_jsonb_from_storage(meeting, db) is True
+
+    assert storage.list_objects_bounded.call_args_list == [call("recordings/10/")]
+    get_storage.assert_called_once_with()
+    assert [(rec["session_uid"], rec["id"]) for rec in meeting.data["recordings"]] == [("a", 101), ("b", 102)]
+    db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_recovery_failed_listing_skips_without_commit():
+    meeting = make_meeting(id=8, user_id=10, data={})
+    db = AsyncMock()
+    db.execute.return_value = MockResult([make_session(session_uid="a"), make_session(session_uid="b")])
+    storage = MagicMock()
+    storage.list_objects_bounded.side_effect = RuntimeError("storage temporarily unavailable")
+    with patch.object(sweeps, "_get_default_storage_client", return_value=storage):
+        assert await sweeps.recover_recordings_jsonb_from_storage(meeting, db) is False
+
+    storage.list_objects_bounded.assert_called_once_with("recordings/10/")
+    db.commit.assert_not_awaited()
+    assert not meeting.data.get("recordings")
 
 
 @pytest.mark.asyncio
