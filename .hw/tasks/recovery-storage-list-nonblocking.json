@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "purpose": "録音のない会議のBotが退出したとき、meeting-api 全体が数分応答しなくなり、他のBotの参加・状態通知・停止APIまで止まるのを防ぐ",
+  "sources": ["docs/incidents/meeting-api-recovery-freeze-20261110.md"],
+  "acceptance": [
+    "recover_recordings_jsonb_from_storage のストレージ初期化と一覧取得がイベントループ外で実行され、実行中も /health と /readyz が応答する",
+    "1回のリカバリでの一覧取得は会議ごとに1回だけで、複数セッションでその結果を使い回す",
+    "一覧取得に失敗した場合はコミットせず False を返し、既存の挙動（警告ログを出して続行）を保つ",
+    "既存の録音リカバリ結果（session_uid ごとの recording_id・media_files の組み立て、書き込み時の冪等マージ）を変えない"
+  ],
+  "deliverable": [
+    "services/meeting-api/meeting_api/sweeps.py の recover_recordings_jsonb_from_storage の修正",
+    "services/meeting-api/tests/test_recording_storage_async.py の回帰テスト追加"
+  ],
+  "constraints": [
+    "テストの削除・skip・期待値緩和をしない",
+    "秘密情報を出力しない",
+    "定期スイープ側（_sweep_unfinalized_recordings）の挙動を変えない"
+  ],
+  "review_required": true
+}
